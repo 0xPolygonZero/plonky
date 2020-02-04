@@ -1,0 +1,15 @@
+[package]
+name = "plonky"
+description = "Succinct arguments for arithmetic circuits, using a scheme similar to PLONK"
+version = "0.1.0"
+authors = ["Daniel Lubarov"]
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/mir-protocol/plonky"
+keywords = ["cryptography", "SNARK"]
+categories = ["cryptography"]
+edition = "2018"
+
+[dev-dependencies]
+criterion = "0.2"
+num = "0.2.1"
