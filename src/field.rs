@@ -1,5 +1,17 @@
+/// This module contains field arithmetic implementations for BLS12's base field and scalar field,
+/// with an emphasis on performance.
+///
+/// Field elements are represented as `u64` arrays, which works well with modern x86 systems which
+/// natively support multiplying two `u64`s to obtain a `u128`. All encodings in the public API are
+/// little-endian.
+///
+/// We use fixed-length arrays so that there is no need for heap allocation or bounds checking.
+/// Unfortunately, this means that some methods need to be duplicated to handle various array
+/// lengths. They can be rewritten to use const generics when that feature becomes stable.
+
 use std::convert::TryInto;
 use std::ops::Mul;
+use std::cmp::Ordering;
 
 /// An element of the BLS12 group's base field.
 #[derive(Copy, Clone)]
@@ -63,16 +75,34 @@ impl Mul<Bls12Base> for Bls12Base {
         }
 
         let product_r_shifted_n = mul_6_6(product_r_shifted, Self::ORDER);
-        let result = sub_12_12(product, product_r_shifted_n);
+        let t_12 = sub_12_12(product, product_r_shifted_n);
 
         // The 6 higher-order limbs should all be 0 after the subtraction. Truncate them off.
         for i in 6..12 {
-            assert_eq!(result[i], 0);
+            debug_assert_eq!(t_12[i], 0);
         }
-        let result_slice = &result[0..6];
-        let limbs: [u64; 6] = result_slice.try_into().unwrap();
+        let t_6: [u64; 6] = (&t_12[0..6]).try_into().unwrap();
+        let ord = cmp_6_6(t_6, Self::ORDER);
+        println!("{:?} {:?} {:?}", t_6, ord, Self::ORDER);
+        let limbs = if cmp_6_6(t_6, Self::ORDER) == Ordering::Less {
+            t_6
+        } else {
+            sub_6_6(t_6, Self::ORDER)
+        };
         Self { limbs }
     }
+}
+
+fn cmp_6_6(a: [u64; 6], b: [u64; 6]) -> Ordering {
+    for i in (0..6).rev() {
+        if a[i] < b[i] {
+            return Ordering::Less;
+        }
+        if a[i] > b[i] {
+            return Ordering::Greater;
+        }
+    }
+    Ordering::Equal
 }
 
 fn add_6_6(a: [u64; 6], b: [u64; 6]) -> [u64; 7] {
@@ -101,7 +131,22 @@ fn sub_12_12(a: [u64; 12], b: [u64; 12]) -> [u64; 12] {
         // If either difference underflowed, set the borrow bit.
         borrow = result1.1 | result2.1;
     }
-    debug_assert!(!borrow, "a < b");
+    debug_assert!(!borrow, "a < b: {:?} < {:?}", a, b);
+    difference
+}
+
+/// Compute `a - b`. Assumes `a >= b`, otherwise the behavior is undefined.
+fn sub_6_6(a: [u64; 6], b: [u64; 6]) -> [u64; 6] {
+    let mut borrow = false;
+    let mut difference = [0; 6];
+    for i in 0..6 {
+        let result1 = a[i].overflowing_sub(b[i]);
+        let result2 = result1.0.overflowing_sub(borrow as u64);
+        difference[i] = result2.0;
+        // If either difference underflowed, set the borrow bit.
+        borrow = result1.1 | result2.1;
+    }
+    debug_assert!(!borrow, "a < b: {:?} < {:?}", a, b);
     difference
 }
 
@@ -154,8 +199,8 @@ fn mul_12_6(a: [u64; 12], b: [u64; 6]) -> [u64; 18] {
     acc[0] = acc128[0] as u64;
     let mut carry = false;
     for i in 1..18 {
-        let last_chunk_big = (acc[i - 1] >> 64) as u64;
-        let curr_chunk_small = acc[i] as u64;
+        let last_chunk_big = (acc128[i - 1] >> 64) as u64;
+        let curr_chunk_small = acc128[i] as u64;
         // Note that last_chunk_big won't get anywhere near 2^64, since it's essentially a carry
         // from some additions in the previous phase, so we can add the carry bit to it without
         // fear of overflow.
@@ -170,7 +215,8 @@ fn mul_12_6(a: [u64; 12], b: [u64; 6]) -> [u64; 18] {
 mod tests {
     use num::BigUint;
     use std::str::FromStr;
-    use crate::field::mul_6_6;
+    use crate::field::{mul_6_6, Bls12Base};
+    use std::ops::Mul;
 
     fn u64_slice_to_biguint(n: &[u64]) -> BigUint {
         let mut bytes_le = Vec::new();
@@ -195,5 +241,21 @@ mod tests {
         assert_eq!(
             u64_slice_to_biguint(&mul_6_6(a, b)),
             u64_slice_to_biguint(&a) * u64_slice_to_biguint(&b));
+    }
+
+    #[test]
+    fn test_mul_bls12_base() {
+        let a = [1, 2, 3, 4, 0, 0];
+        let b = [3, 4, 5, 6, 0, 0];
+
+        let a_blsbase = Bls12Base { limbs: a };
+        let b_blsbase = Bls12Base { limbs: b };
+        let a_biguint = u64_slice_to_biguint(&a);
+        let b_biguint = u64_slice_to_biguint(&b);
+        let order_biguint = u64_slice_to_biguint(&Bls12Base::ORDER);
+
+        assert_eq!(
+            u64_slice_to_biguint(&(a_blsbase * b_blsbase).limbs),
+            a_biguint * b_biguint % order_biguint);
     }
 }
