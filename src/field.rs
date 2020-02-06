@@ -1,17 +1,17 @@
-/// This module contains field arithmetic implementations for BLS12's base field and scalar field,
-/// with an emphasis on performance.
-///
-/// Field elements are represented as `u64` arrays, which works well with modern x86 systems which
-/// natively support multiplying two `u64`s to obtain a `u128`. All encodings in the public API are
-/// little-endian.
-///
-/// We use fixed-length arrays so that there is no need for heap allocation or bounds checking.
-/// Unfortunately, this means that some methods need to be duplicated to handle various array
-/// lengths. They can be rewritten to use const generics when that feature becomes stable.
+//! This module contains field arithmetic implementations for BLS12's base field and scalar field,
+//! with an emphasis on performance.
+//!
+//! Field elements are represented as `u64` arrays, which works well with modern x86 systems which
+//! natively support multiplying two `u64`s to obtain a `u128`. All encodings in the public API are
+//! little-endian.
+//!
+//! We use fixed-length arrays so that there is no need for heap allocation or bounds checking.
+//! Unfortunately, this means that some methods need to be duplicated to handle various array
+//! lengths. They can be rewritten to use const generics when that feature becomes stable.
 
+use std::cmp::Ordering;
 use std::convert::TryInto;
 use std::ops::Mul;
-use std::cmp::Ordering;
 
 /// An element of the BLS12 group's base field.
 #[derive(Copy, Clone)]
@@ -59,10 +59,12 @@ impl Mul<Bls12Base> for Bls12Base {
     fn mul(self, rhs: Bls12Base) -> Bls12Base {
         // First we do a widening multiplication.
         let product = mul_6_6(self.limbs, rhs.limbs);
+//        println!("x: {:?}", product);
 
         // Then, to make it a modular multiplication, we apply the Barrett reduction algorithm.
         // See https://www.nayuki.io/page/barrett-reduction-algorithm
         let product_r = mul_12_6(product, Self::BARRET_FACTOR);
+        println!("xr: {:?} * {:?} = {:?}", product, Self::BARRET_FACTOR, product_r);
 
         // Shift left to divide by 4^k.
         let mut product_r_shifted = [0u64; 6];
@@ -70,30 +72,51 @@ impl Mul<Bls12Base> for Bls12Base {
             let shift_total_bits = Self::BARRET_K * 2;
             let shift_words = shift_total_bits / 64;
             let shift_bits = shift_total_bits as u64 % 64;
-            product_r_shifted[i] = product_r[shift_words] >> shift_bits
-                | product_r[shift_words + 1] << (64 - shift_bits);
+            product_r_shifted[i] = product_r[i + shift_words] >> shift_bits
+                | product_r[i + shift_words + 1] << (64 - shift_bits);
         }
 
         let product_r_shifted_n = mul_6_6(product_r_shifted, Self::ORDER);
         let t_12 = sub_12_12(product, product_r_shifted_n);
 
-        // The 6 higher-order limbs should all be 0 after the subtraction. Truncate them off.
-        for i in 6..12 {
-            debug_assert_eq!(t_12[i], 0);
+        // t should fit in m + 1 bits, where m is the modulus length in bits.
+        debug_assert!(t_12[6] == 0 || t_12[6] == 1,
+                      "t should fit in m + 1 bits: {:?}", t_12);
+        for i in 7..12 {
+            debug_assert_eq!(t_12[i], 0,
+                             "t should fit in m + 1 bits: {:?}", t_12);
         }
-        let t_6: [u64; 6] = (&t_12[0..6]).try_into().unwrap();
-        let ord = cmp_6_6(t_6, Self::ORDER);
-        println!("{:?} {:?} {:?}", t_6, ord, Self::ORDER);
-        let limbs = if cmp_6_6(t_6, Self::ORDER) == Ordering::Less {
-            t_6
+        // For efficiency, truncate t down to 7 `u64`s.
+        let t_7: [u64; 7] = (&t_12[0..7]).try_into().unwrap();
+
+        let result_7 = if cmp_7_6(t_7, Self::ORDER) == Ordering::Less {
+            t_7
         } else {
-            sub_6_6(t_6, Self::ORDER)
+            sub_7_6(t_7, Self::ORDER)
         };
-        Self { limbs }
+        // The difference should fit into 6 bits; truncate the most significant bit.
+        debug_assert_eq!(t_7[6], 0);
+        let result_6 = (&result_7[0..6]).try_into().unwrap();
+        Self { limbs: result_6 }
     }
 }
 
 fn cmp_6_6(a: [u64; 6], b: [u64; 6]) -> Ordering {
+    for i in (0..6).rev() {
+        if a[i] < b[i] {
+            return Ordering::Less;
+        }
+        if a[i] > b[i] {
+            return Ordering::Greater;
+        }
+    }
+    Ordering::Equal
+}
+
+fn cmp_7_6(a: [u64; 7], b: [u64; 6]) -> Ordering {
+    if a[6] != 0 {
+        return Ordering::Greater;
+    }
     for i in (0..6).rev() {
         if a[i] < b[i] {
             return Ordering::Less;
@@ -150,8 +173,29 @@ fn sub_6_6(a: [u64; 6], b: [u64; 6]) -> [u64; 6] {
     difference
 }
 
+/// Compute `a - b`. Assumes `a >= b`, otherwise the behavior is undefined.
+fn sub_7_6(a: [u64; 7], b: [u64; 6]) -> [u64; 7] {
+    let mut borrow = false;
+    let mut difference = [0; 7];
+    for i in 0..6 {
+        let result1 = a[i].overflowing_sub(b[i]);
+        let result2 = result1.0.overflowing_sub(borrow as u64);
+        difference[i] = result2.0;
+        // If either difference underflowed, set the borrow bit.
+        borrow = result1.1 | result2.1;
+    }
+
+    // For the last digit, we do `a - carry`, since `b` has been fully consumed already.
+    let result = a[6].overflowing_sub(borrow as u64);
+    difference[6] = result.0;
+    debug_assert!(!result.1, "a < b: {:?} < {:?}", a, b);
+
+    difference
+}
+
 fn mul_6_6(a: [u64; 6], b: [u64; 6]) -> [u64; 12] {
-    // Grade school multiplication.
+    // Grade school multiplication. To avoid carrying at each of O(n^2) steps, we first add each
+    // intermediate product to a 128-bit accumulator, then propagate carries at the end.
     let mut acc128 = [0u128; 12];
 
     for i in 0..6 {
@@ -177,12 +221,13 @@ fn mul_6_6(a: [u64; 6], b: [u64; 6]) -> [u64; 12] {
         acc[i] += result.0;
         carry = result.1;
     }
-    assert!(!carry);
+    debug_assert!(!carry);
     acc
 }
 
 fn mul_12_6(a: [u64; 12], b: [u64; 6]) -> [u64; 18] {
-    // Grade school multiplication.
+    // Grade school multiplication. To avoid carrying at each of O(n^2) steps, we first add each
+    // intermediate product to a 128-bit accumulator, then propagate carries at the end.
     let mut acc128 = [0u128; 18];
 
     for i in 0..12 {
@@ -191,7 +236,7 @@ fn mul_12_6(a: [u64; 12], b: [u64; 6]) -> [u64; 18] {
             // Add the least significant chunk to the less significant accumulator.
             acc128[i + j] += a_i_b_j as u64 as u128;
             // Add the more significant chunk to the more significant accumulator.
-            acc128[i + j + 1] = a_i_b_j >> 64;
+            acc128[i + j + 1] += a_i_b_j >> 64;
         }
     }
 
@@ -213,16 +258,17 @@ fn mul_12_6(a: [u64; 12], b: [u64; 6]) -> [u64; 18] {
 
 #[cfg(test)]
 mod tests {
-    use num::BigUint;
     use std::str::FromStr;
-    use crate::field::{mul_6_6, Bls12Base};
-    use std::ops::Mul;
+
+    use num::BigUint;
+
+    use crate::field::{Bls12Base, mul_12_6, mul_6_6};
 
     fn u64_slice_to_biguint(n: &[u64]) -> BigUint {
         let mut bytes_le = Vec::new();
-        for (i, n_i) in n.iter().enumerate() {
+        for n_i in n {
             for j in 0..8 {
-                bytes_le.push((n_i >> j*8) as u8);
+                bytes_le.push((n_i >> j * 8) as u8);
             }
         }
         BigUint::from_bytes_le(&bytes_le)
@@ -244,6 +290,16 @@ mod tests {
     }
 
     #[test]
+    fn test_mul_12_6() {
+        let a = [11111111u64, 22222222, 33333333, 44444444, 55555555, 66666666,
+            77777777, 88888888, 99999999, 11111111, 22222222, 33333333];
+        let b = [77777777u64, 88888888, 99999999, 11111111, 22222222, 33333333];
+        assert_eq!(
+            u64_slice_to_biguint(&mul_12_6(a, b)),
+            u64_slice_to_biguint(&a) * u64_slice_to_biguint(&b));
+    }
+
+    #[test]
     fn test_mul_bls12_base() {
         let a = [1, 2, 3, 4, 0, 0];
         let b = [3, 4, 5, 6, 0, 0];
@@ -253,6 +309,10 @@ mod tests {
         let a_biguint = u64_slice_to_biguint(&a);
         let b_biguint = u64_slice_to_biguint(&b);
         let order_biguint = u64_slice_to_biguint(&Bls12Base::ORDER);
+
+        println!("{} {}",
+                 u64_slice_to_biguint(&(a_blsbase * b_blsbase).limbs),
+                 &a_biguint * &b_biguint % &order_biguint);
 
         assert_eq!(
             u64_slice_to_biguint(&(a_blsbase * b_blsbase).limbs),
