@@ -17,3 +17,6 @@ num = "0.2.1"
 [[bench]]
 name = "field_arithmetic"
 harness = false
+
+[profile.bench]
+opt-level = 3

@@ -282,6 +282,10 @@ macro_rules! mul_asymmetric {
         pub fn $name(a: [u64; $a_len], b: [u64; $b_len]) -> [u64; $a_len + $b_len] {
             // Grade school multiplication. To avoid carrying at each of O(n^2) steps, we first add each
             // intermediate product to a 128-bit accumulator, then propagate carries at the end.
+
+            // TODO: It may be faster to do this in one pass. We can minimize carry propagation by
+            // enumerating the intermediate products in a least-significant-to-most-significant manner.
+
             let mut acc128 = [0u128; $a_len + $b_len];
 
             for i in 0..$a_len {
