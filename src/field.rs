@@ -25,6 +25,7 @@ impl Bls12Base {
     // Precomputed R for the Barrett reduction algorithm.
     const BARRET_FACTOR: [u64; 6] = [17027978386419893992, 5649138592172459777, 3421924034565217767,
         11848418460761227941, 4080332095855958760, 2837504485842123031];
+
     const BARRET_K: usize = 381;
 }
 
@@ -36,6 +37,7 @@ impl Bls12Scalar {
 
     // Precomputed R for the Barrett reduction algorithm.
     const BARRET_CONSTANT: [u64; 4] = [5808762262936312036, 15654811016218471260, 1021603728894469044, 10183805594867568095];
+
     const BARRET_K: usize = 255;
 }
 
@@ -61,7 +63,7 @@ impl Mul<Bls12Base> for Bls12Base {
         }
 
         let product_r_shifted_n = mul_6_6(product_r_shifted, Self::ORDER);
-        let result = sub_12x64(product, product_r_shifted_n);
+        let result = sub_12_12(product, product_r_shifted_n);
 
         // The 6 higher-order limbs should all be 0 after the subtraction. Truncate them off.
         for i in 6..12 {
@@ -73,8 +75,34 @@ impl Mul<Bls12Base> for Bls12Base {
     }
 }
 
-fn sub_12x64(a: [u64; 12], b: [u64; 12]) -> [u64; 12] {
-    todo!()
+fn add_6_6(a: [u64; 6], b: [u64; 6]) -> [u64; 7] {
+    let mut carry = false;
+    let mut sum = [0; 7];
+    for i in 0..6 {
+        // First add a[i] + b[i], then add in the carry.
+        let result1 = a[i].overflowing_add(b[i]);
+        let result2 = result1.0.overflowing_add(carry as u64);
+        sum[i] = result2.0;
+        // If either sum overflowed, set the carry bit.
+        carry = result1.1 | result2.1;
+    }
+    sum[6] = carry as u64;
+    sum
+}
+
+/// Compute `a - b`. Assumes `a >= b`, otherwise the behavior is undefined.
+fn sub_12_12(a: [u64; 12], b: [u64; 12]) -> [u64; 12] {
+    let mut borrow = false;
+    let mut difference = [0; 12];
+    for i in 0..12 {
+        let result1 = a[i].overflowing_sub(b[i]);
+        let result2 = result1.0.overflowing_sub(borrow as u64);
+        difference[i] = result2.0;
+        // If either difference underflowed, set the borrow bit.
+        borrow = result1.1 | result2.1;
+    }
+    debug_assert!(!borrow, "a < b");
+    difference
 }
 
 fn mul_6_6(a: [u64; 6], b: [u64; 6]) -> [u64; 12] {
