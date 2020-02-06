@@ -17,14 +17,14 @@ use std::ops::Mul;
 #[derive(Copy, Clone)]
 pub struct Bls12Base {
     /// The limbs in little-endian form.
-    limbs: [u64; 6],
+    pub limbs: [u64; 6],
 }
 
 /// An element of the BLS12 group's scalar field.
 #[derive(Copy, Clone)]
 pub struct Bls12Scalar {
     /// The limbs in little-endian form.
-    limbs: [u64; 4],
+    pub limbs: [u64; 4],
 }
 
 impl Bls12Base {
@@ -59,12 +59,10 @@ impl Mul<Bls12Base> for Bls12Base {
     fn mul(self, rhs: Bls12Base) -> Bls12Base {
         // First we do a widening multiplication.
         let product = mul_6_6(self.limbs, rhs.limbs);
-//        println!("x: {:?}", product);
 
         // Then, to make it a modular multiplication, we apply the Barrett reduction algorithm.
         // See https://www.nayuki.io/page/barrett-reduction-algorithm
         let product_r = mul_12_6(product, Self::BARRET_FACTOR);
-        println!("xr: {:?} * {:?} = {:?}", product, Self::BARRET_FACTOR, product_r);
 
         // Shift left to divide by 4^k.
         let mut product_r_shifted = [0u64; 6];
@@ -193,7 +191,7 @@ fn sub_7_6(a: [u64; 7], b: [u64; 6]) -> [u64; 7] {
     difference
 }
 
-fn mul_6_6(a: [u64; 6], b: [u64; 6]) -> [u64; 12] {
+pub fn mul_6_6(a: [u64; 6], b: [u64; 6]) -> [u64; 12] {
     // Grade school multiplication. To avoid carrying at each of O(n^2) steps, we first add each
     // intermediate product to a 128-bit accumulator, then propagate carries at the end.
     let mut acc128 = [0u128; 12];
@@ -263,22 +261,7 @@ mod tests {
     use num::BigUint;
 
     use crate::field::{Bls12Base, mul_12_6, mul_6_6};
-
-    fn u64_slice_to_biguint(n: &[u64]) -> BigUint {
-        let mut bytes_le = Vec::new();
-        for n_i in n {
-            for j in 0..8 {
-                bytes_le.push((n_i >> j * 8) as u8);
-            }
-        }
-        BigUint::from_bytes_le(&bytes_le)
-    }
-
-    #[test]
-    fn convert_single_u64() {
-        let biguint = u64_slice_to_biguint(&[12379813738877118345]);
-        assert_eq!(biguint, BigUint::from_str("12379813738877118345").unwrap());
-    }
+    use crate::u64_slice_to_biguint;
 
     #[test]
     fn test_mul_6_6() {
@@ -309,10 +292,6 @@ mod tests {
         let a_biguint = u64_slice_to_biguint(&a);
         let b_biguint = u64_slice_to_biguint(&b);
         let order_biguint = u64_slice_to_biguint(&Bls12Base::ORDER);
-
-        println!("{} {}",
-                 u64_slice_to_biguint(&(a_blsbase * b_blsbase).limbs),
-                 &a_biguint * &b_biguint % &order_biguint);
 
         assert_eq!(
             u64_slice_to_biguint(&(a_blsbase * b_blsbase).limbs),

@@ -13,3 +13,7 @@ edition = "2018"
 [dev-dependencies]
 criterion = "0.2"
 num = "0.2.1"
+
+[[bench]]
+name = "field_arithmetic"
+harness = false
