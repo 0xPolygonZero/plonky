@@ -1,7 +1,9 @@
 pub use field::*;
+pub use group::*;
 pub use plonk::*;
 
 mod field;
+mod group;
 mod plonk;
 
 #[cfg(test)]

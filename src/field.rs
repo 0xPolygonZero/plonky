@@ -12,17 +12,17 @@
 
 use std::cmp::Ordering;
 use std::convert::TryInto;
-use std::ops::{Mul, Add};
+use std::ops::{Mul, Add, Neg, Sub, Div};
 
 /// An element of the BLS12 group's base field.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub struct Bls12Base {
     /// The limbs in little-endian form.
     pub limbs: [u64; 6],
 }
 
 /// An element of the BLS12 group's scalar field.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub struct Bls12Scalar {
     /// The limbs in little-endian form.
     pub limbs: [u64; 4],
@@ -86,6 +86,14 @@ impl Add<Bls12Base> for Bls12Base {
     }
 }
 
+impl Sub<Bls12Base> for Bls12Base {
+    type Output = Bls12Base;
+
+    fn sub(self, rhs: Bls12Base) -> Self::Output {
+        self + -rhs
+    }
+}
+
 impl Mul<Bls12Scalar> for Bls12Scalar {
     type Output = Bls12Scalar;
 
@@ -105,6 +113,27 @@ impl Mul<Bls12Base> for Bls12Base {
         let product = mul_6_6(self.limbs, rhs.limbs);
         let limbs = barrett_reduction_bls12_base(product);
         Bls12Base { limbs }
+    }
+}
+
+impl Mul<u64> for Bls12Base {
+    type Output = Bls12Base;
+
+    fn mul(self, rhs: u64) -> Self::Output {
+        let rhs_field = Bls12Base{limbs: [rhs, 0x0, 0x0, 0x0, 0x0, 0x0]};
+        self * rhs_field
+    }
+}
+
+impl Neg for Bls12Base {
+    type Output = Bls12Base;
+
+    fn neg(self) -> Self::Output {
+        if self == Bls12Base::ZERO {
+            Bls12Base::ZERO
+        }else {
+            Bls12Base{limbs: sub_6_6(Bls12Base::ORDER, self.limbs)}
+        }
     }
 }
 
