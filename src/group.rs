@@ -81,7 +81,7 @@ impl Add<G1ProjectivePoint> for G1ProjectivePoint {
             let vv = v * v;
             let vvv = v * vv;
             let r = vv * x1z2;
-            let a = uu * z1z2 - vvv - r * 2u64;
+            let a = uu * z1z2 - vvv - (r + r);
             let x3 = v * a;
             let y3 = u * (r - a) - vvv * y1z2;
             let z3 = vvv * z1z2;
