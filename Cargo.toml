@@ -10,6 +10,9 @@ keywords = ["cryptography", "SNARK"]
 categories = ["cryptography"]
 edition = "2018"
 
+[dependencies]
+unroll = "0.1.4"
+
 [dev-dependencies]
 criterion = "0.2"
 num = "0.2.1"

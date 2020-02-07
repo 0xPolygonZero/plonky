@@ -12,7 +12,9 @@
 
 use std::cmp::Ordering;
 use std::convert::TryInto;
-use std::ops::{Mul, Add, Neg, Sub, Div};
+use std::ops::{Add, Div, Mul, Neg, Sub};
+
+use unroll::unroll_for_loops;
 
 /// An element of the BLS12 group's base field.
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -308,13 +310,10 @@ macro_rules! mul_symmetric {
 
 macro_rules! mul_asymmetric {
     ($name:ident, $a_len:expr, $b_len:expr) => {
+        #[unroll_for_loops]
         pub fn $name(a: [u64; $a_len], b: [u64; $b_len]) -> [u64; $a_len + $b_len] {
             // Grade school multiplication. To avoid carrying at each of O(n^2) steps, we first add each
             // intermediate product to a 128-bit accumulator, then propagate carries at the end.
-
-            // TODO: It may be faster to do this in one pass. We can minimize carry propagation by
-            // enumerating the intermediate products in a least-significant-to-most-significant manner.
-
             let mut acc128 = [0u128; $a_len + $b_len];
 
             for i in 0..$a_len {
