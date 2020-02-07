@@ -21,5 +21,9 @@ num = "0.2.1"
 name = "field_arithmetic"
 harness = false
 
+[[bench]]
+name = "bls12"
+harness = false
+
 [profile.bench]
 opt-level = 3

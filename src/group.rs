@@ -1,6 +1,6 @@
-use crate::{Bls12Scalar, Bls12Base};
 use std::ops::{Add, Mul};
 
+use crate::{Bls12Base, Bls12Scalar};
 
 // Parameters taken from the implementation of Bls12-377 in Zexe found here:
 // https://github.com/scipr-lab/zexe/blob/master/algebra/src/curves/bls12_377/g1.rs
@@ -51,7 +51,7 @@ pub const G1_GENERATOR_Y: Bls12Base = Bls12Base {
     ]
 };
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Copy, Clone)]
 pub struct G1ProjectivePoint {
     pub x: Bls12Base,
     pub y: Bls12Base,
@@ -66,12 +66,12 @@ impl Add<G1ProjectivePoint> for G1ProjectivePoint {
     fn add(self, rhs: G1ProjectivePoint) -> Self::Output {
         if self.is_zero() {
             rhs
-        }else if rhs.is_zero() {
+        } else if rhs.is_zero() {
             self
-        }else if self.x == -rhs.x {
+        } else if self.x == -rhs.x {
             //TODO: return the zero element
             self
-        }else {
+        } else {
             let y1z2 = self.y * rhs.z;
             let x1z2 = self.x * rhs.z;
             let z1z2 = self.z * rhs.z;
@@ -85,7 +85,7 @@ impl Add<G1ProjectivePoint> for G1ProjectivePoint {
             let x3 = v * a;
             let y3 = u * (r - a) - vvv * y1z2;
             let z3 = vvv * z1z2;
-            G1ProjectivePoint{x: x3, y: y3, z: z3}
+            G1ProjectivePoint { x: x3, y: y3, z: z3 }
         }
     }
 }
@@ -94,7 +94,6 @@ impl Mul<G1ProjectivePoint> for Bls12Scalar {
     type Output = G1ProjectivePoint;
 
     fn mul(self, rhs: G1ProjectivePoint) -> Self::Output {
-
         let mut g = rhs;
         let mut sum = G1ProjectivePoint::ZERO;
         for limb in self.limbs.iter() {
@@ -114,7 +113,7 @@ impl G1ProjectivePoint {
         self.z == Bls12Base::ZERO
     }
 
-    const ZERO : G1ProjectivePoint = G1ProjectivePoint{x: Bls12Base::ZERO, y: Bls12Base::ZERO, z: Bls12Base::ZERO};
+    const ZERO: G1ProjectivePoint = G1ProjectivePoint { x: Bls12Base::ZERO, y: Bls12Base::ZERO, z: Bls12Base::ZERO };
 
     /// Doubling of a G1 point
     /// From https://www.hyperelliptic.org/EFD/g1p/data/shortw/projective/doubling/dbl-2007-bl
@@ -129,12 +128,12 @@ impl G1ProjectivePoint {
         let x3 = h * s * 2u64;
         let y3 = w * (b * 4u64 - h) - r * r * 8u64;
         let z3 = sss * 8u64;
-        G1ProjectivePoint{x: x3, y: y3, z: z3}
+        G1ProjectivePoint { x: x3, y: y3, z: z3 }
     }
 
     pub fn new(x: Bls12Base, y: Bls12Base, z: Bls12Base) -> G1ProjectivePoint {
         assert!(G1ProjectivePoint::is_on_curve(x, y, z) /*&& is_in_subgroup(x, y, z)*/);
-        G1ProjectivePoint{x: x, y: y, z: z}
+        G1ProjectivePoint { x: x, y: y, z: z }
     }
 
     fn is_on_curve(x: Bls12Base, y: Bls12Base, z: Bls12Base) -> bool {

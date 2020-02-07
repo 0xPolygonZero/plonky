@@ -32,6 +32,7 @@ pub struct Bls12Scalar {
 
 impl Bls12Base {
     pub const ZERO: Self = Self { limbs: [0; 6] };
+    pub const ONE: Self = Self { limbs: [1, 0, 0, 0, 0, 0] };
 
     // The order of the field.
     pub const ORDER: [u64; 6] = [13402431016077863595, 2210141511517208575, 7435674573564081700,
@@ -42,10 +43,15 @@ impl Bls12Base {
         11848418460761227941, 4080332095855958760, 2837504485842123031];
 
     const BARRETT_K: usize = 381;
+
+    fn multiplicative_inverse(&self) -> Self {
+        Self { limbs: multiplicative_inverse_6(self.limbs) }
+    }
 }
 
 impl Bls12Scalar {
     pub const ZERO: Self = Self { limbs: [0; 4] };
+    pub const ONE: Self = Self { limbs: [1, 0, 0, 0] };
 
     // The order of the field.
     pub const ORDER: [u64; 4] = [18446744069414584321, 6034159408538082302, 3691218898639771653, 8353516859464449352];
@@ -54,6 +60,10 @@ impl Bls12Scalar {
     const BARRETT_R: [u64; 4] = [5808762262936312036, 15654811016218471260, 1021603728894469044, 10183805594867568095];
 
     const BARRETT_K: usize = 255;
+
+    fn multiplicative_inverse(&self) -> Self {
+        Self { limbs: multiplicative_inverse_4(self.limbs) }
+    }
 }
 
 impl Add<Bls12Scalar> for Bls12Scalar {
@@ -122,19 +132,48 @@ impl Mul<u64> for Bls12Base {
     type Output = Bls12Base;
 
     fn mul(self, rhs: u64) -> Self::Output {
-        let rhs_field = Bls12Base{limbs: [rhs, 0x0, 0x0, 0x0, 0x0, 0x0]};
+        // TODO: Do a 6x1 multiplication instead of padding to 6x6.
+        let rhs_field = Bls12Base { limbs: [rhs, 0x0, 0x0, 0x0, 0x0, 0x0] };
         self * rhs_field
+    }
+}
+
+impl Div<Bls12Base> for Bls12Base {
+    type Output = Bls12Base;
+
+    fn div(self, rhs: Bls12Base) -> Bls12Base {
+        self * rhs.multiplicative_inverse()
+    }
+}
+
+impl Div<Bls12Scalar> for Bls12Scalar {
+    type Output = Bls12Scalar;
+
+    fn div(self, rhs: Bls12Scalar) -> Bls12Scalar {
+        self * rhs.multiplicative_inverse()
     }
 }
 
 impl Neg for Bls12Base {
     type Output = Bls12Base;
 
-    fn neg(self) -> Self::Output {
+    fn neg(self) -> Bls12Base {
         if self == Bls12Base::ZERO {
             Bls12Base::ZERO
-        }else {
-            Bls12Base{limbs: sub_6_6(Bls12Base::ORDER, self.limbs)}
+        } else {
+            Bls12Base { limbs: sub_6_6(Bls12Base::ORDER, self.limbs) }
+        }
+    }
+}
+
+impl Neg for Bls12Scalar {
+    type Output = Bls12Scalar;
+
+    fn neg(self) -> Bls12Scalar {
+        if self == Bls12Scalar::ZERO {
+            Bls12Scalar::ZERO
+        } else {
+            Bls12Scalar { limbs: sub_4_4(Bls12Scalar::ORDER, self.limbs) }
         }
     }
 }
@@ -345,6 +384,15 @@ macro_rules! mul_asymmetric {
     }
 }
 
+macro_rules! multiplicative_inverse {
+    ($name:ident, $len:expr) => {
+        #[unroll_for_loops]
+        pub fn $name(a: [u64; $len]) -> [u64; $len] {
+            todo!()
+        }
+    }
+}
+
 add_symmetric!(add_4_4, 4);
 add_symmetric!(add_6_6, 6);
 
@@ -364,6 +412,9 @@ cmp_symmetric!(cmp_4_4, 4);
 cmp_symmetric!(cmp_6_6, 6);
 cmp_asymmetric!(cmp_5_4, 5, 4);
 cmp_asymmetric!(cmp_7_6, 7, 6);
+
+multiplicative_inverse!(multiplicative_inverse_4, 4);
+multiplicative_inverse!(multiplicative_inverse_6, 6);
 
 barrett_reduction!(barrett_reduction_bls12_scalar, 4, mul_4_4, mul_8_4, cmp_5_4, sub_8_8, sub_5_4,
 Bls12Scalar::ORDER, Bls12Scalar::BARRETT_R, Bls12Scalar::BARRETT_K);
