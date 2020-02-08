@@ -69,8 +69,7 @@ impl Add<G1ProjectivePoint> for G1ProjectivePoint {
         } else if rhs.is_zero() {
             self
         } else if self.x == -rhs.x {
-            //TODO: return the zero element
-            self
+            G1ProjectivePoint::ZERO
         } else {
             let y1z2 = self.y * rhs.z;
             let x1z2 = self.x * rhs.z;
@@ -151,4 +150,12 @@ impl G1ProjectivePoint {
 
     }
     */
+}
+
+pub struct Bls12Projective {
+
+}
+
+impl Bls12Projective {
+
 }
