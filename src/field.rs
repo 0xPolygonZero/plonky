@@ -77,7 +77,17 @@ impl Bls12Base {
     pub const ORDER: [u64; 6] = [9586122913090633729, 1660523435060625408, 2230234197602682880,
         1883307231910630287, 14284016967150029115, 121098312706494698];
 
-    fn multiplicative_inverse(&self) -> Self {
+    pub fn double(&self) -> Self {
+        // TODO: Shift instead of adding.
+        *self + *self
+    }
+
+    pub fn square(&self) -> Self {
+        // TODO: Some intermediate products are the redundant, so this can be made faster.
+        *self * *self
+    }
+
+    pub fn multiplicative_inverse(&self) -> Self {
         Self { limbs: multiplicative_inverse_6(self.limbs) }
     }
 }
@@ -97,7 +107,7 @@ impl Bls12Scalar {
     // The order of the field.
     pub const ORDER: [u64; 4] = [725501752471715841, 6461107452199829505, 6968279316240510977, 1345280370688173398];
 
-    fn multiplicative_inverse(&self) -> Self {
+    pub fn multiplicative_inverse(&self) -> Self {
         Self { limbs: multiplicative_inverse_4(self.limbs) }
     }
 
@@ -245,6 +255,7 @@ macro_rules! barrett_reduction {
         $barrett_r:expr,
         $barrett_k:expr
     ) => {
+        #[unroll_for_loops]
         fn $name(x: [u64; 2 * $n]) -> [u64; $n] {
             // Then, to make it a modular multiplication, we apply the Barrett reduction algorithm.
             // See https://www.nayuki.io/page/barrett-reduction-algorithm
@@ -282,6 +293,7 @@ macro_rules! barrett_reduction {
 macro_rules! shl {
     ($name:ident, $in_len:expr, $out_len:expr) => {
         /// Shift each bit `n` bits to the left, i.e., in the direction of decreasing significance.
+        #[unroll_for_loops]
         fn $name(a: [u64; $in_len], n: usize) -> [u64; $out_len] {
             let mut result = [0u64; $out_len];
             for i in 0..$out_len {
@@ -304,6 +316,7 @@ macro_rules! cmp_symmetric {
 /// Generates comparison functions for `u64` arrays.
 macro_rules! cmp_asymmetric {
     ($name:ident, $a_len:expr, $b_len:expr) => {
+        #[unroll_for_loops]
         fn $name(a: [u64; $a_len], b: [u64; $b_len]) -> Ordering {
             // If any of the "a only" bits are set, then a is greater, as b's associated bit is
             // implicitly zero.
@@ -331,6 +344,7 @@ macro_rules! cmp_asymmetric {
 macro_rules! add_symmetric {
     ($name:ident, $len:expr) => {
         /// Computes `a + b`.
+        #[unroll_for_loops]
         fn $name(a: [u64; $len], b: [u64; $len]) -> [u64; $len + 1] {
             let mut carry = false;
             let mut sum = [0; $len + 1];
@@ -352,6 +366,7 @@ macro_rules! add_symmetric {
 macro_rules! sub_symmetric {
     ($name:ident, $len:expr) => {
         /// Computes `a - b`. Assumes `a >= b`, otherwise the behavior is undefined.
+        #[unroll_for_loops]
         fn $name(a: [u64; $len], b: [u64; $len]) -> [u64; $len] {
             debug_assert!($len == $len);
 
@@ -376,6 +391,7 @@ macro_rules! sub_symmetric {
 macro_rules! sub_asymmetric {
     ($name:ident, $a_len:expr, $b_len:expr) => {
         /// Computes `a - b`. Assumes `a >= b`, otherwise the behavior is undefined.
+        #[unroll_for_loops]
         fn $name(a: [u64; $a_len], b: [u64; $b_len]) -> [u64; $a_len] {
             debug_assert!($a_len > $b_len);
 
@@ -450,7 +466,6 @@ macro_rules! mul_asymmetric {
 macro_rules! div_asymmetric {
     ($name:ident, $a_len:expr, $b_len:expr) => {
         /// Integer division. Returns (quotient, remainder).
-        #[unroll_for_loops]
         pub fn $name(a: [u64; $a_len], b: [u64; $b_len]) -> ([u64; $a_len], [u64; $a_len]) {
             // For now, we're not too interested in optimizing division speed, so we just use num's
             // implementation.
@@ -466,7 +481,6 @@ macro_rules! div_asymmetric {
 
 macro_rules! multiplicative_inverse {
     ($name:ident, $len:expr) => {
-        #[unroll_for_loops]
         pub fn $name(a: [u64; $len]) -> [u64; $len] {
             todo!()
         }

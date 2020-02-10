@@ -42,7 +42,7 @@ pub const G1_GENERATOR_X: Bls12Base = Bls12Base {
 };
 
 // 241266749859715473739788878240585681733927191168601896383759122102112907357779751001206799952863815012735208165030
-pub const G1_GENERATOR_Y: Bls12Base = Bls12Base {
+const G1_GENERATOR_Y: Bls12Base = Bls12Base {
     limbs: [
         0x8193961fb8cb81f3,
         0x638d4c5f44adb8,
@@ -115,12 +115,12 @@ impl Add<G1ProjectivePoint> for G1ProjectivePoint {
             let x1z2 = self.x * rhs.z;
             let z1z2 = self.z * rhs.z;
             let u = rhs.y * self.z - y1z2;
-            let uu = u * u;
+            let uu = u.square();
             let v = rhs.x * self.z - x1z2;
-            let vv = v * v;
+            let vv = v.square();
             let vvv = v * vv;
             let r = vv * x1z2;
-            let a = uu * z1z2 - vvv - (r + r);
+            let a = uu * z1z2 - vvv - r.double();
             let x3 = v * a;
             let y3 = u * (r - a) - vvv * y1z2;
             let z3 = vvv * z1z2;
@@ -141,12 +141,12 @@ impl G1ProjectivePoint {
     pub fn double(&self) -> G1ProjectivePoint {
         let w = self.x * self.x * 3u64;
         let s = self.y * self.z;
-        let ss = s * s;
+        let ss = s.square();
         let sss = s * ss;
         let r = self.y * s;
         let b = self.x * r;
         let h = w * w - b * 8u64;
-        let x3 = h * s * 2u64;
+        let x3 = h * s.double();
         let y3 = w * (b * 4u64 - h) - r * r * 8u64;
         let z3 = sss * 8u64;
         G1ProjectivePoint { x: x3, y: y3, z: z3 }

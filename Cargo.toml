@@ -12,8 +12,10 @@ edition = "2018"
 
 [dependencies]
 chashmap = "2.2.2"
+executors = "0.5.3"
 lazy_static = "1.4.0"
 num = "0.2.1"
+num_cpus = "1.12.0"
 unroll = "0.1.4"
 getrandom = "0.1.14"
 rand = "0.7.3"
@@ -28,6 +30,9 @@ harness = false
 [[bench]]
 name = "bls12"
 harness = false
+
+[profile.release]
+opt-level = 3
 
 [profile.bench]
 opt-level = 3
