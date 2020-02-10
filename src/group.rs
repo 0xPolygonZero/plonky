@@ -144,16 +144,12 @@ impl G1ProjectivePoint {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12Base, Bls12Scalar, G1ProjectivePoint};
+    use crate::{Bls12Base, Bls12Scalar, G1ProjectivePoint, G1_GENERATOR};
 
     #[test]
     fn test_g1_multiplication() {
         let lhs = Bls12Scalar { limbs: [11111111, 22222222, 33333333, 44444444] };
-        let s_part = 0b1010111010101010101000101010101010101011101010101010101010101010u64;
-        let lhs = Bls12Scalar { limbs: [s_part, s_part, s_part, s_part] };
-        // TODO: Not on the curve.
-        let rhs = G1ProjectivePoint { x: Bls12Base::ZERO, y: Bls12Base::ONE, z: Bls12Base::ONE };
-        assert_eq!(lhs * rhs, mul_naive(lhs, rhs));
+        assert_eq!(lhs * G1_GENERATOR, mul_naive(lhs, G1_GENERATOR));
     }
 
     /// A simple, somewhat inefficient implementation of multiplication which is used as a reference

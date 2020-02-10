@@ -57,16 +57,13 @@ impl Mul<G1ProjectivePoint> for Bls12Scalar {
 
         let mut y = G1ProjectivePoint::ZERO;
         let mut u = G1ProjectivePoint::ZERO;
-        let mut ops = 0; // todo
         for j in (1..BASE).rev() {
             for (i, &digit) in digits.iter().enumerate() {
                 if digit == j as u64 {
                     u = u + precomputed_powers[i];
-                    ops += 1;
                 }
             }
             y = y + u;
-            ops += 1;
         }
         y
     }
@@ -84,18 +81,4 @@ fn to_digits(x: &Bls12Scalar) -> [u64; DIGITS] {
     }
 
     digits
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::{G1_GENERATOR, Bls12Scalar};
-
-    #[test]
-    fn mul() {
-        let ten = Bls12Scalar::from(10);
-        let product = ten * G1_GENERATOR;
-        let sum = G1_GENERATOR + G1_GENERATOR + G1_GENERATOR + G1_GENERATOR + G1_GENERATOR
-            + G1_GENERATOR + G1_GENERATOR + G1_GENERATOR + G1_GENERATOR + G1_GENERATOR;
-        assert_eq!(product, sum);
-    }
 }
