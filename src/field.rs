@@ -14,13 +14,12 @@ use std::cmp::Ordering;
 use std::convert::TryInto;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
-use rand::rngs::OsRng;
-
-use unroll::unroll_for_loops;
+use num::integer::Integer;
 use rand::RngCore;
+use rand::rngs::OsRng;
+use unroll::unroll_for_loops;
 
 use lazy_static::lazy_static;
-use num::integer::Integer;
 
 use crate::conversions::{biguint_to_u64_vec, u64_slice_to_biguint};
 
@@ -98,8 +97,7 @@ impl Bls12Scalar {
 
     //TODO: replace with a CSPRNG
     pub fn rand() -> Bls12Scalar {
-
-        let mut random_bits:[u64; 4] = [0x0, 0x0, 0x0, 0x0];
+        let mut random_bits: [u64; 4] = [0x0, 0x0, 0x0, 0x0];
 
         for i in 0..4 {
             random_bits[i] = OsRng.next_u64();
@@ -499,9 +497,9 @@ Bls12Base::ORDER, *BLS12_BASE_BARRETT_R, Bls12Base::BITS);
 
 #[cfg(test)]
 mod tests {
+    use crate::Bls12Scalar;
     use crate::conversions::u64_slice_to_biguint;
     use crate::field::{Bls12Base, mul_12_6, mul_6_6};
-    use crate::{u64_slice_to_biguint, Bls12Scalar};
 
     #[test]
     fn test_mul_6_6() {
