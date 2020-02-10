@@ -53,6 +53,12 @@ pub const G1_GENERATOR_Y: Bls12Base = Bls12Base {
     ]
 };
 
+pub const G1_GENERATOR: G1ProjectivePoint = G1ProjectivePoint {
+    x: G1_GENERATOR_X,
+    y: G1_GENERATOR_Y,
+    z: Bls12Base::ONE,
+};
+
 #[derive(Eq, PartialEq, Hash, Copy, Clone, Debug)]
 pub struct G1ProjectivePoint {
     pub x: Bls12Base,

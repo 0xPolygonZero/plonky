@@ -85,3 +85,17 @@ fn to_digits(x: &Bls12Scalar) -> [u64; DIGITS] {
 
     digits
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{G1_GENERATOR, Bls12Scalar};
+
+    #[test]
+    fn mul() {
+        let ten = Bls12Scalar::from(10);
+        let product = ten * G1_GENERATOR;
+        let sum = G1_GENERATOR + G1_GENERATOR + G1_GENERATOR + G1_GENERATOR + G1_GENERATOR
+            + G1_GENERATOR + G1_GENERATOR + G1_GENERATOR + G1_GENERATOR + G1_GENERATOR;
+        assert_eq!(product, sum);
+    }
+}

@@ -82,6 +82,12 @@ impl Bls12Base {
     }
 }
 
+impl From<u64> for Bls12Base {
+    fn from(n: u64) -> Self {
+        Bls12Base { limbs: [n, 0, 0, 0, 0, 0] }
+    }
+}
+
 impl Bls12Scalar {
     pub const ZERO: Self = Self { limbs: [0; 4] };
     pub const ONE: Self = Self { limbs: [1, 0, 0, 0] };
@@ -104,6 +110,12 @@ impl Bls12Scalar {
         }
 
         Bls12Scalar { limbs: random_bits }
+    }
+}
+
+impl From<u64> for Bls12Scalar {
+    fn from(n: u64) -> Self {
+        Bls12Scalar { limbs: [n, 0, 0, 0] }
     }
 }
 
