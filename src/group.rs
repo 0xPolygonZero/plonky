@@ -98,6 +98,9 @@ impl Add<G1ProjectivePoint> for G1ProjectivePoint {
 
     /// Safe version of addition with non-zero checks
     /// From https://www.hyperelliptic.org/EFD/g1p/data/shortw/projective/addition/add-1998-cmo-2
+    ///
+    /// Performs several checks that assume normalized coordinates (z=1) before implementing
+    /// the general addition algorithm for projective coordinates
     fn add(self, rhs: G1ProjectivePoint) -> Self::Output {
         if self.is_zero() {
             rhs
