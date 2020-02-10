@@ -103,6 +103,8 @@ impl Add<G1ProjectivePoint> for G1ProjectivePoint {
             rhs
         } else if rhs.is_zero() {
             self
+        } else if self == rhs {
+            self.double()
         } else if self.y == -rhs.y {
             G1ProjectivePoint::ZERO
         } else {
