@@ -16,15 +16,50 @@ use std::ops::{Add, Div, Mul, Neg, Sub};
 
 use unroll::unroll_for_loops;
 
+use lazy_static::lazy_static;
+use num::integer::Integer;
+
+use crate::conversions::{biguint_to_u64_vec, u64_slice_to_biguint};
+
+lazy_static! {
+    /// Precomputed R for the Barrett reduction algorithm.
+    static ref BLS12_BASE_BARRETT_R: [u64; 6] = {
+        // 4^k in binary is 1 followed by 2*377 0s.
+        let four_exp_k = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 << 50];
+        let (q_12, _r) = div_12_6(four_exp_k, Bls12Base::ORDER);
+
+        // The more-significant half of the limbs should all be zero after the division.
+        for i in 6..12 {
+            debug_assert_eq!(q_12[i], 0);
+        }
+
+        (&q_12[0..6]).try_into().unwrap()
+    };
+
+    /// Precomputed R for the Barrett reduction algorithm.
+    static ref BLS12_SCALAR_BARRETT_R: [u64; 4] = {
+        // 4^k in binary is 1 followed by 2*253 0s.
+        let four_exp_k = [0, 0, 0, 0, 0, 0, 0, 1 << 58];
+        let (q_8, _r) = div_8_4(four_exp_k, Bls12Scalar::ORDER);
+
+        // The more-significant half of the limbs should all be zero after the division.
+        for i in 4..8 {
+            debug_assert_eq!(q_8[i], 0);
+        }
+
+        (&q_8[0..4]).try_into().unwrap()
+    };
+}
+
 /// An element of the BLS12 group's base field.
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Bls12Base {
     /// The limbs in little-endian form.
     pub limbs: [u64; 6],
 }
 
 /// An element of the BLS12 group's scalar field.
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Bls12Scalar {
     /// The limbs in little-endian form.
     pub limbs: [u64; 4],
@@ -34,15 +69,11 @@ impl Bls12Base {
     pub const ZERO: Self = Self { limbs: [0; 6] };
     pub const ONE: Self = Self { limbs: [1, 0, 0, 0, 0, 0] };
 
+    pub const BITS: usize = 377;
+
     // The order of the field.
-    pub const ORDER: [u64; 6] = [13402431016077863595, 2210141511517208575, 7435674573564081700,
-        7239337960414712511, 5412103778470702295, 1873798617647539866];
-
-    // Precomputed R for the Barrett reduction algorithm.
-    const BARRETT_R: [u64; 6] = [17027978386419893992, 5649138592172459777, 3421924034565217767,
-        11848418460761227941, 4080332095855958760, 2837504485842123031];
-
-    const BARRETT_K: usize = 381;
+    pub const ORDER: [u64; 6] = [9586122913090633729, 1660523435060625408, 2230234197602682880,
+        1883307231910630287, 14284016967150029115, 121098312706494698];
 
     fn multiplicative_inverse(&self) -> Self {
         Self { limbs: multiplicative_inverse_6(self.limbs) }
@@ -53,13 +84,10 @@ impl Bls12Scalar {
     pub const ZERO: Self = Self { limbs: [0; 4] };
     pub const ONE: Self = Self { limbs: [1, 0, 0, 0] };
 
+    pub const BITS: usize = 253;
+
     // The order of the field.
-    pub const ORDER: [u64; 4] = [18446744069414584321, 6034159408538082302, 3691218898639771653, 8353516859464449352];
-
-    // Precomputed R for the Barrett reduction algorithm.
-    const BARRETT_R: [u64; 4] = [5808762262936312036, 15654811016218471260, 1021603728894469044, 10183805594867568095];
-
-    const BARRETT_K: usize = 255;
+    pub const ORDER: [u64; 4] = [725501752471715841, 6461107452199829505, 6968279316240510977, 1345280370688173398];
 
     fn multiplicative_inverse(&self) -> Self {
         Self { limbs: multiplicative_inverse_4(self.limbs) }
@@ -187,6 +215,7 @@ macro_rules! barrett_reduction {
         $cmp_n_plus_1_n:ident,
         $sub_2n_2n:ident,
         $sub_n_plus_1_n:ident,
+        $shl_3n_n:ident,
         $modulus:expr,
         $barrett_r:expr,
         $barrett_k:expr
@@ -197,14 +226,7 @@ macro_rules! barrett_reduction {
             let x_r = $mul_2n_n(x, $barrett_r);
 
             // Shift left to divide by 4^k.
-            let mut x_r_shifted = [0u64; $n];
-            for i in 0..$n {
-                let shift_total_bits = $barrett_k * 2;
-                let shift_words = shift_total_bits / 64;
-                let shift_bits = shift_total_bits as u64 % 64;
-                x_r_shifted[i] = x_r[i + shift_words] >> shift_bits
-                    | x_r[i + shift_words + 1] << (64 - shift_bits);
-            }
+            let mut x_r_shifted = $shl_3n_n(x_r, $barrett_k * 2);
 
             let x_r_shifted_n = $mul_n_n(x_r_shifted, $modulus);
             let t_2n = $sub_2n_2n(x, x_r_shifted_n);
@@ -228,6 +250,22 @@ macro_rules! barrett_reduction {
             // The difference should fit into 6 bits; truncate the most significant bit.
             debug_assert_eq!(t_n_plus_1[$n], 0);
             (&result_n_plus_1[0..$n]).try_into().unwrap()
+        }
+    }
+}
+
+macro_rules! shl {
+    ($name:ident, $in_len:expr, $out_len:expr) => {
+        /// Shift each bit `n` bits to the left, i.e., in the direction of decreasing significance.
+        fn $name(a: [u64; $in_len], n: usize) -> [u64; $out_len] {
+            let mut result = [0u64; $out_len];
+            for i in 0..$out_len {
+                let shift_words = n / 64;
+                let shift_bits = n as u64 % 64;
+                result[i] = a[i + shift_words] >> shift_bits
+                    | a[i + shift_words + 1] << (64 - shift_bits);
+            }
+            result
         }
     }
 }
@@ -384,6 +422,23 @@ macro_rules! mul_asymmetric {
     }
 }
 
+macro_rules! div_asymmetric {
+    ($name:ident, $a_len:expr, $b_len:expr) => {
+        /// Integer division. Returns (quotient, remainder).
+        #[unroll_for_loops]
+        pub fn $name(a: [u64; $a_len], b: [u64; $b_len]) -> ([u64; $a_len], [u64; $a_len]) {
+            // For now, we're not too interested in optimizing division speed, so we just use num's
+            // implementation.
+            let a_biguint = u64_slice_to_biguint(&a);
+            let b_biguint = u64_slice_to_biguint(&b);
+            let (q_biguint, r_biguint) = a_biguint.div_rem(&b_biguint);
+            let q = biguint_to_u64_vec(q_biguint, $a_len).as_slice().try_into().unwrap();
+            let r = biguint_to_u64_vec(r_biguint, $a_len).as_slice().try_into().unwrap();
+            (q, r)
+        }
+    }
+}
+
 macro_rules! multiplicative_inverse {
     ($name:ident, $len:expr) => {
         #[unroll_for_loops]
@@ -408,27 +463,29 @@ mul_symmetric!(mul_6_6, 6);
 mul_asymmetric!(mul_8_4, 8, 4);
 mul_asymmetric!(mul_12_6, 12, 6);
 
+div_asymmetric!(div_8_4, 8, 4);
+div_asymmetric!(div_12_6, 12, 6);
+
 cmp_symmetric!(cmp_4_4, 4);
 cmp_symmetric!(cmp_6_6, 6);
 cmp_asymmetric!(cmp_5_4, 5, 4);
 cmp_asymmetric!(cmp_7_6, 7, 6);
 
+shl!(shl_12_4, 12, 4);
+shl!(shl_18_6, 18, 6);
+
 multiplicative_inverse!(multiplicative_inverse_4, 4);
 multiplicative_inverse!(multiplicative_inverse_6, 6);
 
-barrett_reduction!(barrett_reduction_bls12_scalar, 4, mul_4_4, mul_8_4, cmp_5_4, sub_8_8, sub_5_4,
-Bls12Scalar::ORDER, Bls12Scalar::BARRETT_R, Bls12Scalar::BARRETT_K);
-barrett_reduction!(barrett_reduction_bls12_base, 6, mul_6_6, mul_12_6, cmp_7_6, sub_12_12, sub_7_6,
-Bls12Base::ORDER, Bls12Base::BARRETT_R, Bls12Base::BARRETT_K);
+barrett_reduction!(barrett_reduction_bls12_scalar, 4, mul_4_4, mul_8_4, cmp_5_4, sub_8_8, sub_5_4, shl_12_4,
+Bls12Scalar::ORDER, *BLS12_SCALAR_BARRETT_R, Bls12Scalar::BITS);
+barrett_reduction!(barrett_reduction_bls12_base, 6, mul_6_6, mul_12_6, cmp_7_6, sub_12_12, sub_7_6, shl_18_6,
+Bls12Base::ORDER, *BLS12_BASE_BARRETT_R, Bls12Base::BITS);
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
-    use num::BigUint;
-
+    use crate::conversions::u64_slice_to_biguint;
     use crate::field::{Bls12Base, mul_12_6, mul_6_6};
-    use crate::u64_slice_to_biguint;
 
     #[test]
     fn test_mul_6_6() {

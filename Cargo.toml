@@ -11,11 +11,13 @@ categories = ["cryptography"]
 edition = "2018"
 
 [dependencies]
+chashmap = "2.2.2"
+lazy_static = "1.4.0"
+num = "0.2.1"
 unroll = "0.1.4"
 
 [dev-dependencies]
 criterion = "0.2"
-num = "0.2.1"
 
 [[bench]]
 name = "field_arithmetic"
