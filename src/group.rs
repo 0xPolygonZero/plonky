@@ -257,3 +257,9 @@ mod tests {
         sum
     }
 }
+
+pub struct Bls12Projective {
+}
+
+impl Bls12Projective {
+}

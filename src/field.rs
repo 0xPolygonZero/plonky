@@ -14,7 +14,10 @@ use std::cmp::Ordering;
 use std::convert::TryInto;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
+use rand::rngs::OsRng;
+
 use unroll::unroll_for_loops;
+use rand::RngCore;
 
 use lazy_static::lazy_static;
 use num::integer::Integer;
@@ -91,6 +94,18 @@ impl Bls12Scalar {
 
     fn multiplicative_inverse(&self) -> Self {
         Self { limbs: multiplicative_inverse_4(self.limbs) }
+    }
+
+    //TODO: replace with a CSPRNG
+    pub fn rand() -> Bls12Scalar {
+
+        let mut random_bits:[u64; 4] = [0x0, 0x0, 0x0, 0x0];
+
+        for i in 0..4 {
+            random_bits[i] = OsRng.next_u64();
+        }
+
+        Bls12Scalar { limbs: random_bits }
     }
 }
 
@@ -486,6 +501,7 @@ Bls12Base::ORDER, *BLS12_BASE_BARRETT_R, Bls12Base::BITS);
 mod tests {
     use crate::conversions::u64_slice_to_biguint;
     use crate::field::{Bls12Base, mul_12_6, mul_6_6};
+    use crate::{u64_slice_to_biguint, Bls12Scalar};
 
     #[test]
     fn test_mul_6_6() {
@@ -520,5 +536,14 @@ mod tests {
         assert_eq!(
             u64_slice_to_biguint(&(a_blsbase * b_blsbase).limbs),
             a_biguint * b_biguint % order_biguint);
+    }
+
+    #[test]
+    fn test_bls12_rand() {
+        let random_element = Bls12Scalar::rand();
+
+        for i in 0..4 {
+            assert!(random_element.limbs[i] != 0x0);
+        }
     }
 }
