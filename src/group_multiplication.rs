@@ -1,5 +1,10 @@
-use crate::{G1ProjectivePoint, Bls12Scalar};
 use std::ops::Mul;
+
+use chashmap::CHashMap;
+
+use lazy_static::lazy_static;
+
+use crate::{Bls12Scalar, G1ProjectivePoint};
 
 const WINDOW_BITS: usize = 4;
 const BASE: usize = 1 << WINDOW_BITS;

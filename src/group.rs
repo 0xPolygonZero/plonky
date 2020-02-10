@@ -1,8 +1,4 @@
-use std::ops::{Add, Mul};
-
-use chashmap::CHashMap;
-
-use lazy_static::lazy_static;
+use std::ops::Add;
 
 use crate::{Bls12Base, Bls12Scalar};
 
