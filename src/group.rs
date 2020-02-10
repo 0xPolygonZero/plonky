@@ -59,12 +59,39 @@ pub const G1_GENERATOR: G1ProjectivePoint = G1ProjectivePoint {
     z: Bls12Base::ONE,
 };
 
-#[derive(Eq, PartialEq, Hash, Copy, Clone, Debug)]
+#[derive(Hash, Copy, Clone, Debug)]
 pub struct G1ProjectivePoint {
     pub x: Bls12Base,
     pub y: Bls12Base,
     pub z: Bls12Base,
 }
+
+impl G1ProjectivePoint {
+    fn normalized(&self) -> G1ProjectivePoint {
+        if self.is_zero() {
+            *self
+        } else {
+            G1ProjectivePoint { x: self.x / self.z, y: self.y / self.z, z: Bls12Base::ONE }
+        }
+    }
+}
+
+impl PartialEq for G1ProjectivePoint {
+    fn eq(&self, other: &Self) -> bool {
+        let self_zero = self.is_zero();
+        let other_zero = other.is_zero();
+        if self_zero || other_zero {
+            return self_zero == other_zero;
+        }
+
+        // We want to compare (x1/z1, y1/z1) == (x2/z2, y2/z2).
+        // But to avoid field division, it is better to compare (x1*z2, y1*z2) == (x2*z1, y2*z1).
+        self.x * other.z == other.x * self.z
+            && self.y * other.z == other.y * self.z
+    }
+}
+
+impl Eq for G1ProjectivePoint {}
 
 impl Add<G1ProjectivePoint> for G1ProjectivePoint {
     type Output = G1ProjectivePoint;
@@ -76,7 +103,7 @@ impl Add<G1ProjectivePoint> for G1ProjectivePoint {
             rhs
         } else if rhs.is_zero() {
             self
-        } else if self.x == -rhs.x {
+        } else if self.y == -rhs.y {
             G1ProjectivePoint::ZERO
         } else {
             let y1z2 = self.y * rhs.z;
@@ -145,6 +172,15 @@ impl G1ProjectivePoint {
 #[cfg(test)]
 mod tests {
     use crate::{Bls12Base, Bls12Scalar, G1ProjectivePoint, G1_GENERATOR};
+
+    #[test]
+    fn test_naive_multiplication() {
+        let ten = Bls12Scalar { limbs: [10, 0, 0, 0] };
+        let product = mul_naive(ten, G1_GENERATOR);
+        let sum = G1_GENERATOR + G1_GENERATOR + G1_GENERATOR + G1_GENERATOR + G1_GENERATOR
+            + G1_GENERATOR + G1_GENERATOR + G1_GENERATOR + G1_GENERATOR + G1_GENERATOR;
+        assert_eq!(product, sum);
+    }
 
     #[test]
     fn test_g1_multiplication() {
