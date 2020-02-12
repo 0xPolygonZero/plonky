@@ -11,6 +11,7 @@
 //! in the future when const generics become stable.
 
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::convert::TryInto;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
@@ -22,7 +23,6 @@ use unroll::unroll_for_loops;
 use lazy_static::lazy_static;
 
 use crate::conversions::{biguint_to_u64_vec, u64_slice_to_biguint};
-use std::collections::HashSet;
 
 lazy_static! {
     /// Precomputed R for the Barrett reduction algorithm.
@@ -178,15 +178,15 @@ impl Bls12Scalar {
         Self { limbs: multiplicative_inverse_4(self.limbs) }
     }
 
-    //TODO: replace with a CSPRNG
+    // TODO: replace with a CSPRNG
     pub fn rand() -> Bls12Scalar {
-        let mut random_bits: [u64; 4] = [0x0, 0x0, 0x0, 0x0];
+        let mut limbs = [0; 4];
 
         for i in 0..4 {
-            random_bits[i] = OsRng.next_u64();
+            limbs[i] = OsRng.next_u64();
         }
 
-        Bls12Scalar { limbs: random_bits }
+        Bls12Scalar { limbs }
     }
 }
 

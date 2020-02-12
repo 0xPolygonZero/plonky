@@ -1,4 +1,4 @@
-use crate::{G1ProjectivePoint, Bls12Scalar};
+use crate::{Bls12Scalar, G1ProjectivePoint};
 
 pub struct KZG10 {
 

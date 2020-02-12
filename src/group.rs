@@ -176,7 +176,7 @@ impl G1ProjectivePoint {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12Base, Bls12Scalar, G1ProjectivePoint, G1_GENERATOR};
+    use crate::{Bls12Base, Bls12Scalar, G1_GENERATOR, G1ProjectivePoint};
 
     #[test]
     fn test_naive_multiplication() {

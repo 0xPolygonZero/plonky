@@ -1,5 +1,5 @@
-pub use field::*;
 pub use fft::*;
+pub use field::*;
 pub use group::*;
 pub use group_multiplication::*;
 pub use plonk::*;
