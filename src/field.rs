@@ -22,6 +22,7 @@ use unroll::unroll_for_loops;
 use lazy_static::lazy_static;
 
 use crate::conversions::{biguint_to_u64_vec, u64_slice_to_biguint};
+use std::collections::HashSet;
 
 lazy_static! {
     /// Precomputed R for the Barrett reduction algorithm.
@@ -73,7 +74,8 @@ impl Bls12Base {
 
     pub const BITS: usize = 377;
 
-    // The order of the field.
+    /// The order of the field:
+    /// 258664426012969094010652733694893533536393512754914660539884262666720468348340822774968888139573360124440321458177
     pub const ORDER: [u64; 6] = [9586122913090633729, 1660523435060625408, 2230234197602682880,
         1883307231910630287, 14284016967150029115, 121098312706494698];
 
@@ -101,11 +103,76 @@ impl From<u64> for Bls12Base {
 impl Bls12Scalar {
     pub const ZERO: Self = Self { limbs: [0; 4] };
     pub const ONE: Self = Self { limbs: [1, 0, 0, 0] };
+    pub const TWO: Self = Self { limbs: [2, 0, 0, 0] };
+    pub const THREE: Self = Self { limbs: [3, 0, 0, 0] };
 
     pub const BITS: usize = 253;
 
-    // The order of the field.
+    /// The order of the field:
+    /// 8444461749428370424248824938781546531375899335154063827935233455917409239041
     pub const ORDER: [u64; 4] = [725501752471715841, 6461107452199829505, 6968279316240510977, 1345280370688173398];
+
+    pub const TWO_ADICITY: usize = 47;
+
+    /// Generator of [1, order).
+    const GENERATOR: Bls12Scalar = Bls12Scalar { limbs: [11, 0, 0, 0] };
+
+    /// 60001509534603559531609739528203892656505753216962260608619555
+    const T: Bls12Scalar = Self { limbs: [17149038877957297187, 11113960768935211860, 14608890324369326440, 9558] };
+
+    /// Computes a `2^n_power`th primitive root of unity.
+    pub fn primitive_root_of_unity(n_power: usize) -> Bls12Scalar {
+        assert!(n_power <= 47);
+        let base_root = Self::GENERATOR.exp(Self::T);
+        base_root.exp((1u64 << 47u64 - n_power as u64).into())
+    }
+
+    pub fn cyclic_subgroup_unknown_order(generator: Bls12Scalar) -> Vec<Bls12Scalar> {
+        let mut subgroup_vec = Vec::new();
+        let mut subgroup_set = HashSet::new();
+        let mut current = generator;
+        loop {
+            if !subgroup_set.insert(current) {
+                break;
+            }
+            subgroup_vec.push(current);
+            current = current * generator;
+        }
+        subgroup_vec
+    }
+
+    pub fn cyclic_subgroup_known_order(generator: Bls12Scalar, order: usize) -> Vec<Bls12Scalar> {
+        let mut subgroup = Vec::new();
+        let mut current = generator;
+        for i in 0..order {
+            subgroup.push(current);
+            current = current * generator;
+        }
+        subgroup
+    }
+
+    pub fn generator_order(generator: Bls12Scalar) -> usize {
+        Self::cyclic_subgroup_unknown_order(generator).len()
+    }
+
+    pub fn exp(&self, power: Bls12Scalar) -> Bls12Scalar {
+        let mut current = *self;
+        let mut product = Bls12Scalar::ONE;
+        for limb in power.limbs.iter() {
+            for i in 0..64 {
+                if (limb >> i & 1u64) != 0u64 {
+                    product = product * current;
+                }
+                current = current.square();
+            }
+        }
+        product
+    }
+
+    pub fn square(&self) -> Self {
+        // TODO: Some intermediate products are the redundant, so this can be made faster.
+        *self * *self
+    }
 
     pub fn multiplicative_inverse(&self) -> Self {
         Self { limbs: multiplicative_inverse_4(self.limbs) }
@@ -568,6 +635,37 @@ mod tests {
 
         for i in 0..4 {
             assert!(random_element.limbs[i] != 0x0);
+        }
+    }
+
+    #[test]
+    fn exp() {
+        assert_eq!(Bls12Scalar::THREE.exp(Bls12Scalar::ZERO), Bls12Scalar::ONE);
+        assert_eq!(Bls12Scalar::THREE.exp(Bls12Scalar::ONE), Bls12Scalar::THREE);
+        assert_eq!(Bls12Scalar::THREE.exp(Bls12Scalar::TWO), Bls12Scalar::from(9u64));
+        assert_eq!(Bls12Scalar::THREE.exp(Bls12Scalar::THREE), Bls12Scalar::from(27u64));
+    }
+
+    #[test]
+    fn roots_of_unity() {
+        for n_power in 0..10 {
+            let n = 1 << n_power as u64;
+            let root = Bls12Scalar::primitive_root_of_unity(n_power);
+
+            assert_eq!(root.exp(Bls12Scalar::from(n)), Bls12Scalar::ONE);
+
+            if n > 1 {
+                assert_ne!(root.exp(Bls12Scalar::from(n - 1)), Bls12Scalar::ONE)
+            }
+        }
+    }
+
+    #[test]
+    fn primitive_root_order() {
+        for n_power in 0..10 {
+            let root = Bls12Scalar::primitive_root_of_unity(n_power);
+            let order = Bls12Scalar::generator_order(root);
+            assert_eq!(order, 1 << n_power, "2^{}'th primitive root", n_power);
         }
     }
 }
