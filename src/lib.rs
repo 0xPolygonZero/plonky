@@ -10,5 +10,6 @@ mod field;
 mod fft;
 mod group;
 mod group_multiplication;
+mod num_util;
 mod plonk;
 mod poly_commit;

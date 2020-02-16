@@ -101,6 +101,7 @@ impl Add<G1ProjectivePoint> for G1ProjectivePoint {
     ///
     /// Performs several checks that assume normalized coordinates (z=1) before implementing
     /// the general addition algorithm for projective coordinates
+    // TODO: Add a variant which assumes rhs is normalized (z=1).
     fn add(self, rhs: G1ProjectivePoint) -> Self::Output {
         if self.is_zero() {
             rhs
@@ -153,7 +154,7 @@ impl G1ProjectivePoint {
     }
 
     pub fn new(x: Bls12Base, y: Bls12Base, z: Bls12Base) -> G1ProjectivePoint {
-        assert!(G1ProjectivePoint::is_on_curve(x, y, z) /*&& is_in_subgroup(x, y, z)*/);
+        debug_assert!(G1ProjectivePoint::is_on_curve(x, y, z) /*&& is_in_subgroup(x, y, z)*/);
         G1ProjectivePoint { x: x, y: y, z: z }
     }
 

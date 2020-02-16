@@ -23,6 +23,7 @@ use unroll::unroll_for_loops;
 use lazy_static::lazy_static;
 
 use crate::conversions::{biguint_to_u64_vec, u64_slice_to_biguint};
+use crate::num_util::inverse;
 
 lazy_static! {
     /// Precomputed R for the Barrett reduction algorithm.
@@ -89,8 +90,14 @@ impl Bls12Base {
         *self * *self
     }
 
-    pub fn multiplicative_inverse(&self) -> Self {
-        Self { limbs: multiplicative_inverse_6(self.limbs) }
+    pub fn multiplicative_inverse(&self) -> Option<Self> {
+        let self_biguint = u64_slice_to_biguint(&self.limbs);
+        let order_biguint = u64_slice_to_biguint(&Self::ORDER);
+        let opt_inverse_biguint = inverse(self_biguint, &order_biguint);
+
+        opt_inverse_biguint.map(|inverse_biguint| Self {
+            limbs: biguint_to_u64_vec(inverse_biguint, 6).as_slice().try_into().unwrap()
+        })
     }
 }
 
@@ -174,8 +181,14 @@ impl Bls12Scalar {
         *self * *self
     }
 
-    pub fn multiplicative_inverse(&self) -> Self {
-        Self { limbs: multiplicative_inverse_4(self.limbs) }
+    pub fn multiplicative_inverse(&self) -> Option<Self> {
+        let self_biguint = u64_slice_to_biguint(&self.limbs);
+        let order_biguint = u64_slice_to_biguint(&Self::ORDER);
+        let opt_inverse_biguint = inverse(self_biguint, &order_biguint);
+
+        opt_inverse_biguint.map(|inverse_biguint| Self {
+            limbs: biguint_to_u64_vec(inverse_biguint, 4).as_slice().try_into().unwrap()
+        })
     }
 
     // TODO: replace with a CSPRNG
@@ -272,7 +285,7 @@ impl Div<Bls12Base> for Bls12Base {
     type Output = Bls12Base;
 
     fn div(self, rhs: Bls12Base) -> Bls12Base {
-        self * rhs.multiplicative_inverse()
+        self * rhs.multiplicative_inverse().expect("No inverse")
     }
 }
 
@@ -280,7 +293,7 @@ impl Div<Bls12Scalar> for Bls12Scalar {
     type Output = Bls12Scalar;
 
     fn div(self, rhs: Bls12Scalar) -> Bls12Scalar {
-        self * rhs.multiplicative_inverse()
+        self * rhs.multiplicative_inverse().expect("No inverse")
     }
 }
 
@@ -546,14 +559,6 @@ macro_rules! div_asymmetric {
     }
 }
 
-macro_rules! multiplicative_inverse {
-    ($name:ident, $len:expr) => {
-        pub fn $name(a: [u64; $len]) -> [u64; $len] {
-            todo!()
-        }
-    }
-}
-
 add_symmetric!(add_4_4, 4);
 add_symmetric!(add_6_6, 6);
 
@@ -569,6 +574,8 @@ mul_symmetric!(mul_6_6, 6);
 mul_asymmetric!(mul_8_4, 8, 4);
 mul_asymmetric!(mul_12_6, 12, 6);
 
+div_asymmetric!(div_4_4, 4, 4);
+div_asymmetric!(div_6_6, 6, 6);
 div_asymmetric!(div_8_4, 8, 4);
 div_asymmetric!(div_12_6, 12, 6);
 
@@ -579,9 +586,6 @@ cmp_asymmetric!(cmp_7_6, 7, 6);
 
 shl!(shl_12_4, 12, 4);
 shl!(shl_18_6, 18, 6);
-
-multiplicative_inverse!(multiplicative_inverse_4, 4);
-multiplicative_inverse!(multiplicative_inverse_6, 6);
 
 barrett_reduction!(barrett_reduction_bls12_scalar, 4, mul_4_4, mul_8_4, cmp_5_4, sub_8_8, sub_5_4, shl_12_4,
 Bls12Scalar::ORDER, *BLS12_SCALAR_BARRETT_R, Bls12Scalar::BITS);
