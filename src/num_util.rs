@@ -1,84 +1,54 @@
 use std::cmp::Ordering;
+use std::fmt::Display;
 use std::mem;
 use std::ops::{Neg, Shr};
 
-use num::Integer;
+use num::{BigInt, BigUint, Integer, One, Zero};
 use num::traits::NumRef;
 use num::traits::RefNum;
 
-/// See https://github.com/rust-num/num-integer/pull/10/files
+use num::bigint::ToBigInt;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct GcdResult<T> {
-    /// Greatest common divisor.
-    pub gcd: T,
-    /// Coefficients such that: gcd(a, b) = c1*a + c2*b
-    pub c1: T, pub c2: T,
-}
-
-/// Calculate greatest common divisor and the corresponding coefficients.
-pub fn extended_gcd<T: Integer + NumRef>(a: T, b: T) -> GcdResult<T>
-    where for<'a> &'a T: RefNum<T>
-{
-    // Euclid's extended algorithm
-    let (mut s, mut old_s) = (T::zero(), T::one());
-    let (mut t, mut old_t) = (T::one(), T::zero());
-    let (mut r, mut old_r) = (b, a);
-
-    while r != T::zero() {
-        let quotient = &old_r / &r;
-        old_r = old_r - &quotient * &r; mem::swap(&mut old_r, &mut r);
-        old_s = old_s - &quotient * &s; mem::swap(&mut old_s, &mut s);
-        old_t = old_t - quotient * &t; mem::swap(&mut old_t, &mut t);
-    }
-
-    let _quotients = (t, s); // == (a, b) / gcd
-
-    GcdResult { gcd: old_r, c1: old_s, c2: old_t }
-}
-
-/// Find the standard representation of a (mod n).
-pub fn normalize<T: Integer + NumRef>(a: T, n: &T) -> T {
-    let a = a % n;
-    match a.cmp(&T::zero()) {
-        Ordering::Less => a + n,
-        _ => a,
+fn egcd(a: BigInt, b: BigInt) -> (BigInt, BigInt, BigInt) {
+    if a.is_zero() {
+        (b, BigInt::zero(), BigInt::one())
+    } else {
+        let (g, y, x) = egcd(&b % &a, a.clone());
+        return (g, x - (b / a) * &y, y)
     }
 }
 
-/// Calculate the inverse of a (mod n).
-pub fn inverse<T: Integer + NumRef + Clone>(a: T, n: &T) -> Option<T>
-    where for<'a> &'a T: RefNum<T>
-{
-    let GcdResult { gcd, c1: c, .. } = extended_gcd(a, n.clone());
-    if gcd == T::one() {
-        Some(normalize(c, n))
+pub fn modinv(a: BigUint, m: BigUint) -> Option<BigUint> {
+    let a = a.to_bigint().unwrap();
+    let m = m.to_bigint().unwrap();
+    let (g, x, y) = egcd(a, m.clone());
+    if g.is_one() {
+        let result_bigint = (x % &m + &m) % m;
+        Some((result_bigint).to_biguint().unwrap())
     } else {
         None
     }
 }
 
-/// Calculate base^exp (mod modulus).
-pub fn powm<T>(base: &T, exp: &T, modulus: &T) -> T
-    where T: Integer + NumRef + Clone + Neg<Output = T> + Shr<i32, Output = T>,
-          for<'a> &'a T: RefNum<T>
-{
-    let zero = T::zero();
-    let one = T::one();
-    let two = &one + &one;
-    let mut exp = exp.clone();
-    let mut result = one.clone();
-    let mut base = base % modulus;
-    if exp < zero {
-        exp = -exp;
-        base = inverse(base, modulus).unwrap();
-    }
-    while exp > zero {
-        if &exp % &two == one {
-            result = (result * &base) % modulus;
+#[cfg(test)]
+mod tests {
+    use num::{BigUint, FromPrimitive, ToPrimitive};
+    use crate::num_util::modinv;
+
+    #[test]
+    fn test_modinv() {
+        let m = 197;
+        let m_biguint = BigUint::from_u32(m).unwrap();
+
+        for x in 0..m {
+            let x_biguint = BigUint::from_u32(x).unwrap();
+            let x_inv_biguint = modinv(x_biguint.clone(), m_biguint.clone());
+            if x == 0 {
+                assert!(x_inv_biguint.is_none());
+            } else {
+                let x_inv = x_inv_biguint.expect("No inverse").to_u32().unwrap();
+                assert_eq!(x * x_inv % m, 1);
+            }
         }
-        exp = exp >> 1;
-        base = (&base * &base) % modulus;
     }
-    result
 }
