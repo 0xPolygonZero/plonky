@@ -43,7 +43,10 @@ pub struct Bls12Scalar {
 
 impl Bls12Base {
     pub const ZERO: Self = Self { limbs: [0; 6] };
-    pub const ONE: Self = Self { limbs: [1, 0, 0, 0, 0, 0] };
+    pub const ONE: Self = Self {
+        limbs: [202099033278250856, 5854854902718660529, 11492539364873682930, 8885205928937022213,
+            5545221690922665192, 39800542322357402]
+    };
 
     pub const BITS: usize = 377;
 
@@ -67,16 +70,16 @@ impl Bls12Base {
     /// In the context of Montgomery multiplication, µ = -|F|^-1 mod 2^64.
     const MU: u64 = 9586122913090633727;
 
-    fn from_canonical(c: [u64; 6]) -> Self {
+    pub fn from_canonical(c: [u64; 6]) -> Self {
         // We compute M(c, R^2) = c * R^2 * R^-1 = c * R.
         Self { limbs: Self::montgomery_multiply(c, Self::R2) }
     }
 
-    fn from_canonical_u64(c: u64) -> Self {
+    pub fn from_canonical_u64(c: u64) -> Self {
         Self::from_canonical([c, 0, 0, 0, 0, 0])
     }
 
-    fn to_canonical(&self) -> [u64; 6] {
+    pub fn to_canonical(&self) -> [u64; 6] {
         // Let x * R = self. We compute M(x * R, 1) = x * R * R^-1 = x.
         Self::montgomery_multiply(self.limbs, [1, 0, 0, 0, 0, 0])
     }
@@ -89,6 +92,10 @@ impl Bls12Base {
     pub fn square(&self) -> Self {
         // TODO: Some intermediate products are the redundant, so this can be made faster.
         *self * *self
+    }
+
+    pub fn cube(&self) -> Self {
+        self.square() * *self
     }
 
     pub fn multiplicative_inverse(&self) -> Option<Self> {
@@ -175,19 +182,21 @@ impl Bls12Scalar {
     pub const TWO_ADICITY: usize = 47;
 
     /// Generator of [1, order).
-    const GENERATOR: Bls12Scalar = Bls12Scalar { limbs: [
-        1855201571499933546, 8511318076631809892, 6222514765367795509, 1122129207579058019] };
+    const GENERATOR: Bls12Scalar = Bls12Scalar {
+        limbs: [
+            1855201571499933546, 8511318076631809892, 6222514765367795509, 1122129207579058019]
+    };
 
-    fn from_canonical(c: [u64; 4]) -> Self {
+    pub fn from_canonical(c: [u64; 4]) -> Self {
         // We compute M(c, R^2) = c * R^2 * R^-1 = c * R.
         Self { limbs: Self::montgomery_multiply(c, Self::R2) }
     }
 
-    fn from_canonical_u64(c: u64) -> Self {
+    pub fn from_canonical_u64(c: u64) -> Self {
         Self::from_canonical([c, 0, 0, 0])
     }
 
-    fn to_canonical(&self) -> [u64; 4] {
+    pub fn to_canonical(&self) -> [u64; 4] {
         // Let x * R = self. We compute M(x * R, 1) = x * R * R^-1 = x.
         Self::montgomery_multiply(self.limbs, [1, 0, 0, 0])
     }
@@ -257,7 +266,7 @@ impl Bls12Scalar {
         opt_inverse_biguint.map(|inverse_biguint| Self {
             limbs: Self::montgomery_multiply(
                 biguint_to_u64_vec(inverse_biguint, 4).as_slice().try_into().unwrap(),
-                Bls12Scalar::R3
+                Bls12Scalar::R3,
             )
         })
     }

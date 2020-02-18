@@ -4,7 +4,7 @@ use chashmap::CHashMap;
 
 use lazy_static::lazy_static;
 
-use crate::{Bls12Scalar, G1ProjectivePoint};
+use crate::{Bls12Scalar, G1ProjectivePoint, G1AffinePoint};
 
 const WINDOW_BITS: usize = 4;
 const BASE: usize = 1 << WINDOW_BITS;
@@ -14,8 +14,8 @@ const DIGITS: usize = (Bls12Scalar::BITS + WINDOW_BITS - 1) / WINDOW_BITS;
 /// specific to a particular generator.
 #[derive(Copy, Clone)]
 struct G1GeneratorPrecomputations {
-    /// [(2^w)^i] g for each i < DIGITS
-    powers: [G1ProjectivePoint; DIGITS],
+    /// [(2^w)^i] g for each i < DIGITS; must be normalized
+    powers: [G1AffinePoint; DIGITS],
 }
 
 // TODO: Use compressed coordinates in the cache.
@@ -35,13 +35,14 @@ fn get_precomputation(g: G1ProjectivePoint) -> G1GeneratorPrecomputations {
 }
 
 fn precompute(g: G1ProjectivePoint) -> G1GeneratorPrecomputations {
-    let mut powers = [G1ProjectivePoint::ZERO; DIGITS];
-    powers[0] = g;
+    let mut powers = [G1AffinePoint::ZERO; DIGITS];
+    powers[0] = g.to_affine();
     for i in 1..DIGITS {
-        powers[i] = powers[i - 1];
+        let mut power_i_proj = powers[i - 1].to_projective();
         for _j in 0..WINDOW_BITS {
-            powers[i] = powers[i] + powers[i];
+            power_i_proj = power_i_proj.double();
         }
+        powers[i] = power_i_proj.to_affine();
     }
     G1GeneratorPrecomputations { powers }
 }
@@ -74,7 +75,7 @@ fn to_digits(x: &Bls12Scalar) -> [u64; DIGITS] {
                   "For simplicity, only power-of-two window sizes are handled for now");
     let digits_per_u64 = 64 / WINDOW_BITS;
     let mut digits = [0; DIGITS];
-    for (i, limb) in x.limbs.iter().enumerate() {
+    for (i, limb) in x.to_canonical().iter().enumerate() {
         for j in 0..digits_per_u64 {
             digits[i * digits_per_u64 + j] = (limb >> (j * WINDOW_BITS)) % BASE as u64;
         }
