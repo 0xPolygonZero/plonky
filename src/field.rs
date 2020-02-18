@@ -99,13 +99,17 @@ impl Bls12Base {
     }
 
     pub fn multiplicative_inverse(&self) -> Option<Self> {
-        // TODO: This assumes canonical representation. Need to M-multiply by R^3.
+        // Let x R = self. We compute M((x R)^-1, R^3) = x^-1 R^-1 R^3 R^-1 = x^-1 R.
+        // We use BigUints for now, since we don't care much about inverse performance.
         let self_biguint = u64_slice_to_biguint(&self.limbs);
         let order_biguint = u64_slice_to_biguint(&Self::ORDER);
         let opt_inverse_biguint = modinv(self_biguint, order_biguint);
 
         opt_inverse_biguint.map(|inverse_biguint| Self {
-            limbs: biguint_to_u64_vec(inverse_biguint, 6).as_slice().try_into().unwrap()
+            limbs: Self::montgomery_multiply(
+                biguint_to_u64_vec(inverse_biguint, 6).as_slice().try_into().unwrap(),
+                Bls12Base::R3,
+            )
         })
     }
 
@@ -279,6 +283,8 @@ impl Bls12Scalar {
             limbs[i] = OsRng.next_u64();
         }
 
+        // TODO: May be out of range; need to reduce.
+
         Bls12Scalar { limbs }
     }
 
@@ -386,7 +392,7 @@ impl Mul<u64> for Bls12Base {
 
     fn mul(self, rhs: u64) -> Self::Output {
         // TODO: Do a 6x1 multiplication instead of padding to 6x6.
-        let rhs_field = Bls12Base { limbs: [rhs, 0x0, 0x0, 0x0, 0x0, 0x0] };
+        let rhs_field = Bls12Base::from_canonical_u64(rhs);
         self * rhs_field
     }
 }
@@ -710,7 +716,7 @@ mod tests {
         let random_element = Bls12Scalar::rand();
 
         for i in 0..4 {
-            assert!(random_element.limbs[i] != 0x0);
+            assert_ne!(random_element.limbs[i], 0x0);
         }
     }
 
@@ -720,6 +726,33 @@ mod tests {
         assert_eq!(Bls12Scalar::THREE.exp(BigUint::one()), Bls12Scalar::THREE);
         assert_eq!(Bls12Scalar::THREE.exp(BigUint::from_u8(2).unwrap()), Bls12Scalar::from_canonical_u64(9));
         assert_eq!(Bls12Scalar::THREE.exp(BigUint::from_u8(3).unwrap()), Bls12Scalar::from_canonical_u64(27));
+    }
+
+    #[test]
+    fn negation() {
+        for i in 0..25 {
+            let i_blsbase = Bls12Base::from_canonical_u64(i);
+            let i_blsscalar = Bls12Scalar::from_canonical_u64(i);
+            assert_eq!(i_blsbase + -i_blsbase, Bls12Base::ZERO);
+            assert_eq!(i_blsscalar + -i_blsscalar, Bls12Scalar::ZERO);
+        }
+    }
+
+    #[test]
+    fn multiplicative_inverse() {
+        for i in 0..25 {
+            let i_blsbase = Bls12Base::from_canonical_u64(i);
+            let i_blsscalar = Bls12Scalar::from_canonical_u64(i);
+            let i_inv_blsbase = i_blsbase.multiplicative_inverse();
+            let i_inv_blsscalar = i_blsscalar.multiplicative_inverse();
+            if i == 0 {
+                assert!(i_inv_blsbase.is_none());
+                assert!(i_inv_blsscalar.is_none());
+            } else {
+                assert_eq!(i_blsbase * i_inv_blsbase.unwrap(), Bls12Base::ONE);
+                assert_eq!(i_blsscalar * i_inv_blsscalar.unwrap(), Bls12Scalar::ONE);
+            }
+        }
     }
 
     #[test]
