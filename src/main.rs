@@ -2,10 +2,13 @@ use std::time::Instant;
 
 use plonky::{Bls12Scalar, G1_GENERATOR, msm_execute, msm_precompute};
 
-const DEGREE: usize = 1 << 13;
+const DEGREE: usize = 1 << 17;
 
 fn main() {
-    let w = 15;
+    // Here's a quick Python snippet to calculate optimal window sizes:
+    //     min(range(1, 50), key=lambda w: 2**w + degree * ceil(field_bits / w))
+    let w = 17;
+
     let mut generators = Vec::with_capacity(DEGREE);
     let mut scalars = Vec::with_capacity(DEGREE);
     for _i in 0..DEGREE {
