@@ -14,7 +14,7 @@ const DIGITS: usize = (Bls12Scalar::BITS + WINDOW_BITS - 1) / WINDOW_BITS;
 /// specific to a particular generator.
 #[derive(Copy, Clone)]
 struct G1GeneratorPrecomputations {
-    /// [(2^w)^i] g for each i < DIGITS; must be normalized
+    /// [(2^w)^i] g for each i < DIGITS.
     powers: [G1AffinePoint; DIGITS],
 }
 

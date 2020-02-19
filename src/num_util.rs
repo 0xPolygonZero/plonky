@@ -21,7 +21,7 @@ fn egcd(a: BigInt, b: BigInt) -> (BigInt, BigInt, BigInt) {
 pub fn modinv(a: BigUint, m: BigUint) -> Option<BigUint> {
     let a = a.to_bigint().unwrap();
     let m = m.to_bigint().unwrap();
-    let (g, x, y) = egcd(a, m.clone());
+    let (g, x, _y) = egcd(a, m.clone());
     if g.is_one() {
         let result_bigint = (x % &m + &m) % m;
         Some((result_bigint).to_biguint().unwrap())

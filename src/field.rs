@@ -681,16 +681,29 @@ mod tests {
     }
 
     #[test]
-    fn test_to_and_from_canonical() {
+    fn bls12base_to_and_from_canonical() {
         let a = [1, 2, 3, 4, 0, 0];
         let a_biguint = u64_slice_to_biguint(&a);
         let order_biguint = u64_slice_to_biguint(&Bls12Base::ORDER);
         let r_biguint = u64_slice_to_biguint(&Bls12Base::R);
 
-        let a_blsbase = Bls12Base::from_canonical(a);
-        assert_eq!(u64_slice_to_biguint(&a_blsbase.limbs),
+        let a_bls12base = Bls12Base::from_canonical(a);
+        assert_eq!(u64_slice_to_biguint(&a_bls12base.limbs),
                    &a_biguint * &r_biguint % &order_biguint);
-        assert_eq!(u64_slice_to_biguint(&a_blsbase.to_canonical()), a_biguint);
+        assert_eq!(u64_slice_to_biguint(&a_bls12base.to_canonical()), a_biguint);
+    }
+
+    #[test]
+    fn bls12scalar_to_and_from_canonical() {
+        let a = [1, 2, 3, 4];
+        let a_biguint = u64_slice_to_biguint(&a);
+        let order_biguint = u64_slice_to_biguint(&Bls12Scalar::ORDER);
+        let r_biguint = u64_slice_to_biguint(&Bls12Scalar::R);
+
+        let a_bls12scalar = Bls12Scalar::from_canonical(a);
+        assert_eq!(u64_slice_to_biguint(&a_bls12scalar.limbs),
+                   &a_biguint * &r_biguint % &order_biguint);
+        assert_eq!(u64_slice_to_biguint(&a_bls12scalar.to_canonical()), a_biguint);
     }
 
     #[test]
