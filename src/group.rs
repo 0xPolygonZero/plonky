@@ -112,6 +112,22 @@ impl G1ProjectivePoint {
             G1AffinePoint { x: self.x / self.z, y: self.y / self.z }
         }
     }
+
+    pub fn batch_to_affine(proj_points: &[Self]) -> Vec<G1AffinePoint> {
+        let n = proj_points.len();
+        let zs: Vec<Bls12Base> = proj_points.iter().map(|pp| pp.z).collect();
+        let z_inv_opts = Bls12Base::batch_multiplicative_inverse_opt(&zs);
+
+        let mut result = Vec::with_capacity(n);
+        for i in 0..n {
+            let pp = proj_points[i];
+            result.push(match z_inv_opts[i] {
+                Some(z_inv) => G1AffinePoint { x: pp.x * z_inv, y: pp.y * z_inv },
+                None => G1AffinePoint::ZERO,
+            });
+        }
+        result
+    }
 }
 
 impl PartialEq for G1ProjectivePoint {

@@ -18,6 +18,10 @@ fn criterion_benchmark(c: &mut Criterion) {
         black_box(g) + black_box(g);
     }));
 
+    c.bench_function("BLS12 G1 doubling", move |b| b.iter(|| {
+        black_box(g).double();
+    }));
+
     c.bench_function("BLS12 G1 multiplication", move |b| b.iter(|| {
         black_box(s) * black_box(g);
     }));

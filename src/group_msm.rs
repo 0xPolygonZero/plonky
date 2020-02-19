@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use rayon::prelude::*;
+
 use crate::{Bls12Scalar, G1AffinePoint, G1ProjectivePoint};
 
 pub struct MsmPrecomputation {
@@ -11,24 +13,24 @@ pub struct MsmPrecomputation {
 
 pub fn msm_precompute(generators: &Vec<G1ProjectivePoint>, w: usize) -> MsmPrecomputation {
     MsmPrecomputation {
-        powers_per_generator: generators.iter()
-            .map(|g| precompute_single_generator(g, w))
+        powers_per_generator: generators.into_par_iter()
+            .map(|&g| precompute_single_generator(g, w))
             .collect()
     }
 }
 
-fn precompute_single_generator(g: &G1ProjectivePoint, w: usize) -> Vec<G1AffinePoint> {
+fn precompute_single_generator(g: G1ProjectivePoint, w: usize) -> Vec<G1AffinePoint> {
     let digits = (Bls12Scalar::BITS + w - 1) / w;
-    let mut powers = Vec::with_capacity(digits);
-    powers.push(g.to_affine());
+    let mut powers: Vec<G1ProjectivePoint> = Vec::with_capacity(digits);
+    powers.push(g);
     for i in 1..digits {
-        let mut power_i_proj = powers[i - 1].to_projective();
+        let mut power_i_proj = powers[i - 1];
         for _j in 0..w {
             power_i_proj = power_i_proj.double();
         }
-        powers.push(power_i_proj.to_affine());
+        powers.push(power_i_proj);
     }
-    powers
+    G1ProjectivePoint::batch_to_affine(&powers)
 }
 
 pub fn msm_execute(
@@ -47,7 +49,7 @@ pub fn msm_execute(
     // where i is the index of the generator and j is an index into the digits of the scalar
     // associated with that generator.
     let mut digit_occurrences: Vec<Vec<(usize, usize)>> = Vec::with_capacity(digits);
-    for i in 0..digits {
+    for i in 0..base {
         digit_occurrences.push(Vec::new());
     }
     for (i, scalar) in scalars.iter().enumerate() {
@@ -94,7 +96,7 @@ pub(crate) fn to_digits(x: &Bls12Scalar, w: usize) -> Vec<usize> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12Scalar, to_digits, G1_GENERATOR, msm_precompute, msm_execute};
+    use crate::{Bls12Scalar, G1_GENERATOR, msm_execute, msm_precompute, to_digits};
 
     #[test]
     fn test_to_digits() {

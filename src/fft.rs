@@ -1,5 +1,4 @@
 use chashmap::CHashMap;
-use executors::threadpool_executor::ThreadPoolExecutor;
 use num::range_step;
 
 use lazy_static::lazy_static;
@@ -35,8 +34,6 @@ fn get_subgroup(order_power: usize) -> Vec<Bls12Scalar> {
 
 // TODO: Make coefficients mutable and do it in-place?
 fn fft(subgroup: Vec<Bls12Scalar>, coefficients: Vec<Bls12Scalar>) -> Vec<Bls12Scalar> {
-    let executor = ThreadPoolExecutor::new(num_cpus::get() * 2);
-
     let mut degree_pow = 0;
     while 1 << degree_pow < coefficients.len() {
         degree_pow += 1;
