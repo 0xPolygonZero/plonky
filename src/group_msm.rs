@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use rayon::prelude::*;
 
 use crate::{Bls12Scalar, G1AffinePoint, G1ProjectivePoint};
+use std::time::Instant;
 
 pub struct MsmPrecomputation {
     /// For each generator (in the order they were passed to `msm_precompute`), contains a vector
@@ -69,6 +70,60 @@ pub fn msm_execute(
         y = y + u;
     }
 
+    y
+}
+
+pub fn msm_execute_parallel(
+    precomputation: &MsmPrecomputation,
+    scalars: &Vec<Bls12Scalar>,
+    w: usize,
+) -> G1ProjectivePoint {
+    assert_eq!(precomputation.powers_per_generator.len(), scalars.len());
+    let digits = (Bls12Scalar::BITS + w - 1) / w;
+    let base = 1 << w;
+
+    // This is a variant of Yao's method, adapted to the multi-scalar setting. Because we use
+    // extremely large windows, the repeated scans in Yao's method could be more expensive than the
+    // actual group operations. To avoid this, we store a multimap from each possible digit to the
+    // positions in which that digit occurs in the scalars. These positions have the form (i, j),
+    // where i is the index of the generator and j is an index into the digits of the scalar
+    // associated with that generator.
+    let mut digit_occurrences: Vec<Vec<(usize, usize)>> = Vec::with_capacity(digits);
+    for i in 0..base {
+        digit_occurrences.push(Vec::new());
+    }
+    for (i, scalar) in scalars.iter().enumerate() {
+        let digits = to_digits(scalar, w);
+        for (j, &digit) in digits.iter().enumerate() {
+            digit_occurrences[digit].push((i, j));
+        }
+    }
+
+    // For each digit, we add up the powers associated with all occurrences that digit.
+    let digits: Vec<usize> = (0..base).collect();
+    println!("Computing digit_acc");
+    let start = Instant::now();
+    let digit_acc: Vec<G1ProjectivePoint> = digits.par_chunks(100)
+        .flat_map(|c| {
+            let accs: Vec<G1ProjectivePoint> = c.iter().map(|&digit| {
+                digit_occurrences[digit].iter()
+                    .map(|&(i, j)| precomputation.powers_per_generator[i][j])
+                    .sum()
+            }).collect();
+            accs
+        })
+        .collect();
+    println!("Done after {}s", start.elapsed().as_secs_f64());
+
+    println!("Adding up");
+    let start = Instant::now();
+    let mut y = G1ProjectivePoint::ZERO;
+    let mut u = G1ProjectivePoint::ZERO;
+    for digit in (1..base).rev() {
+        u = u + digit_acc[digit];
+        y = y + u;
+    }
+    println!("Done after {}s", start.elapsed().as_secs_f64());
     y
 }
 

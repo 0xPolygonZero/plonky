@@ -1,6 +1,7 @@
 use std::ops::Add;
 
 use crate::{Bls12Base, Bls12Scalar};
+use std::iter::Sum;
 
 // Parameters taken from the implementation of Bls12-377 in Zexe found here:
 // https://github.com/scipr-lab/zexe/blob/master/algebra/src/curves/bls12_377/g1.rs
@@ -215,6 +216,37 @@ impl Add<G1AffinePoint> for G1ProjectivePoint {
             let y3 = u * (r - a) - vvv * y1z2;
             let z3 = vvv * z1z2;
             G1ProjectivePoint { x: x3, y: y3, z: z3 }
+        }
+    }
+}
+
+impl Sum<G1AffinePoint> for G1ProjectivePoint {
+    fn sum<I: Iterator<Item=G1AffinePoint>>(mut iter: I) -> Self {
+        let first_opt = iter.next();
+        match first_opt {
+            Some(current_affine) => {
+                let mut current = current_affine.to_projective();
+                for x in iter {
+                    current = current + x;
+                }
+                current
+            },
+            None => G1ProjectivePoint::ZERO,
+        }
+    }
+}
+
+impl Sum for G1ProjectivePoint {
+    fn sum<I: Iterator<Item=G1ProjectivePoint>>(mut iter: I) -> Self {
+        let first_opt = iter.next();
+        match first_opt {
+            Some(mut current) => {
+                for x in iter {
+                    current = current + x;
+                }
+                current
+            },
+            None => G1ProjectivePoint::ZERO,
         }
     }
 }
