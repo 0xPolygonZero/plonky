@@ -454,7 +454,15 @@ impl Sub<Bls12Base> for Bls12Base {
     type Output = Bls12Base;
 
     fn sub(self, rhs: Bls12Base) -> Self::Output {
-        self + -rhs
+        let limbs = if cmp_6_6(self.limbs, rhs.limbs) == Ordering::Less {
+            // Underflow occurs, so we compute self + (ORDER - rhs).
+            let result = add_6_6(self.limbs, sub_6_6(Self::ORDER, rhs.limbs));
+            debug_assert_eq!(result[6], 0);
+            result[..6].try_into().unwrap()
+        } else {
+            sub_6_6(self.limbs, rhs.limbs)
+        };
+        Self { limbs }
     }
 }
 
