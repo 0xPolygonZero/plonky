@@ -9,8 +9,8 @@ fn criterion_benchmark(c: &mut Criterion) {
     let x = [11111111, 22222222, 33333333, 44444444, 55555555, 66666666];
     let y = [44444444, 55555555, 66666666, 77777777, 88888888, 99999999];
 
-    let x_bls12base = Bls12Base { limbs: x };
-    let y_bls12base = Bls12Base { limbs: y };
+    let x_bls12base = Bls12Base::from_canonical(x);
+    let y_bls12base = Bls12Base::from_canonical(y);
 
     let x_biguint = u64_slice_to_biguint(&x);
     let y_biguint = u64_slice_to_biguint(&y);
