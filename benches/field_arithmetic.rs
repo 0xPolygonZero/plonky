@@ -42,6 +42,14 @@ fn criterion_benchmark(c: &mut Criterion) {
         }));
     }
 
+    c.bench_function("Bls12Base field addition", move |b| b.iter(|| {
+        black_box(y_bls12base) + black_box(x_bls12base);
+    }));
+
+    c.bench_function("Bls12Base field subtraction", move |b| b.iter(|| {
+        black_box(y_bls12base) - black_box(x_bls12base);
+    }));
+
     c.bench_function("Bls12Base field multiplication", move |b| b.iter(|| {
         black_box(x_bls12base) * black_box(y_bls12base);
     }));

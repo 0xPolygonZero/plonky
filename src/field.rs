@@ -726,8 +726,6 @@ add_symmetric!(add_6_6, 6);
 
 sub_symmetric!(sub_4_4, 4);
 sub_symmetric!(sub_6_6, 6);
-sub_symmetric!(sub_8_8, 8);
-sub_symmetric!(sub_12_12, 12);
 sub_asymmetric!(sub_7_6, 7, 6);
 sub_asymmetric!(sub_5_4, 5, 4);
 
@@ -745,9 +743,6 @@ cmp_symmetric!(cmp_4_4, 4);
 cmp_symmetric!(cmp_6_6, 6);
 cmp_asymmetric!(cmp_5_4, 5, 4);
 cmp_asymmetric!(cmp_7_6, 7, 6);
-
-shl!(shl_12_4, 12, 4);
-shl!(shl_18_6, 18, 6);
 
 #[cfg(test)]
 mod tests {
