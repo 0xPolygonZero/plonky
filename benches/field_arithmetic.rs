@@ -57,6 +57,10 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("Bls12Base field squaring", move |b| b.iter(|| {
         black_box(x_bls12base).square()
     }));
+
+    c.bench_function("Bls12Base field inversion", move |b| b.iter(|| {
+        black_box(x_bls12base).multiplicative_inverse()
+    }));
 }
 
 fn u64_slice_to_biguint(n: &[u64]) -> BigUint {

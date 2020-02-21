@@ -11,8 +11,11 @@
 //! in the future when const generics become stable.
 
 use std::cmp::Ordering;
+use std::cmp::Ordering::{Equal, Greater, Less};
 use std::collections::HashSet;
 use std::convert::TryInto;
+use std::mem;
+use std::mem::swap;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 use std::str::FromStr;
 
@@ -103,18 +106,131 @@ impl Bls12Base {
     }
 
     pub fn multiplicative_inverse(&self) -> Option<Self> {
-        // Let x R = self. We compute M((x R)^-1, R^3) = x^-1 R^-1 R^3 R^-1 = x^-1 R.
-        // We use BigUints for now, since we don't care much about inverse performance.
-        let self_biguint = u64_slice_to_biguint(&self.limbs);
-        let order_biguint = u64_slice_to_biguint(&Self::ORDER);
-        let opt_inverse_biguint = modinv(self_biguint, order_biguint);
+        if self.is_zero() {
+            None
+        } else {
+            // Let x R = self. We compute M((x R)^-1, R^3) = x^-1 R^-1 R^3 R^-1 = x^-1 R.
+            let self_r_inv = Self::nonzero_multiplicative_inverse_canonical(self.limbs);
+            Some(Self { limbs: Self::montgomery_multiply(self_r_inv, Self::R3) })
+        }
+    }
 
-        opt_inverse_biguint.map(|inverse_biguint| Self {
-            limbs: Self::montgomery_multiply(
-                biguint_to_u64_vec(inverse_biguint, 6).as_slice().try_into().unwrap(),
-                Bls12Base::R3,
-            )
-        })
+    fn nonzero_multiplicative_inverse_canonical(a: [u64; 6]) -> [u64; 6] {
+        // Based on SE3 from "Modular Inverse Algorithms Without Multiplications for Cryptographic
+        // Applications", by Laszlo Hars.
+
+        let zero = [0, 0, 0, 0, 0, 0];
+        let one = [1, 0, 0, 0, 0, 0];
+
+        let mut u_neg = false;
+        let mut v_neg = false;
+        let mut r_neg = false;
+        let mut s_neg = false;
+        let mut u = Self::ORDER;
+        let mut v = a;
+        let mut r = zero;
+        let mut s = one;
+
+        while Self::size_in_bits(v) > 1 {
+            let f = Self::size_in_bits(u) - Self::size_in_bits(v);
+            let signs_equal = u_neg == v_neg;
+            let (u_neg_new, u_new) = Self::signed_add_6_6(u_neg, u, v_neg ^ signs_equal, Self::shl(v, f));
+            let (r_neg_new, r_new) = Self::signed_add_6_6(r_neg, r, s_neg ^ signs_equal, Self::shl(s, f));
+            u_neg = u_neg_new;
+            u = u_new;
+            r_neg = r_neg_new;
+            r = r_new;
+            if Self::size_in_bits(u) < Self::size_in_bits(v) {
+                swap(&mut u_neg, &mut v_neg);
+                swap(&mut u, &mut v);
+                swap(&mut r_neg, &mut s_neg);
+                swap(&mut r, &mut s);
+            }
+        }
+
+        debug_assert_ne!(v, zero);
+        s_neg ^= v_neg;
+        if s_neg {
+            // s + m == m - |s|
+            sub_6_6(Self::ORDER, s)
+        } else if cmp_6_6(s, Self::ORDER) == Greater {
+            // s - m
+            return sub_6_6(s, Self::ORDER);
+        } else {
+            s
+        }
+    }
+
+    /// Shift bits in the direction of increasing significance.
+    #[unroll_for_loops]
+    fn shl(x: [u64; 6], shift: usize) -> [u64; 6] {
+        let shift_words = shift / 64;
+        let shift_bits = shift as u32 % 64;
+        let mut result = [0; 6];
+        for i in shift_words..6 {
+            let ms_index = i - shift_words;
+            result[i] |= x[ms_index] << shift_bits;
+            if shift_bits != 0 && ms_index > 0 {
+                let ls_index = ms_index - 1;
+                result[i] |= x[ls_index].overflowing_shr(64 - shift_bits).0;
+            }
+        }
+        result
+    }
+
+    fn size_in_bits(x: [u64; 6]) -> usize {
+        let mut size = 0;
+        for i in 0..6 {
+            for j in 0..64 {
+                let bit_index: usize = i * 64 + j;
+                let bit_is_set = (x[i] >> j & 1) != 0;
+                if bit_is_set {
+                    size = bit_index + 1;
+                }
+            }
+        }
+        size
+    }
+
+    fn signed_cmp_6_6(a_neg: bool, a: [u64; 6], b_neg: bool, b: [u64; 6]) -> Ordering {
+        if a == [0, 0, 0, 0, 0, 0] && b == [0, 0, 0, 0, 0, 0] {
+            // Special case because we need to ignore signs.
+            return Equal;
+        }
+
+        if a_neg != b_neg {
+            if a_neg {
+                Less
+            } else {
+                Greater
+            }
+        } else {
+            let magnitude_ordering = cmp_6_6(a, b);
+            if a_neg {
+                magnitude_ordering.reverse()
+            } else {
+                magnitude_ordering
+            }
+        }
+    }
+
+    fn signed_add_6_6(a_neg: bool, a: [u64; 6], b_neg: bool, b: [u64; 6]) -> (bool, [u64; 6]) {
+        if a_neg == b_neg {
+            let widened_sum = add_6_6(a, b);
+            debug_assert_eq!(widened_sum[6], 0);
+            (a_neg, widened_sum[0..6].try_into().unwrap())
+        } else {
+            let ordering = cmp_6_6(a, b);
+            if ordering == Greater {
+                (a_neg, sub_6_6(a, b))
+            } else {
+                (b_neg, sub_6_6(b, a))
+            }
+        }
+    }
+
+    fn signed_sub_6_6(a_neg: bool, a: [u64; 6], b_neg: bool, b: [u64; 6]) -> (bool, [u64; 6]) {
+        Self::signed_add_6_6(a_neg, a, !b_neg, b)
     }
 
     pub fn batch_multiplicative_inverse_opt(x: &[Self]) -> Vec<Option<Self>> {
@@ -158,7 +274,7 @@ impl Bls12Base {
 
         let mut a_inv = vec![Self::ZERO; n];
         a_inv[n - 1] = a[n - 1].multiplicative_inverse().expect("No inverse");
-        for i in (0..n-1).rev() {
+        for i in (0..n - 1).rev() {
             a_inv[i] = x[i + 1] * a_inv[i + 1];
         }
 
@@ -349,7 +465,7 @@ impl Bls12Scalar {
 
         let mut a_inv = vec![Self::ZERO; n];
         a_inv[n - 1] = a[n - 1].multiplicative_inverse().expect("No inverse");
-        for i in (0..n-1).rev() {
+        for i in (0..n - 1).rev() {
             a_inv[i] = x[i + 1] * a_inv[i + 1];
         }
 
@@ -871,6 +987,20 @@ mod tests {
         for (x_i, x_i_inv) in x.into_iter().zip(x_inv) {
             assert_eq!(x_i * x_i_inv, Bls12Base::ONE);
         }
+    }
+
+    #[test]
+    fn test_shl() {
+        assert_eq!(Bls12Base::shl([1, 2, 3, 4, 5, 6], 128), [0, 0, 1, 2, 3, 4]);
+
+        assert_eq!(
+            Bls12Base::shl([0, 0, 0, 0,
+                               0b1010101010101010101010101010101010101010101010101010101010101010,
+                               0b1100110011001100110011001100110011001100110011001100110011001100],
+                           5),
+            [0, 0, 0, 0,
+                0b0101010101010101010101010101010101010101010101010101010101000000,
+                0b1001100110011001100110011001100110011001100110011001100110010101])
     }
 
     #[test]
