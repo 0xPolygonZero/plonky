@@ -116,65 +116,79 @@ impl Bls12Base {
     }
 
     fn nonzero_multiplicative_inverse_canonical(a: [u64; 6]) -> [u64; 6] {
-        // Based on SE3 from "Modular Inverse Algorithms Without Multiplications for Cryptographic
-        // Applications", by Laszlo Hars.
+        // Based on Algorithm 16 of "Efficient Software-Implementation of Finite Fields with
+        // Applications to Cryptography".
 
         let zero = [0, 0, 0, 0, 0, 0];
         let one = [1, 0, 0, 0, 0, 0];
 
-        let mut u_neg = false;
-        let mut v_neg = false;
-        let mut r_neg = false;
-        let mut s_neg = false;
-        let mut u = Self::ORDER;
-        let mut v = a;
-        let mut r = zero;
-        let mut s = one;
+        let mut u = a;
+        let mut v = Self::ORDER;
+        let mut b = one;
+        let mut c = zero;
 
-        while Self::size_in_bits(v) > 1 {
-            let f = Self::size_in_bits(u) - Self::size_in_bits(v);
-            let signs_equal = u_neg == v_neg;
-            let (u_neg_new, u_new) = Self::signed_add_6_6(u_neg, u, v_neg ^ signs_equal, Self::shl(v, f));
-            let (r_neg_new, r_new) = Self::signed_add_6_6(r_neg, r, s_neg ^ signs_equal, Self::shl(s, f));
-            u_neg = u_neg_new;
-            u = u_new;
-            r_neg = r_neg_new;
-            r = r_new;
-            if Self::size_in_bits(u) < Self::size_in_bits(v) {
-                swap(&mut u_neg, &mut v_neg);
-                swap(&mut u, &mut v);
-                swap(&mut r_neg, &mut s_neg);
-                swap(&mut r, &mut s);
+        while u != one && v != one {
+            while Self::is_even(u) {
+                u = Self::div2(u);
+                if Self::is_odd(b) {
+                    b = Self::add_asserting_no_overflow(b, Self::ORDER);
+                }
+                b = Self::div2(b);
+            }
+
+            while Self::is_even(v) {
+                v = Self::div2(v);
+                if Self::is_odd(c) {
+                    c = Self::add_asserting_no_overflow(c, Self::ORDER);
+                }
+                c = Self::div2(c);
+            }
+
+            if cmp_6_6(u, v) == Less {
+                v = sub_6_6(v, u);
+                if cmp_6_6(c, b) == Less {
+                    c = Self::add_asserting_no_overflow(c, Self::ORDER);
+                }
+                c = sub_6_6(c, b);
+            } else {
+                u = sub_6_6(u, v);
+                if cmp_6_6(b, c) == Less {
+                    b = Self::add_asserting_no_overflow(b, Self::ORDER);
+                }
+                b = sub_6_6(b, c);
             }
         }
 
-        debug_assert_ne!(v, zero);
-        s_neg ^= v_neg;
-        if s_neg {
-            // s + m == m - |s|
-            sub_6_6(Self::ORDER, s)
-        } else if cmp_6_6(s, Self::ORDER) == Greater {
-            // s - m
-            return sub_6_6(s, Self::ORDER);
+        if u == one {
+            b
         } else {
-            s
+            c
         }
     }
 
-    /// Shift bits in the direction of increasing significance.
+    fn add_asserting_no_overflow(a: [u64; 6], b: [u64; 6]) -> [u64; 6] {
+        let sum = add_6_6(a, b);
+        debug_assert_eq!(sum[6], 0);
+        sum[0..6].try_into().unwrap()
+    }
+
+    fn is_even(x: [u64; 6]) -> bool {
+        x[0] & 1 == 0
+    }
+
+    fn is_odd(x: [u64; 6]) -> bool {
+        x[0] & 1 == 1
+    }
+
+    /// Shift left (in the direction of increasing significance) by 1. Equivalent to integer
+    /// division by two.
     #[unroll_for_loops]
-    fn shl(x: [u64; 6], shift: usize) -> [u64; 6] {
-        let shift_words = shift / 64;
-        let shift_bits = shift as u32 % 64;
+    fn div2(x: [u64; 6]) -> [u64; 6] {
         let mut result = [0; 6];
-        for i in shift_words..6 {
-            let ms_index = i - shift_words;
-            result[i] |= x[ms_index] << shift_bits;
-            if shift_bits != 0 && ms_index > 0 {
-                let ls_index = ms_index - 1;
-                result[i] |= x[ls_index].overflowing_shr(64 - shift_bits).0;
-            }
+        for i in 0..5 {
+            result[i] = x[i] >> 1 | x[i + 1] << 63;
         }
+        result[5] = x[5] >> 1;
         result
     }
 
@@ -648,23 +662,6 @@ impl Neg for Bls12Scalar {
     }
 }
 
-macro_rules! shl {
-    ($name:ident, $in_len:expr, $out_len:expr) => {
-        /// Shift each bit `n` bits to the left, i.e., in the direction of decreasing significance.
-        #[unroll_for_loops]
-        fn $name(a: [u64; $in_len], n: usize) -> [u64; $out_len] {
-            let mut result = [0u64; $out_len];
-            for i in 0..$out_len {
-                let shift_words = n / 64;
-                let shift_bits = n as u64 % 64;
-                result[i] = a[i + shift_words] >> shift_bits
-                    | a[i + shift_words + 1] << (64 - shift_bits);
-            }
-            result
-        }
-    }
-}
-
 macro_rules! cmp_symmetric {
     ($name:ident, $len:expr) => {
         cmp_asymmetric!($name, $len, $len);
@@ -990,17 +987,13 @@ mod tests {
     }
 
     #[test]
-    fn test_shl() {
-        assert_eq!(Bls12Base::shl([1, 2, 3, 4, 5, 6], 128), [0, 0, 1, 2, 3, 4]);
+    fn test_div2() {
+        assert_eq!(Bls12Base::div2([40, 0, 0, 0, 0, 0]), [20, 0, 0, 0, 0, 0]);
 
         assert_eq!(
-            Bls12Base::shl([0, 0, 0, 0,
-                               0b1010101010101010101010101010101010101010101010101010101010101010,
-                               0b1100110011001100110011001100110011001100110011001100110011001100],
-                           5),
-            [0, 0, 0, 0,
-                0b0101010101010101010101010101010101010101010101010101010101000000,
-                0b1001100110011001100110011001100110011001100110011001100110010101])
+            Bls12Base::div2(
+                [15668009436471190370, 3102040391300197453, 4166322749169705801, 3518225024268476800, 11231577158546850254, 226224965816356276]),
+            [17057376755090370993, 10774392232504874534, 2083161374584852900, 1759112512134238400, 5615788579273425127, 113112482908178138]);
     }
 
     #[test]
