@@ -1,8 +1,8 @@
 use std::time::Instant;
 
-use plonky::{Bls12Scalar, G1_GENERATOR, msm_execute, msm_precompute, msm_execute_parallel};
+use plonky::{Bls12Scalar, msm_execute, msm_precompute, msm_execute_parallel, G1_GENERATOR_PROJECTIVE};
 
-const DEGREE: usize = 1 << 17;
+const DEGREE: usize = 100_000;
 
 fn main() {
     // Configure the main thread pool size.
@@ -19,7 +19,7 @@ fn main() {
     let mut generators = Vec::with_capacity(DEGREE);
     let mut scalars = Vec::with_capacity(DEGREE);
     for _i in 0..DEGREE {
-        generators.push(G1_GENERATOR);
+        generators.push(G1_GENERATOR_PROJECTIVE);
         scalars.push(Bls12Scalar::rand());
     }
 

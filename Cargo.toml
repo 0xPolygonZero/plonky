@@ -30,6 +30,10 @@ harness = false
 name = "bls12"
 harness = false
 
+[[bench]]
+name = "g1_summations"
+harness = false
+
 [profile.release]
 opt-level = 3
 

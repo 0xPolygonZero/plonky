@@ -1,4 +1,4 @@
-use std::ops::Add;
+use std::ops::{Add, Neg};
 
 use crate::{Bls12Base, Bls12Scalar};
 use std::iter::Sum;
@@ -32,7 +32,12 @@ const G1_GENERATOR_Y: Bls12Base = Bls12Base {
         3369780711397861396, 35370409237953649]
 };
 
-pub const G1_GENERATOR: G1ProjectivePoint = G1ProjectivePoint {
+pub const G1_GENERATOR_AFFINE: G1AffinePoint = G1AffinePoint {
+    x: G1_GENERATOR_X,
+    y: G1_GENERATOR_Y,
+};
+
+pub const G1_GENERATOR_PROJECTIVE: G1ProjectivePoint = G1ProjectivePoint {
     x: G1_GENERATOR_X,
     y: G1_GENERATOR_Y,
     z: Bls12Base::ONE,
@@ -151,11 +156,7 @@ impl Eq for G1ProjectivePoint {}
 impl Add<G1ProjectivePoint> for G1ProjectivePoint {
     type Output = G1ProjectivePoint;
 
-    /// Safe version of addition with non-zero checks
     /// From https://www.hyperelliptic.org/EFD/g1p/data/shortw/projective/addition/add-1998-cmo-2
-    ///
-    /// Performs several checks that assume normalized coordinates (z=1) before implementing
-    /// the general addition algorithm for projective coordinates
     fn add(self, rhs: G1ProjectivePoint) -> Self::Output {
         if self.is_zero() {
             rhs
@@ -187,11 +188,7 @@ impl Add<G1ProjectivePoint> for G1ProjectivePoint {
 impl Add<G1AffinePoint> for G1ProjectivePoint {
     type Output = G1ProjectivePoint;
 
-    /// Safe version of addition with non-zero checks
     /// From https://www.hyperelliptic.org/EFD/g1p/data/shortw/projective/addition/add-1998-cmo-2
-    ///
-    /// Performs several checks that assume normalized coordinates (z=1) before implementing
-    /// the general addition algorithm for projective coordinates
     fn add(self, rhs: G1AffinePoint) -> Self::Output {
         if self.is_zero() {
             rhs.to_projective()
@@ -220,54 +217,69 @@ impl Add<G1AffinePoint> for G1ProjectivePoint {
     }
 }
 
-impl Sum<G1AffinePoint> for G1ProjectivePoint {
-    fn sum<I: Iterator<Item=G1AffinePoint>>(mut iter: I) -> Self {
-        let first_opt = iter.next();
-        match first_opt {
-            Some(current_affine) => {
-                let mut current = current_affine.to_projective();
-                for x in iter {
-                    current = current + x;
-                }
-                current
-            },
-            None => G1ProjectivePoint::ZERO,
+impl Add<G1AffinePoint> for G1AffinePoint {
+    type Output = G1ProjectivePoint;
+
+    fn add(self, rhs: G1AffinePoint) -> Self::Output {
+        if self.is_zero() {
+            rhs.to_projective()
+        } else if rhs.is_zero() {
+            self.to_projective()
+        } else if self == rhs {
+            self.to_projective().double()
+        } else if self.y == -rhs.y {
+            G1ProjectivePoint::ZERO
+        } else {
+            let G1AffinePoint { x: x1, y: y1 } = self;
+            let G1AffinePoint { x: x2, y: y2 } = rhs;
+            let u = y2 - y1;
+            let uu = u.square();
+            let v = x2 - x1;
+            let vv = v.square();
+            let vvv = v * vv;
+            let r = vv * x1;
+            let a = uu - vvv - r.double();
+            let x3 = v * a;
+            let y3 = u * (r - a) - vvv * y1;
+            let z3 = vvv;
+            G1ProjectivePoint { x: x3, y: y3, z: z3 }
         }
     }
 }
 
-impl Sum for G1ProjectivePoint {
-    fn sum<I: Iterator<Item=G1ProjectivePoint>>(mut iter: I) -> Self {
-        let first_opt = iter.next();
-        match first_opt {
-            Some(mut current) => {
-                for x in iter {
-                    current = current + x;
-                }
-                current
-            },
-            None => G1ProjectivePoint::ZERO,
-        }
+impl Neg for G1AffinePoint {
+    type Output = G1AffinePoint;
+
+    fn neg(self) -> Self::Output {
+        G1AffinePoint { x: self.x, y: -self.y }
+    }
+}
+
+impl Neg for G1ProjectivePoint {
+    type Output = G1ProjectivePoint;
+
+    fn neg(self) -> Self::Output {
+        G1ProjectivePoint { x: self.x, y: -self.y, z: self.z }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12Base, Bls12Scalar, G1_GENERATOR, G1ProjectivePoint};
+    use crate::{Bls12Base, Bls12Scalar, G1_GENERATOR_PROJECTIVE, G1ProjectivePoint};
 
     #[test]
     fn test_naive_multiplication() {
+        let g = G1_GENERATOR_PROJECTIVE;
         let ten = Bls12Scalar::from_canonical_u64(10);
-        let product = mul_naive(ten, G1_GENERATOR);
-        let sum = G1_GENERATOR + G1_GENERATOR + G1_GENERATOR + G1_GENERATOR + G1_GENERATOR
-            + G1_GENERATOR + G1_GENERATOR + G1_GENERATOR + G1_GENERATOR + G1_GENERATOR;
+        let product = mul_naive(ten, g);
+        let sum = g + g + g + g + g + g + g + g + g + g;
         assert_eq!(product, sum);
     }
 
     #[test]
     fn test_g1_multiplication() {
         let lhs = Bls12Scalar::from_canonical([11111111, 22222222, 33333333, 44444444]);
-        assert_eq!(lhs * G1_GENERATOR, mul_naive(lhs, G1_GENERATOR));
+        assert_eq!(lhs * G1_GENERATOR_PROJECTIVE, mul_naive(lhs, G1_GENERATOR_PROJECTIVE));
     }
 
     /// A simple, somewhat inefficient implementation of multiplication which is used as a reference

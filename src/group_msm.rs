@@ -103,7 +103,7 @@ pub fn msm_execute_parallel(
     let digits: Vec<usize> = (0..base).collect();
     println!("Computing digit_acc");
     let start = Instant::now();
-    let digit_acc: Vec<G1ProjectivePoint> = digits.par_chunks(100)
+    let digit_acc: Vec<G1ProjectivePoint> = digits.par_chunks(500)
         .flat_map(|c| {
             let accs: Vec<G1ProjectivePoint> = c.iter().map(|&digit| {
                 digit_occurrences[digit].iter()
@@ -151,7 +151,7 @@ pub(crate) fn to_digits(x: &Bls12Scalar, w: usize) -> Vec<usize> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12Scalar, G1_GENERATOR, msm_execute, msm_precompute, to_digits};
+    use crate::{Bls12Scalar, msm_execute, msm_precompute, to_digits, G1_GENERATOR_PROJECTIVE};
 
     #[test]
     fn test_to_digits() {
@@ -185,7 +185,7 @@ mod tests {
     fn test_msm() {
         let w = 5;
 
-        let generator_1 = G1_GENERATOR;
+        let generator_1 = G1_GENERATOR_PROJECTIVE;
         let generator_2 = generator_1 + generator_1;
         let generator_3 = generator_1 + generator_2;
 

@@ -96,6 +96,13 @@ impl Bls12Base {
         *self + *self
     }
 
+    pub fn triple(&self) -> Self {
+        // TODO: It's better to reduce in one step, so that we (potentially) subtract 2 * ORDER
+        // rather than subtracting ORDER twice. Doing two separate additions is probably suboptimal
+        // also.
+        self.double() + *self
+    }
+
     pub fn square(&self) -> Self {
         // TODO: Some intermediate products are the redundant, so this can be made faster.
         *self * *self
