@@ -283,9 +283,6 @@ impl Bls12Base {
     }
 
     pub fn batch_multiplicative_inverse(x: &[Self]) -> Vec<Self> {
-        // TODO: Use the tree-based variant, as described in "Improving SSL Handshake Performance
-        // via Batching", which involves fewer multiplications.
-
         // This is Montgomery's trick. At a high level, we invert the product of the given field
         // elements, then derive the individual inverses from that via multiplication.
 
