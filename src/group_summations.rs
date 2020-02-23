@@ -73,9 +73,11 @@ pub fn affine_multisummation_batch_inversion(summations: Vec<Vec<G1AffinePoint>>
     // For each pair of points, (x1, y1) and (x2, y2), that we're going to add later, we want to
     // invert either y (if the points are equal) or x1 - x2 (otherwise). We will use these later.
     for summation in &summations {
-        assert!(!summation.is_empty());
+        let n = summation.len();
+        // The special case for n=0 is to avoid underflow.
+        let range_end = if n == 0 { 0 } else { n - 1 };
 
-        for i in (0..summation.len() - 1).step_by(2) {
+        for i in (0..range_end).step_by(2) {
             let p1 = summation[i];
             let p2 = summation[i + 1];
             let G1AffinePoint { x: x1, y: y1 } = p1;
@@ -99,7 +101,10 @@ pub fn affine_multisummation_batch_inversion(summations: Vec<Vec<G1AffinePoint>>
         let n = summation.len();
         let mut reduced_points = Vec::with_capacity((n + 1) / 2);
 
-        for i in (0..n - 1).step_by(2) {
+        // The special case for n=0 is to avoid underflow.
+        let range_end = if n == 0 { 0 } else { n - 1 };
+
+        for i in (0..range_end).step_by(2) {
             let p1 = summation[i];
             let p2 = summation[i + 1];
             let G1AffinePoint { x: x1, y: y1 } = p1;
