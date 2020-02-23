@@ -1,6 +1,7 @@
 pub use fft::*;
 pub use field::*;
 pub use group::*;
+pub use group_adds::*;
 pub use group_msm::*;
 pub use group_multiplication::*;
 pub use group_summations::*;
@@ -11,6 +12,7 @@ mod conversions;
 mod field;
 mod fft;
 mod group;
+mod group_adds;
 mod group_msm;
 mod group_multiplication;
 mod group_summations;
