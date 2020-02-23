@@ -75,18 +75,19 @@ impl G1ProjectivePoint {
         self.z == Bls12Base::ZERO
     }
 
-    /// Doubling of a G1 point
-    /// From https://www.hyperelliptic.org/EFD/g1p/data/shortw/projective/doubling/dbl-2007-bl
     pub fn double(&self) -> G1ProjectivePoint {
-        let w = self.x * self.x * 3u64;
-        let s = self.y * self.z;
-        let sss = s.cube();
-        let r = self.y * s;
-        let b = self.x * r;
-        let h = w * w - b * 8u64;
-        let x3 = h * s.double();
-        let y3 = w * (b * 4u64 - h) - r * r * 8u64;
-        let z3 = sss * 8u64;
+        let G1ProjectivePoint { x: x1, y: y1, z: z1 } = *self;
+        let xx = x1.square();
+        let w = xx.triple();
+        let y1y1 = y1.square();
+        let r = y1y1.double();
+        let sss = y1 * r * 4;
+        let rr = r.square();
+        let b = (x1 + r).square() - xx - rr;
+        let h = w.square() - b.double();
+        let x3 = h * y1.double();
+        let y3 = w * (b - h) - rr.double();
+        let z3 = sss;
         G1ProjectivePoint { x: x3, y: y3, z: z3 }
     }
 
@@ -175,6 +176,7 @@ impl Add<G1ProjectivePoint> for G1ProjectivePoint {
         // Check if we're doubling or adding inverses.
         if x1z2 == x2z1 {
             if y1z2 == y2z1 {
+                // TODO: inline to avoid redundant muls.
                 return self.double();
             }
             if y1z2 == -y2z1 {
@@ -217,6 +219,7 @@ impl Add<G1AffinePoint> for G1ProjectivePoint {
         // Check if we're doubling or adding inverses.
         if x1 == x2z1 {
             if y1 == y2z1 {
+                // TODO: inline to avoid redundant muls.
                 return self.double();
             }
             if y1 == -y2z1 {
