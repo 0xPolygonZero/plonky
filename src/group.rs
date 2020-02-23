@@ -1,7 +1,7 @@
-use std::ops::{Add, Neg};
+use std::iter::Sum;
+use std::ops::Neg;
 
 use crate::{Bls12Base, Bls12Scalar};
-use std::iter::Sum;
 
 // Parameters taken from the implementation of Bls12-377 in Zexe found here:
 // https://github.com/scipr-lab/zexe/blob/master/algebra/src/curves/bls12_377/g1.rs
@@ -78,7 +78,6 @@ impl G1ProjectivePoint {
     pub fn double(&self) -> G1ProjectivePoint {
         let G1ProjectivePoint { x: x1, y: y1, z: z1 } = *self;
         let xx = x1.square();
-        let zz = z1.square();
         let w = xx.triple();
         let s = y1 * z1.double();
         let ss = s.square();

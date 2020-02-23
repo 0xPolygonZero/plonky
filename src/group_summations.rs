@@ -3,14 +3,14 @@ use std::iter::Sum;
 use crate::{Bls12Base, G1AffinePoint, G1ProjectivePoint};
 
 impl Sum<G1AffinePoint> for G1ProjectivePoint {
-    fn sum<I: Iterator<Item=G1AffinePoint>>(mut iter: I) -> Self {
+    fn sum<I: Iterator<Item=G1AffinePoint>>(iter: I) -> Self {
         let points: Vec<G1AffinePoint> = iter.collect();
         affine_summation_best(points)
     }
 }
 
 impl Sum for G1ProjectivePoint {
-    fn sum<I: Iterator<Item=G1ProjectivePoint>>(mut iter: I) -> Self {
+    fn sum<I: Iterator<Item=G1ProjectivePoint>>(iter: I) -> Self {
         iter.fold(G1ProjectivePoint::ZERO, |acc, x| acc + x)
     }
 }
@@ -81,7 +81,7 @@ pub fn affine_multisummation_batch_inversion(summations: Vec<Vec<G1AffinePoint>>
             let p1 = summation[i];
             let p2 = summation[i + 1];
             let G1AffinePoint { x: x1, y: y1 } = p1;
-            let G1AffinePoint { x: x2, y: y2 } = p2;
+            let G1AffinePoint { x: x2, y: _y2 } = p2;
 
             if p1.is_zero() || p2.is_zero() || p1 == -p2 {
                 // These are trivial cases where we won't need any inverse.

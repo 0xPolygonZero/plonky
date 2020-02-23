@@ -58,7 +58,7 @@ pub fn msm_execute(
     // where i is the index of the generator and j is an index into the digits of the scalar
     // associated with that generator.
     let mut digit_occurrences: Vec<Vec<(usize, usize)>> = Vec::with_capacity(digits);
-    for i in 0..base {
+    for _i in 0..base {
         digit_occurrences.push(Vec::new());
     }
     for (i, scalar) in scalars.iter().enumerate() {
@@ -97,7 +97,7 @@ pub fn msm_execute_parallel(
     // where i is the index of the generator and j is an index into the digits of the scalar
     // associated with that generator.
     let mut digit_occurrences: Vec<Vec<(usize, usize)>> = Vec::with_capacity(digits);
-    for i in 0..base {
+    for _i in 0..base {
         digit_occurrences.push(Vec::new());
     }
     for (i, scalar) in scalars.iter().enumerate() {

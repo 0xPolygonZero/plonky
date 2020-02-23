@@ -36,6 +36,6 @@ impl Witness {
             return self.r[i].clone();
         }
         i -= n;
-        return self.o[i].clone();
+        self.o[i].clone()
     }
 }

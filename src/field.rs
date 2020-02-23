@@ -14,15 +14,11 @@ use std::cmp::Ordering;
 use std::cmp::Ordering::{Equal, Greater, Less};
 use std::collections::HashSet;
 use std::convert::TryInto;
-use std::mem;
-use std::mem::swap;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 use std::str::FromStr;
 
 use num::{BigUint, FromPrimitive};
 use num::integer::Integer;
-use num::traits::cast::ToPrimitive;
-use num::traits::identities::One;
 use rand::RngCore;
 use rand::rngs::OsRng;
 use unroll::unroll_for_loops;
@@ -203,61 +199,6 @@ impl Bls12Base {
         result
     }
 
-    fn size_in_bits(x: [u64; 6]) -> usize {
-        let mut size = 0;
-        for i in 0..6 {
-            for j in 0..64 {
-                let bit_index: usize = i * 64 + j;
-                let bit_is_set = (x[i] >> j & 1) != 0;
-                if bit_is_set {
-                    size = bit_index + 1;
-                }
-            }
-        }
-        size
-    }
-
-    fn signed_cmp_6_6(a_neg: bool, a: [u64; 6], b_neg: bool, b: [u64; 6]) -> Ordering {
-        if a == [0, 0, 0, 0, 0, 0] && b == [0, 0, 0, 0, 0, 0] {
-            // Special case because we need to ignore signs.
-            return Equal;
-        }
-
-        if a_neg != b_neg {
-            if a_neg {
-                Less
-            } else {
-                Greater
-            }
-        } else {
-            let magnitude_ordering = cmp_6_6(a, b);
-            if a_neg {
-                magnitude_ordering.reverse()
-            } else {
-                magnitude_ordering
-            }
-        }
-    }
-
-    fn signed_add_6_6(a_neg: bool, a: [u64; 6], b_neg: bool, b: [u64; 6]) -> (bool, [u64; 6]) {
-        if a_neg == b_neg {
-            let widened_sum = add_6_6(a, b);
-            debug_assert_eq!(widened_sum[6], 0);
-            (a_neg, widened_sum[0..6].try_into().unwrap())
-        } else {
-            let ordering = cmp_6_6(a, b);
-            if ordering == Greater {
-                (a_neg, sub_6_6(a, b))
-            } else {
-                (b_neg, sub_6_6(b, a))
-            }
-        }
-    }
-
-    fn signed_sub_6_6(a_neg: bool, a: [u64; 6], b_neg: bool, b: [u64; 6]) -> (bool, [u64; 6]) {
-        Self::signed_add_6_6(a_neg, a, !b_neg, b)
-    }
-
     pub fn batch_multiplicative_inverse_opt(x: &[Self]) -> Vec<Option<Self>> {
         let n = x.len();
         let mut x_nonzero = Vec::with_capacity(n);
@@ -436,7 +377,7 @@ impl Bls12Scalar {
     pub fn cyclic_subgroup_known_order(generator: Bls12Scalar, order: usize) -> Vec<Bls12Scalar> {
         let mut subgroup = Vec::new();
         let mut current = generator;
-        for i in 0..order {
+        for _i in 0..order {
             subgroup.push(current);
             current = current * generator;
         }

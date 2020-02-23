@@ -4,8 +4,6 @@ use std::mem;
 use std::ops::{Neg, Shr};
 
 use num::{BigInt, BigUint, Integer, One, Zero};
-use num::traits::NumRef;
-use num::traits::RefNum;
 
 use num::bigint::ToBigInt;
 
@@ -18,6 +16,7 @@ fn egcd(a: BigInt, b: BigInt) -> (BigInt, BigInt, BigInt) {
     }
 }
 
+// TODO: Delete this poor implementation once it's fully replaced.
 pub fn modinv(a: BigUint, m: BigUint) -> Option<BigUint> {
     let a = a.to_bigint().unwrap();
     let m = m.to_bigint().unwrap();
