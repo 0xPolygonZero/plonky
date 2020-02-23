@@ -156,64 +156,85 @@ impl Eq for G1ProjectivePoint {}
 impl Add<G1ProjectivePoint> for G1ProjectivePoint {
     type Output = G1ProjectivePoint;
 
-    /// From https://www.hyperelliptic.org/EFD/g1p/data/shortw/projective/addition/add-1998-cmo-2
     fn add(self, rhs: G1ProjectivePoint) -> Self::Output {
         if self.is_zero() {
-            rhs
-        } else if rhs.is_zero() {
-            self
-        } else if self == rhs {
-            self.double()
-        } else if self.y * rhs.z == -rhs.y * self.z {
-            G1ProjectivePoint::ZERO
-        } else {
-            let y1z2 = self.y * rhs.z;
-            let x1z2 = self.x * rhs.z;
-            let z1z2 = self.z * rhs.z;
-            let u = rhs.y * self.z - y1z2;
-            let uu = u.square();
-            let v = rhs.x * self.z - x1z2;
-            let vv = v.square();
-            let vvv = v * vv;
-            let r = vv * x1z2;
-            let a = uu * z1z2 - vvv - r.double();
-            let x3 = v * a;
-            let y3 = u * (r - a) - vvv * y1z2;
-            let z3 = vvv * z1z2;
-            G1ProjectivePoint { x: x3, y: y3, z: z3 }
+            return rhs;
         }
+        if rhs.is_zero() {
+            return self;
+        }
+
+        let G1ProjectivePoint { x: x1, y: y1, z: z1 } = self;
+        let G1ProjectivePoint { x: x2, y: y2, z: z2 } = rhs;
+
+        let x1z2 = x1 * z2;
+        let y1z2 = y1 * z2;
+        let x2z1 = x2 * z1;
+        let y2z1 = y2 * z1;
+
+        // Check if we're doubling or adding inverses.
+        if x1z2 == x2z1 {
+            if y1z2 == y2z1 {
+                return self.double();
+            }
+            if y1z2 == -y2z1 {
+                return G1ProjectivePoint::ZERO;
+            }
+        }
+
+        let z1z2 = z1 * z2;
+        let u = y2z1 - y1z2;
+        let uu = u.square();
+        let v = x2z1 - x1z2;
+        let vv = v.square();
+        let vvv = v * vv;
+        let r = vv * x1z2;
+        let a = uu * z1z2 - vvv - r.double();
+        let x3 = v * a;
+        let y3 = u * (r - a) - vvv * y1z2;
+        let z3 = vvv * z1z2;
+        G1ProjectivePoint { x: x3, y: y3, z: z3 }
     }
 }
 
 impl Add<G1AffinePoint> for G1ProjectivePoint {
     type Output = G1ProjectivePoint;
 
-    /// From https://www.hyperelliptic.org/EFD/g1p/data/shortw/projective/addition/add-1998-cmo-2
     fn add(self, rhs: G1AffinePoint) -> Self::Output {
         if self.is_zero() {
-            rhs.to_projective()
-        } else if rhs.is_zero() {
-            self
-        } else if (self.x, self.y) == (rhs.x * self.z, rhs.y * self.z) {
-            self.double()
-        } else if self.y == -rhs.y * self.z {
-            G1ProjectivePoint::ZERO
-        } else {
-            let y1z2 = self.y;
-            let x1z2 = self.x;
-            let z1z2 = self.z;
-            let u = rhs.y * self.z - y1z2;
-            let uu = u.square();
-            let v = rhs.x * self.z - x1z2;
-            let vv = v.square();
-            let vvv = v * vv;
-            let r = vv * x1z2;
-            let a = uu * z1z2 - vvv - r.double();
-            let x3 = v * a;
-            let y3 = u * (r - a) - vvv * y1z2;
-            let z3 = vvv * z1z2;
-            G1ProjectivePoint { x: x3, y: y3, z: z3 }
+            return rhs.to_projective();
         }
+        if rhs.is_zero() {
+            return self;
+        }
+
+        let G1ProjectivePoint { x: x1, y: y1, z: z1 } = self;
+        let G1AffinePoint { x: x2, y: y2 } = rhs;
+
+        let x2z1 = x2 * z1;
+        let y2z1 = y2 * z1;
+
+        // Check if we're doubling or adding inverses.
+        if x1 == x2z1 {
+            if y1 == y2z1 {
+                return self.double();
+            }
+            if y1 == -y2z1 {
+                return G1ProjectivePoint::ZERO;
+            }
+        }
+
+        let u = y2z1 - y1;
+        let uu = u.square();
+        let v = x2z1 - x1;
+        let vv = v.square();
+        let vvv = v * vv;
+        let r = vv * x1;
+        let a = uu * z1 - vvv - r.double();
+        let x3 = v * a;
+        let y3 = u * (r - a) - vvv * y1;
+        let z3 = vvv * z1;
+        G1ProjectivePoint { x: x3, y: y3, z: z3 }
     }
 }
 
@@ -222,28 +243,36 @@ impl Add<G1AffinePoint> for G1AffinePoint {
 
     fn add(self, rhs: G1AffinePoint) -> Self::Output {
         if self.is_zero() {
-            rhs.to_projective()
-        } else if rhs.is_zero() {
-            self.to_projective()
-        } else if self == rhs {
-            self.to_projective().double()
-        } else if self.y == -rhs.y {
-            G1ProjectivePoint::ZERO
-        } else {
-            let G1AffinePoint { x: x1, y: y1 } = self;
-            let G1AffinePoint { x: x2, y: y2 } = rhs;
-            let u = y2 - y1;
-            let uu = u.square();
-            let v = x2 - x1;
-            let vv = v.square();
-            let vvv = v * vv;
-            let r = vv * x1;
-            let a = uu - vvv - r.double();
-            let x3 = v * a;
-            let y3 = u * (r - a) - vvv * y1;
-            let z3 = vvv;
-            G1ProjectivePoint { x: x3, y: y3, z: z3 }
+            return rhs.to_projective();
         }
+        if rhs.is_zero() {
+            return self.to_projective();
+        }
+
+        let G1AffinePoint { x: x1, y: y1 } = self;
+        let G1AffinePoint { x: x2, y: y2 } = rhs;
+
+        // Check if we're doubling or adding inverses.
+        if x1 == x2 {
+            if y1 == y2 {
+                return self.to_projective().double();
+            }
+            if y1 == -y2 {
+                return G1ProjectivePoint::ZERO;
+            }
+        }
+
+        let u = y2 - y1;
+        let uu = u.square();
+        let v = x2 - x1;
+        let vv = v.square();
+        let vvv = v * vv;
+        let r = vv * x1;
+        let a = uu - vvv - r.double();
+        let x3 = v * a;
+        let y3 = u * (r - a) - vvv * y1;
+        let z3 = vvv;
+        G1ProjectivePoint { x: x3, y: y3, z: z3 }
     }
 }
 
