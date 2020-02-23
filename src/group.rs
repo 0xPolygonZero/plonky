@@ -78,14 +78,16 @@ impl G1ProjectivePoint {
     pub fn double(&self) -> G1ProjectivePoint {
         let G1ProjectivePoint { x: x1, y: y1, z: z1 } = *self;
         let xx = x1.square();
+        let zz = z1.square();
         let w = xx.triple();
-        let y1y1 = y1.square();
-        let r = y1y1.double();
-        let sss = y1 * r * 4;
+        let s = y1 * z1.double();
+        let ss = s.square();
+        let sss = s * ss;
+        let r = y1 * s;
         let rr = r.square();
         let b = (x1 + r).square() - xx - rr;
         let h = w.square() - b.double();
-        let x3 = h * y1.double();
+        let x3 = h * s;
         let y3 = w * (b - h) - rr.double();
         let z3 = sss;
         G1ProjectivePoint { x: x3, y: y3, z: z3 }
