@@ -109,7 +109,6 @@ pub fn msm_execute_parallel(
 
     // For each digit, we add up the powers associated with all occurrences that digit.
     let digits: Vec<usize> = (0..base).collect();
-    println!("Computing digit_acc");
     let start = Instant::now();
     let digit_acc: Vec<G1ProjectivePoint> = digits.par_chunks(DIGITS_PER_CHUNK)
         .flat_map(|chunk| {
@@ -121,9 +120,8 @@ pub fn msm_execute_parallel(
             affine_multisummation_best(summations)
         })
         .collect();
-    println!("Done after {}s", start.elapsed().as_secs_f64());
+    println!("Computing the per-digit summations (in parallel) took {}s", start.elapsed().as_secs_f64());
 
-    println!("Adding up");
     let start = Instant::now();
     let mut y = G1ProjectivePoint::ZERO;
     let mut u = G1ProjectivePoint::ZERO;
@@ -131,7 +129,7 @@ pub fn msm_execute_parallel(
         u = u + digit_acc[digit];
         y = y + u;
     }
-    println!("Done after {}s", start.elapsed().as_secs_f64());
+    println!("Final summation (sequential) {}s", start.elapsed().as_secs_f64());
     y
 }
 

@@ -163,6 +163,7 @@ mod tests {
         assert_eq!(affine_summation_pairwise(vec![g_affine, g_affine]), g2_proj);
         assert_eq!(affine_summation_pairwise(vec![g_affine, g2_affine]), g3_proj);
         assert_eq!(affine_summation_pairwise(vec![g_affine, g_affine, g_affine]), g3_proj);
+        assert_eq!(affine_summation_pairwise(vec![]), G1ProjectivePoint::ZERO);
     }
 
     #[test]
