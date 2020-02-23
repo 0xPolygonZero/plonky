@@ -2,8 +2,16 @@ use std::collections::HashMap;
 
 use rayon::prelude::*;
 
-use crate::{Bls12Scalar, G1AffinePoint, G1ProjectivePoint};
+use crate::{Bls12Scalar, G1AffinePoint, G1ProjectivePoint, affine_multisummation_best};
 use std::time::Instant;
+
+/// In Yao's method, we compute an affine summation for each digit. In a parallel setting, it would
+/// be easiest to assign individual summations to threads, but this would be sub-optimal because
+/// multi-summations can be more efficient than repeating individual summations (see
+/// `affine_multisummation_best`). Thus we divide digits into large chunks, and assign chunks of
+/// digits to threads. Note that there is a delicate balance here, as large chunks can result in
+/// uneven distributions of work among threads.
+const DIGITS_PER_CHUNK: usize = 80;
 
 pub struct MsmPrecomputation {
     /// For each generator (in the order they were passed to `msm_precompute`), contains a vector
@@ -12,7 +20,7 @@ pub struct MsmPrecomputation {
     powers_per_generator: Vec<Vec<G1AffinePoint>>,
 }
 
-pub fn msm_precompute(generators: &Vec<G1ProjectivePoint>, w: usize) -> MsmPrecomputation {
+pub fn msm_precompute(generators: &[G1ProjectivePoint], w: usize) -> MsmPrecomputation {
     MsmPrecomputation {
         powers_per_generator: generators.into_par_iter()
             .map(|&g| precompute_single_generator(g, w))
@@ -36,7 +44,7 @@ fn precompute_single_generator(g: G1ProjectivePoint, w: usize) -> Vec<G1AffinePo
 
 pub fn msm_execute(
     precomputation: &MsmPrecomputation,
-    scalars: &Vec<Bls12Scalar>,
+    scalars: &[Bls12Scalar],
     w: usize,
 ) -> G1ProjectivePoint {
     assert_eq!(precomputation.powers_per_generator.len(), scalars.len());
@@ -75,7 +83,7 @@ pub fn msm_execute(
 
 pub fn msm_execute_parallel(
     precomputation: &MsmPrecomputation,
-    scalars: &Vec<Bls12Scalar>,
+    scalars: &[Bls12Scalar],
     w: usize,
 ) -> G1ProjectivePoint {
     assert_eq!(precomputation.powers_per_generator.len(), scalars.len());
@@ -103,14 +111,14 @@ pub fn msm_execute_parallel(
     let digits: Vec<usize> = (0..base).collect();
     println!("Computing digit_acc");
     let start = Instant::now();
-    let digit_acc: Vec<G1ProjectivePoint> = digits.par_chunks(500)
-        .flat_map(|c| {
-            let accs: Vec<G1ProjectivePoint> = c.iter().map(|&digit| {
-                digit_occurrences[digit].iter()
+    let digit_acc: Vec<G1ProjectivePoint> = digits.par_chunks(DIGITS_PER_CHUNK)
+        .flat_map(|chunk| {
+            let summations: Vec<Vec<G1AffinePoint>> = chunk.iter()
+                .map(|&digit| digit_occurrences[digit].iter()
                     .map(|&(i, j)| precomputation.powers_per_generator[i][j])
-                    .sum()
-            }).collect();
-            accs
+                    .collect())
+                .collect();
+            affine_multisummation_best(summations)
         })
         .collect();
     println!("Done after {}s", start.elapsed().as_secs_f64());

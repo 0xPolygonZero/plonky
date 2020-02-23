@@ -287,6 +287,10 @@ impl Bls12Base {
         // elements, then derive the individual inverses from that via multiplication.
 
         let n = x.len();
+        if n == 0 {
+            return Vec::new();
+        }
+
         let mut a = Vec::with_capacity(n);
         a.push(x[0]);
         for i in 1..n {
