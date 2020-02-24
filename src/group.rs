@@ -1,4 +1,3 @@
-use std::iter::Sum;
 use std::ops::Neg;
 
 use crate::{Bls12Base, Bls12Scalar};

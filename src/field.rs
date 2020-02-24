@@ -11,7 +11,7 @@
 //! in the future when const generics become stable.
 
 use std::cmp::Ordering;
-use std::cmp::Ordering::{Equal, Greater, Less};
+use std::cmp::Ordering::Less;
 use std::collections::HashSet;
 use std::convert::TryInto;
 use std::ops::{Add, Div, Mul, Neg, Sub};

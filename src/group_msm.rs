@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use rayon::prelude::*;
 
 use crate::{Bls12Scalar, G1AffinePoint, G1ProjectivePoint, affine_multisummation_best};

@@ -1,9 +1,4 @@
-use std::cmp::Ordering;
-use std::fmt::Display;
-use std::mem;
-use std::ops::{Neg, Shr};
-
-use num::{BigInt, BigUint, Integer, One, Zero};
+use num::{BigInt, BigUint, One, Zero};
 
 use num::bigint::ToBigInt;
 
