@@ -23,15 +23,23 @@ rayon = "1.3.0"
 criterion = "0.2"
 
 [[bench]]
-name = "field_arithmetic"
+name = "bigint_arithmetic"
 harness = false
 
 [[bench]]
-name = "bls12"
+name = "bls12_base"
 harness = false
 
 [[bench]]
-name = "g1_summations"
+name = "bls12_scalar"
+harness = false
+
+[[bench]]
+name = "bls12_g1"
+harness = false
+
+[[bench]]
+name = "bls12_g1_summations"
 harness = false
 
 [profile.release]

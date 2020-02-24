@@ -176,7 +176,7 @@ impl Bls12Base {
     fn add_asserting_no_overflow(a: [u64; 6], b: [u64; 6]) -> [u64; 6] {
         let sum = add_6_6(a, b);
         debug_assert_eq!(sum[6], 0);
-        sum[0..6].try_into().unwrap()
+        [sum[0], sum[1], sum[2], sum[3], sum[4], sum[5]]
     }
 
     fn is_even(x: [u64; 6]) -> bool {
@@ -410,6 +410,7 @@ impl Bls12Scalar {
     pub fn multiplicative_inverse(&self) -> Option<Self> {
         // Let x R = self. We compute M((x R)^-1, R^3) = x^-1 R^-1 R^3 R^-1 = x^-1 R.
         // We use BigUints for now, since we don't care much about inverse performance.
+        // TODO: Replace with code that doesn't use BigUints.
         let self_biguint = u64_slice_to_biguint(&self.limbs);
         let order_biguint = u64_slice_to_biguint(&Self::ORDER);
         let opt_inverse_biguint = modinv(self_biguint, order_biguint);
@@ -515,7 +516,7 @@ impl Add<Bls12Scalar> for Bls12Scalar {
             _ => sub_5_4(sum, Bls12Scalar::ORDER)
         };
         debug_assert_eq!(result_5[4], 0, "reduced sum should fit in 4 u64s");
-        let limbs = (&result_5[0..4]).try_into().unwrap();
+        let limbs = [result_5[0], result_5[1], result_5[2], result_5[3]];
         Bls12Scalar { limbs }
     }
 }
@@ -531,7 +532,7 @@ impl Add<Bls12Base> for Bls12Base {
             _ => sub_7_6(sum, Bls12Base::ORDER)
         };
         debug_assert_eq!(result_7[6], 0, "reduced sum should fit in 6 u64s");
-        let limbs = (&result_7[0..6]).try_into().unwrap();
+        let limbs = [result_7[0], result_7[1], result_7[2], result_7[3], result_7[4], result_7[5]];
         Bls12Base { limbs }
     }
 }
@@ -548,6 +549,23 @@ impl Sub<Bls12Base> for Bls12Base {
         } else {
             // No underflow, so it's fastest to subtract directly.
             sub_6_6(self.limbs, rhs.limbs)
+        };
+        Self { limbs }
+    }
+}
+
+impl Sub<Bls12Scalar> for Bls12Scalar {
+    type Output = Bls12Scalar;
+
+    fn sub(self, rhs: Bls12Scalar) -> Self::Output {
+        let limbs = if cmp_4_4(self.limbs, rhs.limbs) == Ordering::Less {
+            // Underflow occurs, so we compute the difference as `self + (-rhs)`.
+            let result = add_4_4(self.limbs, (-rhs).limbs);
+            debug_assert_eq!(result[4], 0);
+            [result[0], result[1], result[2], result[3]]
+        } else {
+            // No underflow, so it's fastest to subtract directly.
+            sub_4_4(self.limbs, rhs.limbs)
         };
         Self { limbs }
     }
