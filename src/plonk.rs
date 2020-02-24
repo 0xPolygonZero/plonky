@@ -29,13 +29,13 @@ impl Witness {
     fn get_wire(&self, mut i: usize) -> Bls12Scalar {
         let n = self.num_gates();
         if i < n {
-            return self.l[i].clone();
+            return self.l[i];
         }
         i -= n;
         if i < n {
-            return self.r[i].clone();
+            return self.r[i];
         }
         i -= n;
-        self.o[i].clone()
+        self.o[i]
     }
 }

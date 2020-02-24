@@ -451,8 +451,8 @@ impl Bls12Scalar {
     pub fn rand() -> Bls12Scalar {
         let mut limbs = [0; 4];
 
-        for i in 0..4 {
-            limbs[i] = OsRng.next_u64();
+        for limb_i in &mut limbs {
+            *limb_i = OsRng.next_u64();
         }
 
         // Remove a few of the most significant bits to ensure we're in range.

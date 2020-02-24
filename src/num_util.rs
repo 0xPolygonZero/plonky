@@ -7,7 +7,7 @@ fn egcd(a: BigInt, b: BigInt) -> (BigInt, BigInt, BigInt) {
         (b, BigInt::zero(), BigInt::one())
     } else {
         let (g, y, x) = egcd(&b % &a, a.clone());
-        return (g, x - (b / a) * &y, y)
+        (g, x - (b / a) * &y, y)
     }
 }
 

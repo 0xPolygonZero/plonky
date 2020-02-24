@@ -1,3 +1,13 @@
+// Since we work with elliptic curve groups etc., nearly all the operations are suspicious to
+// Clippy.
+#![allow(clippy::suspicious_arithmetic_impl)]
+
+// We have tons of bigint literals in Montgomery form, which won't be readable with or without underscores.
+#![allow(clippy::unreadable_literal)]
+
+// Constant equality checks are usually due to macro-based loop unrolling.
+#![warn(clippy::eq_op)]
+
 pub use fft::*;
 pub use field::*;
 pub use group::*;

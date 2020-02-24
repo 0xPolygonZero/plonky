@@ -38,7 +38,7 @@ pub fn affine_multisummation_best(summations: Vec<Vec<G1AffinePoint>>) -> Vec<G1
 /// intermediate sums using a projective formula.
 pub fn affine_multisummation_pairwise(summations: Vec<Vec<G1AffinePoint>>) -> Vec<G1ProjectivePoint> {
     summations.into_iter()
-        .map(|summation| affine_summation_pairwise(summation))
+        .map(affine_summation_pairwise)
         .collect()
 }
 
