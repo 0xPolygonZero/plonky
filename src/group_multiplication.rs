@@ -1,10 +1,6 @@
 use std::ops::Mul;
 
-use chashmap::CHashMap;
-
-use lazy_static::lazy_static;
-
-use crate::{Bls12Scalar, G1ProjectivePoint, G1AffinePoint};
+use crate::{Bls12Scalar, G1ProjectivePoint, G1AffinePoint, affine_summation_batch_inversion};
 
 const WINDOW_BITS: usize = 4;
 const BASE: usize = 1 << WINDOW_BITS;
@@ -12,61 +8,60 @@ const DIGITS: usize = (Bls12Scalar::BITS + WINDOW_BITS - 1) / WINDOW_BITS;
 
 /// Precomputed state used for Bls12Scalar x G1ProjectivePoint multiplications,
 /// specific to a particular generator.
-#[derive(Copy, Clone)]
-struct G1GeneratorPrecomputations {
+#[derive(Clone)]
+pub struct G1GeneratorPrecomputations {
     /// [(2^w)^i] g for each i < DIGITS.
-    powers: [G1AffinePoint; DIGITS],
+    powers: Vec<G1AffinePoint>,
 }
 
-// TODO: Use compressed coordinates in the cache.
-lazy_static! {
-    static ref G1_MUL_PRECOMPUTATIONS: CHashMap<G1ProjectivePoint, G1GeneratorPrecomputations> = CHashMap::new();
-}
-
-fn get_precomputation(g: G1ProjectivePoint) -> G1GeneratorPrecomputations {
-    match G1_MUL_PRECOMPUTATIONS.get(&g) {
-        Some(x) => *x,
-        None => {
-            let precomputation = precompute(g);
-            G1_MUL_PRECOMPUTATIONS.insert(g, precomputation);
-            precomputation
+impl G1ProjectivePoint {
+    pub fn mul_precompute(&self) -> G1GeneratorPrecomputations {
+        let mut powers_proj = Vec::with_capacity(DIGITS);
+        powers_proj.push(*self);
+        for i in 1..DIGITS {
+            let mut power_i_proj = powers_proj[i - 1];
+            for _j in 0..WINDOW_BITS {
+                power_i_proj = power_i_proj.double();
+            }
+            powers_proj.push(power_i_proj);
         }
-    }
-}
 
-fn precompute(g: G1ProjectivePoint) -> G1GeneratorPrecomputations {
-    let mut powers = [G1AffinePoint::ZERO; DIGITS];
-    powers[0] = g.to_affine();
-    for i in 1..DIGITS {
-        let mut power_i_proj = powers[i - 1].to_projective();
-        for _j in 0..WINDOW_BITS {
-            power_i_proj = power_i_proj.double();
-        }
-        powers[i] = power_i_proj.to_affine();
+        let powers = G1ProjectivePoint::batch_to_affine(&powers_proj);
+        G1GeneratorPrecomputations { powers }
     }
-    G1GeneratorPrecomputations { powers }
+
+    pub fn mul_with_precomputation(
+        &self,
+        scalar: Bls12Scalar,
+        precomputation: G1GeneratorPrecomputations,
+    ) -> Self {
+        // Yao's method; see https://koclab.cs.ucsb.edu/teaching/ecc/eccPapers/Doche-ch09.pdf
+        let precomputed_powers = precomputation.powers;
+
+        let digits = to_digits(&scalar);
+
+        let mut y = G1ProjectivePoint::ZERO;
+        let mut u = G1ProjectivePoint::ZERO;
+        for j in (1..BASE).rev() {
+            let mut u_summands = Vec::new();
+            for (i, &digit) in digits.iter().enumerate() {
+                if digit == j as u64 {
+                    u_summands.push(precomputed_powers[i]);
+                }
+            }
+            u = u + affine_summation_batch_inversion(u_summands);
+            y = y + u;
+        }
+        y
+    }
 }
 
 impl Mul<G1ProjectivePoint> for Bls12Scalar {
     type Output = G1ProjectivePoint;
 
     fn mul(self, rhs: G1ProjectivePoint) -> Self::Output {
-        // Yao's method; see https://koclab.cs.ucsb.edu/teaching/ecc/eccPapers/Doche-ch09.pdf
-        let precomputed_powers = get_precomputation(rhs).powers;
-
-        let digits = to_digits(&self);
-
-        let mut y = G1ProjectivePoint::ZERO;
-        let mut u = G1ProjectivePoint::ZERO;
-        for j in (1..BASE).rev() {
-            for (i, &digit) in digits.iter().enumerate() {
-                if digit == j as u64 {
-                    u = u + precomputed_powers[i];
-                }
-            }
-            y = y + u;
-        }
-        y
+        let precomputation = rhs.mul_precompute();
+        rhs.mul_with_precomputation(self, precomputation)
     }
 }
 

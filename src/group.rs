@@ -60,7 +60,7 @@ impl G1AffinePoint {
     }
 }
 
-#[derive(Hash, Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct G1ProjectivePoint {
     pub x: Bls12Base,
     pub y: Bls12Base,
