@@ -541,11 +541,12 @@ impl Sub<Bls12Base> for Bls12Base {
 
     fn sub(self, rhs: Bls12Base) -> Self::Output {
         let limbs = if cmp_6_6(self.limbs, rhs.limbs) == Ordering::Less {
-            // Underflow occurs, so we compute self + (ORDER - rhs).
-            let result = add_6_6(self.limbs, sub_6_6(Self::ORDER, rhs.limbs));
+            // Underflow occurs, so we compute the difference as `self + (-rhs)`.
+            let result = add_6_6(self.limbs, (-rhs).limbs);
             debug_assert_eq!(result[6], 0);
-            result[..6].try_into().unwrap()
+            [result[0], result[1], result[2], result[3], result[4], result[5]]
         } else {
+            // No underflow, so it's fastest to subtract directly.
             sub_6_6(self.limbs, rhs.limbs)
         };
         Self { limbs }
@@ -628,7 +629,7 @@ macro_rules! cmp_symmetric {
 macro_rules! cmp_asymmetric {
     ($name:ident, $a_len:expr, $b_len:expr) => {
         #[unroll_for_loops]
-        fn $name(a: [u64; $a_len], b: [u64; $b_len]) -> Ordering {
+        pub fn $name(a: [u64; $a_len], b: [u64; $b_len]) -> Ordering {
             // If any of the "a only" bits are set, then a is greater, as b's associated bit is
             // implicitly zero.
             for i in $b_len..$a_len {
