@@ -775,22 +775,6 @@ macro_rules! mul_asymmetric {
     }
 }
 
-macro_rules! div_asymmetric {
-    ($name:ident, $a_len:expr, $b_len:expr) => {
-        /// Integer division. Returns (quotient, remainder).
-        pub fn $name(a: [u64; $a_len], b: [u64; $b_len]) -> ([u64; $a_len], [u64; $a_len]) {
-            // For now, we're not too interested in optimizing division speed, so we just use num's
-            // implementation.
-            let a_biguint = u64_slice_to_biguint(&a);
-            let b_biguint = u64_slice_to_biguint(&b);
-            let (q_biguint, r_biguint) = a_biguint.div_rem(&b_biguint);
-            let q = biguint_to_u64_vec(q_biguint, $a_len).as_slice().try_into().unwrap();
-            let r = biguint_to_u64_vec(r_biguint, $a_len).as_slice().try_into().unwrap();
-            (q, r)
-        }
-    }
-}
-
 add_symmetric!(add_4_4, 4);
 add_symmetric!(add_6_6, 6);
 
@@ -803,11 +787,6 @@ mul_symmetric!(mul_4_4, 4);
 mul_symmetric!(mul_6_6, 6);
 mul_asymmetric!(mul_8_4, 8, 4);
 mul_asymmetric!(mul_12_6, 12, 6);
-
-div_asymmetric!(div_4_4, 4, 4);
-div_asymmetric!(div_6_6, 6, 6);
-div_asymmetric!(div_8_4, 8, 4);
-div_asymmetric!(div_12_6, 12, 6);
 
 cmp_symmetric!(cmp_4_4, 4);
 cmp_symmetric!(cmp_6_6, 6);
