@@ -2,7 +2,7 @@ use chashmap::CHashMap;
 
 use lazy_static::lazy_static;
 
-use crate::{Bls12Scalar, Bls12Base};
+use crate::{Bls12Base, Bls12Scalar};
 
 lazy_static! {
     static ref SUBGROUPS_BY_ORDER_POWER: CHashMap<usize, Vec<Bls12Scalar>> = CHashMap::new();
@@ -29,12 +29,18 @@ fn reverse_bits(n: usize, num_bits: usize) -> usize {
     result
 }
 
-/// Given a power of 2, return the power.
-fn log2_strict(n: usize) -> usize {
+/// Computes `ceil(log_2(n))`.
+fn log2_ceil(n: usize) -> usize {
     let mut exp = 0;
     while 1 << exp < n {
         exp += 1;
     }
+    exp
+}
+
+/// Computes `log_2(n)`, panicking if `n` is not a power of two.
+fn log2_strict(n: usize) -> usize {
+    let mut exp = log2_ceil(n);
     assert_eq!(1 << exp, n, "Input not a power of 2");
     exp
 }
@@ -52,6 +58,24 @@ fn get_subgroup(order_power: usize) -> Vec<Bls12Scalar> {
 }
 
 pub fn fft(coefficients: &[Bls12Scalar]) -> Vec<Bls12Scalar> {
+    let degree = coefficients.len();
+    let degree_padded = 1 << log2_ceil(degree);
+
+    if degree == degree_padded {
+        fft_power_of_2(coefficients)
+    } else {
+        let mut coefficients_padded = Vec::with_capacity(degree_padded);
+        for &c in coefficients {
+            coefficients_padded.push(c);
+        }
+        for _i in degree..degree_padded {
+            coefficients_padded.push(Bls12Scalar::ZERO);
+        }
+        fft_power_of_2(&coefficients_padded)
+    }
+}
+
+pub fn fft_power_of_2(coefficients: &[Bls12Scalar]) -> Vec<Bls12Scalar> {
     let degree = coefficients.len();
     let degree_pow = log2_strict(degree);
 
@@ -97,16 +121,17 @@ pub fn fft(coefficients: &[Bls12Scalar]) -> Vec<Bls12Scalar> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12Scalar, fft};
-    use crate::fft::{reverse_bits, reverse_index_bits, log2_strict};
-    use rand::rngs::OsRng;
     use rand::RngCore;
+    use rand::rngs::OsRng;
+
+    use crate::{Bls12Scalar, fft};
+    use crate::fft::{log2_strict, reverse_bits, reverse_index_bits, log2_ceil};
 
     #[test]
     fn test_fft() {
-        let degree_pow = 8;
+        let degree = 200;
         let mut coefficients = Vec::new();
-        for i in 0..(1 << degree_pow) {
+        for i in 0..degree {
             coefficients.push(Bls12Scalar::from_canonical_u64(i * 1337 % 100));
         }
         assert_eq!(fft(&coefficients), evaluate_naive(coefficients));
@@ -120,6 +145,20 @@ mod tests {
     }
 
     fn evaluate_naive(coefficients: Vec<Bls12Scalar>) -> Vec<Bls12Scalar> {
+        let degree = coefficients.len();
+        let degree_padded = 1 << log2_ceil(degree);
+
+        let mut coefficients_padded = Vec::with_capacity(degree_padded);
+        for c in coefficients {
+            coefficients_padded.push(c);
+        }
+        for _i in degree..degree_padded {
+            coefficients_padded.push(Bls12Scalar::ZERO);
+        }
+        evaluate_naive_power_of_2(coefficients_padded)
+    }
+
+    fn evaluate_naive_power_of_2(coefficients: Vec<Bls12Scalar>) -> Vec<Bls12Scalar> {
         let degree = coefficients.len();
         let degree_pow = log2_strict(degree);
 

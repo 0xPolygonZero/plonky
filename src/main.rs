@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use plonky::{Bls12Scalar, msm_execute, msm_precompute, msm_execute_parallel, G1_GENERATOR_PROJECTIVE, G1ProjectivePoint, fft};
 
-const DEGREE: usize = 1 << 17;
+const DEGREE: usize = 100_000;
 
 fn main() {
     // Configure the main thread pool size.

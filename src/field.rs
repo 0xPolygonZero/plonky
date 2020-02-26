@@ -18,7 +18,6 @@ use std::ops::{Add, Div, Mul, Neg, Sub};
 use std::str::FromStr;
 
 use num::{BigUint, FromPrimitive};
-use num::integer::Integer;
 use rand::RngCore;
 use rand::rngs::OsRng;
 use unroll::unroll_for_loops;
