@@ -57,12 +57,40 @@ fn get_subgroup(order_power: usize) -> Vec<Bls12Scalar> {
     }
 }
 
+pub struct FftPrecomputation {
+    /// For each layer index i, stores the cyclic subgroup corresponding to the evaluation domain of
+    /// layer i. The indices within these subgroup vectors are bit-reversed.
+    subgroups_rev: Vec<Vec<Bls12Scalar>>,
+}
+
 pub fn fft(coefficients: &[Bls12Scalar]) -> Vec<Bls12Scalar> {
+    let precomputation = fft_precompute(coefficients.len());
+    fft_with_precomputation(coefficients, &precomputation)
+}
+
+pub fn fft_precompute(degree: usize) -> FftPrecomputation {
+    let degree_pow = log2_ceil(degree);
+
+    let mut subgroups_rev = Vec::new();
+    for i in 0..=degree_pow {
+        let g_i = Bls12Scalar::primitive_root_of_unity(i);
+        let subgroup = Bls12Scalar::cyclic_subgroup_known_order(g_i, 1 << i);
+        let subgroup_rev = reverse_index_bits(subgroup);
+        subgroups_rev.push(subgroup_rev);
+    }
+
+    FftPrecomputation { subgroups_rev }
+}
+
+pub fn fft_with_precomputation(
+    coefficients: &[Bls12Scalar],
+    precomputation: &FftPrecomputation
+) -> Vec<Bls12Scalar> {
     let degree = coefficients.len();
     let degree_padded = 1 << log2_ceil(degree);
 
     if degree == degree_padded {
-        fft_power_of_2(coefficients)
+        fft_with_precomputation_power_of_2(coefficients, precomputation)
     } else {
         let mut coefficients_padded = Vec::with_capacity(degree_padded);
         for &c in coefficients {
@@ -71,11 +99,14 @@ pub fn fft(coefficients: &[Bls12Scalar]) -> Vec<Bls12Scalar> {
         for _i in degree..degree_padded {
             coefficients_padded.push(Bls12Scalar::ZERO);
         }
-        fft_power_of_2(&coefficients_padded)
+        fft_with_precomputation_power_of_2(&coefficients_padded, precomputation)
     }
 }
 
-pub fn fft_power_of_2(coefficients: &[Bls12Scalar]) -> Vec<Bls12Scalar> {
+pub fn fft_with_precomputation_power_of_2(
+    coefficients: &[Bls12Scalar],
+    precomputation: &FftPrecomputation
+) -> Vec<Bls12Scalar> {
     let degree = coefficients.len();
     let degree_pow = log2_strict(degree);
 
@@ -89,11 +120,6 @@ pub fn fft_power_of_2(coefficients: &[Bls12Scalar]) -> Vec<Bls12Scalar> {
         let half_chunk_size = 1 << (i - 1);
         let num_chunks = 1 << (degree_pow - i);
 
-        // TODO: This stuff can be precomputed.
-        let g_i = Bls12Scalar::primitive_root_of_unity(i);
-        let powers_of_g_i = Bls12Scalar::cyclic_subgroup_known_order(g_i, 1 << i);
-        let powers_of_g_i_rev = reverse_index_bits(powers_of_g_i);
-
         let mut new_evaluations = Vec::new();
         for j in 0..num_chunks {
             let first_chunk_index = j * chunk_size;
@@ -106,7 +132,7 @@ pub fn fft_power_of_2(coefficients: &[Bls12Scalar]) -> Vec<Bls12Scalar> {
                 let even = evaluations[child_index_0];
                 let odd = evaluations[child_index_1];
 
-                let point_0 = powers_of_g_i_rev[k * 2];
+                let point_0 = precomputation.subgroups_rev[i][k * 2];
                 let product = point_0 * odd;
                 new_evaluations.push(even + product);
                 new_evaluations.push(even - product);

@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use plonky::{Bls12Scalar, msm_execute, msm_precompute, msm_execute_parallel, G1_GENERATOR_PROJECTIVE, G1ProjectivePoint, fft};
+use plonky::{Bls12Scalar, msm_execute, msm_precompute, msm_execute_parallel, G1_GENERATOR_PROJECTIVE, G1ProjectivePoint, fft, fft_precompute, FftPrecomputation, fft_with_precomputation};
 
 const DEGREE: usize = 100_000;
 
@@ -35,25 +35,27 @@ fn main() {
 
 fn run_all_ffts() {
     // As per the paper, we do 8 FFTs of size 4n, 5 FFTs of size 2n and 12 FFTs of size n.
-    let mut fft_sizes = Vec::new();
+    let start = Instant::now();
+
+    let fft_4n_precomputation = fft_precompute(4 * DEGREE);
     for _i in 0..8 {
-        fft_sizes.push(4 * DEGREE);
-    }
-    for _i in 0..5 {
-        fft_sizes.push(2 * DEGREE);
-    }
-    for _i in 0..12 {
-        fft_sizes.push(DEGREE);
+        run_fft(4 * DEGREE, &fft_4n_precomputation);
     }
 
-    let start = Instant::now();
-    for size in fft_sizes {
-        run_fft(size);
+    let fft_2n_precomputation = fft_precompute(2 * DEGREE);
+    for _i in 0..5 {
+        run_fft(2 * DEGREE, &fft_2n_precomputation);
     }
+
+    let fft_n_precomputation = fft_precompute(DEGREE);
+    for _i in 0..12 {
+        run_fft(DEGREE, &fft_n_precomputation);
+    }
+
     println!("All FFTs took {}s", start.elapsed().as_secs_f64());
 }
 
-fn run_fft(size: usize) {
+fn run_fft(size: usize, precomputation: &FftPrecomputation) {
     let mut coefficients = Vec::new();
     for i in 0..size {
         coefficients.push(Bls12Scalar::from_canonical_usize(i));
@@ -61,7 +63,7 @@ fn run_fft(size: usize) {
 
     println!("Running FFT of size {}...", size);
     let start = Instant::now();
-    let _result = fft(&coefficients);
+    let _result = fft_with_precomputation(&coefficients, precomputation);
     println!("Finished in {}s", start.elapsed().as_secs_f64());
 }
 
