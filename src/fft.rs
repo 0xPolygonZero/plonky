@@ -1,4 +1,5 @@
 use chashmap::CHashMap;
+use rayon::prelude::*;
 
 use lazy_static::lazy_static;
 
@@ -84,7 +85,7 @@ pub fn fft_precompute(degree: usize) -> FftPrecomputation {
 
 pub fn fft_with_precomputation(
     coefficients: &[Bls12Scalar],
-    precomputation: &FftPrecomputation
+    precomputation: &FftPrecomputation,
 ) -> Vec<Bls12Scalar> {
     let degree = coefficients.len();
     let degree_padded = 1 << log2_ceil(degree);
@@ -105,9 +106,10 @@ pub fn fft_with_precomputation(
 
 pub fn fft_with_precomputation_power_of_2(
     coefficients: &[Bls12Scalar],
-    precomputation: &FftPrecomputation
+    precomputation: &FftPrecomputation,
 ) -> Vec<Bls12Scalar> {
     let degree = coefficients.len();
+    let half_degree = coefficients.len() >> 1;
     let degree_pow = log2_strict(degree);
 
     // In the base layer, we're just evaluating "degree 0 polynomials", i.e. the coefficients
@@ -116,28 +118,31 @@ pub fn fft_with_precomputation_power_of_2(
     let mut evaluations = reverse_index_bits(coefficients_vec);
 
     for i in 1..=degree_pow {
-        let chunk_size = 1 << i;
-        let half_chunk_size = 1 << (i - 1);
-        let num_chunks = 1 << (degree_pow - i);
+        // In layer i, we're evaluating a series of polynomials, each at 2^i points. In practice
+        // we evaluate a pair of points together, so we have 2^(i - 1) pairs.
+        let points_per_poly = 1 << i;
+        let pairs_per_poly = 1 << (i - 1);
 
-        let mut new_evaluations = Vec::new();
-        for j in 0..num_chunks {
-            let first_chunk_index = j * chunk_size;
-            for k in 0..half_chunk_size {
-                let index_0 = first_chunk_index + k * 2;
-                let index_1 = index_0 + 1;
-                let child_index_0 = first_chunk_index + k;
-                let child_index_1 = child_index_0 + half_chunk_size;
+        let pair_indices: Vec<usize> = (0..half_degree).collect();
+        let new_evaluations = pair_indices.par_chunks(2000).flat_map(|chunk| {
+            let mut new_evaluations_chunk = Vec::new();
+            for pair_index in chunk {
+                let poly_index = pair_index / pairs_per_poly;
+                let pair_index_within_poly = pair_index % pairs_per_poly;
+
+                let child_index_0 = poly_index * points_per_poly + pair_index_within_poly;
+                let child_index_1 = child_index_0 + pairs_per_poly;
 
                 let even = evaluations[child_index_0];
                 let odd = evaluations[child_index_1];
 
-                let point_0 = precomputation.subgroups_rev[i][k * 2];
+                let point_0 = precomputation.subgroups_rev[i][pair_index_within_poly * 2];
                 let product = point_0 * odd;
-                new_evaluations.push(even + product);
-                new_evaluations.push(even - product);
+                new_evaluations_chunk.push(even + product);
+                new_evaluations_chunk.push(even - product);
             }
-        }
+            new_evaluations_chunk
+        }).collect();
         evaluations = new_evaluations;
     }
 
@@ -151,7 +156,7 @@ mod tests {
     use rand::rngs::OsRng;
 
     use crate::{Bls12Scalar, fft};
-    use crate::fft::{log2_strict, reverse_bits, reverse_index_bits, log2_ceil};
+    use crate::fft::{log2_ceil, log2_strict, reverse_bits, reverse_index_bits};
 
     #[test]
     fn test_fft() {

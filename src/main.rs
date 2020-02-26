@@ -2,11 +2,11 @@ use std::time::Instant;
 
 use plonky::{Bls12Scalar, msm_execute, msm_precompute, msm_execute_parallel, G1_GENERATOR_PROJECTIVE, G1ProjectivePoint, fft, fft_precompute, FftPrecomputation, fft_with_precomputation};
 
-const DEGREE: usize = 100_000;
+const DEGREE: usize = 1 << 17;
 
 fn main() {
     // Configure the main thread pool size.
-    rayon::ThreadPoolBuilder::new().num_threads(24).build_global().unwrap();
+    rayon::ThreadPoolBuilder::new().num_threads(12).build_global().unwrap();
 
     run_all_ffts();
 
