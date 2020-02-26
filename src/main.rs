@@ -83,12 +83,12 @@ fn run_msms(w: usize, generators: &[G1ProjectivePoint], scalars: &[Bls12Scalar])
 
     let start = Instant::now();
     for _i in 0..9 {
-        run_msm(&precomputation, w, generators, scalars);
+        run_msm(&precomputation, w, scalars);
     }
     println!("All MSMs took {}s", start.elapsed().as_secs_f64());
 }
 
-fn run_msm(precomputation: &MsmPrecomputation, w: usize, generators: &[G1ProjectivePoint], scalars: &[Bls12Scalar]) {
+fn run_msm(precomputation: &MsmPrecomputation, w: usize, scalars: &[Bls12Scalar]) {
     println!("Computing MSM in parallel...");
     let start = Instant::now();
     let result = msm_execute_parallel(&precomputation, scalars, w);
