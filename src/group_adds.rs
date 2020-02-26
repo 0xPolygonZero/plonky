@@ -1,5 +1,6 @@
-use crate::{G1ProjectivePoint, G1AffinePoint};
 use std::ops::Add;
+
+use crate::{G1AffinePoint, G1ProjectivePoint};
 
 impl Add<G1ProjectivePoint> for G1ProjectivePoint {
     type Output = G1ProjectivePoint;

@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use plonky::{Bls12Scalar, msm_execute, msm_precompute, msm_execute_parallel, G1_GENERATOR_PROJECTIVE, G1ProjectivePoint, fft, fft_precompute, FftPrecomputation, fft_with_precomputation, MsmPrecomputation};
+use plonky::{Bls12Scalar, fft, fft_precompute, fft_with_precomputation, FftPrecomputation, G1_GENERATOR_PROJECTIVE, G1ProjectivePoint, msm_execute, msm_execute_parallel, msm_precompute, MsmPrecomputation};
 
 const DEGREE: usize = 1 << 17;
 

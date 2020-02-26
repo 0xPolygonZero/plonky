@@ -1,6 +1,6 @@
 use std::ops::Mul;
 
-use crate::{Bls12Scalar, G1ProjectivePoint, G1AffinePoint, affine_summation_batch_inversion};
+use crate::{affine_summation_batch_inversion, Bls12Scalar, G1AffinePoint, G1ProjectivePoint};
 
 const WINDOW_BITS: usize = 4;
 const BASE: usize = 1 << WINDOW_BITS;

@@ -1,7 +1,8 @@
+use std::time::Instant;
+
 use rayon::prelude::*;
 
-use crate::{Bls12Scalar, G1AffinePoint, G1ProjectivePoint, affine_multisummation_best};
-use std::time::Instant;
+use crate::{affine_multisummation_best, Bls12Scalar, G1AffinePoint, G1ProjectivePoint};
 
 /// In Yao's method, we compute an affine summation for each digit. In a parallel setting, it would
 /// be easiest to assign individual summations to threads, but this would be sub-optimal because
@@ -155,7 +156,7 @@ pub(crate) fn to_digits(x: &Bls12Scalar, w: usize) -> Vec<usize> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12Scalar, msm_execute, msm_precompute, to_digits, G1_GENERATOR_PROJECTIVE};
+    use crate::{Bls12Scalar, G1_GENERATOR_PROJECTIVE, msm_execute, msm_precompute, to_digits};
 
     #[test]
     fn test_to_digits() {

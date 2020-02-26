@@ -3,7 +3,7 @@ use criterion::criterion_group;
 use criterion::criterion_main;
 use num::BigUint;
 
-use plonky::{Bls12Base, Bls12Scalar, G1ProjectivePoint, mul_6_6, G1AffinePoint, G1_GENERATOR_AFFINE};
+use plonky::{Bls12Base, Bls12Scalar, G1_GENERATOR_AFFINE, G1AffinePoint, G1ProjectivePoint, mul_6_6};
 
 fn criterion_benchmark(c: &mut Criterion) {
     // We want a scalar with a Hamming weight of 0.5, to simulate the "average case".

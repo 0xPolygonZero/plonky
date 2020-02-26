@@ -1,5 +1,4 @@
 use num::{BigInt, BigUint, One, Zero};
-
 use num::bigint::ToBigInt;
 
 fn egcd(a: BigInt, b: BigInt) -> (BigInt, BigInt, BigInt) {
@@ -27,6 +26,7 @@ pub fn modinv(a: BigUint, m: BigUint) -> Option<BigUint> {
 #[cfg(test)]
 mod tests {
     use num::{BigUint, FromPrimitive, ToPrimitive};
+
     use crate::num_util::modinv;
 
     #[test]
