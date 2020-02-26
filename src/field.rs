@@ -363,7 +363,7 @@ impl Bls12Scalar {
     pub fn cyclic_subgroup_unknown_order(generator: Bls12Scalar) -> Vec<Bls12Scalar> {
         let mut subgroup_vec = Vec::new();
         let mut subgroup_set = HashSet::new();
-        let mut current = generator;
+        let mut current = Bls12Scalar::ONE;
         loop {
             if !subgroup_set.insert(current) {
                 break;
@@ -376,7 +376,7 @@ impl Bls12Scalar {
 
     pub fn cyclic_subgroup_known_order(generator: Bls12Scalar, order: usize) -> Vec<Bls12Scalar> {
         let mut subgroup = Vec::new();
-        let mut current = generator;
+        let mut current = Bls12Scalar::ONE;
         for _i in 0..order {
             subgroup.push(current);
             current = current * generator;
@@ -388,6 +388,8 @@ impl Bls12Scalar {
         Self::cyclic_subgroup_unknown_order(generator).len()
     }
 
+    // TODO: Avoid BigUint. Maybe take Bls12Scalar, since larger exponents are unnecessary as per
+    // Fermat's little theorem.
     pub fn exp(&self, power: BigUint) -> Bls12Scalar {
         let mut current = *self;
         let mut product = Bls12Scalar::ONE;
@@ -400,6 +402,10 @@ impl Bls12Scalar {
             }
         }
         product
+    }
+
+    pub fn exp_usize(&self, power: usize) -> Bls12Scalar {
+        self.exp(BigUint::from_usize(power).unwrap())
     }
 
     pub fn square(&self) -> Self {

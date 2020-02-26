@@ -10,7 +10,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     // We want a scalar with a Hamming weight of 0.5, to simulate the "average case".
     let mut summands = Vec::new();
     let mut current = G1_GENERATOR_PROJECTIVE;
-    for i in 0..n {
+    for _i in 0..n {
         summands.push(current);
         current = current.double();
     }
