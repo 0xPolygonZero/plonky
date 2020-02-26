@@ -343,6 +343,10 @@ impl Bls12Scalar {
         Self::from_canonical([c, 0, 0, 0])
     }
 
+    pub fn from_canonical_usize(c: usize) -> Self {
+        Self::from_canonical_u64(c as u64)
+    }
+
     pub fn to_canonical(&self) -> [u64; 4] {
         // Let x * R = self. We compute M(x * R, 1) = x * R * R^-1 = x.
         Self::montgomery_multiply(self.limbs, [1, 0, 0, 0])

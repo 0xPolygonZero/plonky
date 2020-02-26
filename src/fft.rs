@@ -83,8 +83,9 @@ pub fn fft(coefficients: &[Bls12Scalar]) -> Vec<Bls12Scalar> {
                 let odd = evaluations[child_index_1];
 
                 let point_0 = powers_of_g_i_rev[k * 2];
-                new_evaluations.push(even + point_0 * odd);
-                new_evaluations.push(even - point_0 * odd);
+                let product = point_0 * odd;
+                new_evaluations.push(even + product);
+                new_evaluations.push(even - product);
             }
         }
         evaluations = new_evaluations;
