@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use plonky::{Bls12Scalar, msm_execute, msm_precompute, msm_execute_parallel, G1_GENERATOR_PROJECTIVE, G1ProjectivePoint, fft, fft_precompute, FftPrecomputation, fft_with_precomputation};
+use plonky::{Bls12Scalar, msm_execute, msm_precompute, msm_execute_parallel, G1_GENERATOR_PROJECTIVE, G1ProjectivePoint, fft, fft_precompute, FftPrecomputation, fft_with_precomputation, MsmPrecomputation};
 
 const DEGREE: usize = 1 << 17;
 
@@ -29,7 +29,7 @@ fn main() {
     for w in 14..=14 {
         println!();
         println!("MSM WITH WINDOW SIZE {}", w);
-        run_msm(w, &generators, &scalars);
+        run_msms(w, &generators, &scalars);
     }
 }
 
@@ -67,23 +67,31 @@ fn run_fft(size: usize, precomputation: &FftPrecomputation) {
     println!("Finished in {}s", start.elapsed().as_secs_f64());
 }
 
-fn run_msm(w: usize, generators: &[G1ProjectivePoint], scalars: &[Bls12Scalar]) {
+fn run_msms(w: usize, generators: &[G1ProjectivePoint], scalars: &[Bls12Scalar]) {
     println!("Precomputing...");
     let start = Instant::now();
     let precomputation = msm_precompute(generators, w);
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!();
 
-    println!("Computing MSM with one thread...");
-    let start = Instant::now();
-    let result = msm_execute(&precomputation, scalars, w);
-    println!("Finished in {}s", start.elapsed().as_secs_f64());
-    println!("Result: {:?}", result.to_affine());
-    println!();
+//    println!("Computing MSM with one thread...");
+//    let start = Instant::now();
+//    let result = msm_execute(&precomputation, scalars, w);
+//    println!("Finished in {}s", start.elapsed().as_secs_f64());
+//    println!("Result: {:?}", result.to_affine());
+//    println!();
 
     let start = Instant::now();
+    for _i in 0..9 {
+        run_msm(&precomputation, w, generators, scalars);
+    }
+    println!("All MSMs took {}s", start.elapsed().as_secs_f64());
+}
+
+fn run_msm(precomputation: &MsmPrecomputation, w: usize, generators: &[G1ProjectivePoint], scalars: &[Bls12Scalar]) {
     println!("Computing MSM in parallel...");
+    let start = Instant::now();
     let result = msm_execute_parallel(&precomputation, scalars, w);
     println!("Finished in {}s", start.elapsed().as_secs_f64());
-    println!("Result: {:?}", result.to_affine());
+//    println!("Result: {:?}", result.to_affine());
 }
