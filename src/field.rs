@@ -326,6 +326,10 @@ impl Bls12Scalar {
     /// In the context of Montgomery multiplication, µ = -|F|^-1 mod 2^64.
     const MU: u64 = 725501752471715839;
 
+    /// t = (r - 1) / 2^s =
+    /// 60001509534603559531609739528203892656505753216962260608619555
+    const T: Self = Self { limbs: [725501752471715841, 6461107452199829505, 6968279316240510977, 1345280370688042326] };
+
     pub const TWO_ADICITY: usize = 47;
 
     /// Generator of [1, order).
@@ -358,10 +362,9 @@ impl Bls12Scalar {
 
     /// Computes a `2^n_power`th primitive root of unity.
     pub fn primitive_root_of_unity(n_power: usize) -> Bls12Scalar {
-        assert!(n_power <= 47);
-        let t = BigUint::from_str("60001509534603559531609739528203892656505753216962260608619555").unwrap();
-        let base_root = Self::GENERATOR.exp(t);
-        base_root.exp(BigUint::from_u64(1u64 << 47u64 - n_power as u64).unwrap())
+        assert!(n_power <= Self::TWO_ADICITY);
+        let base_root = Self::GENERATOR.exp(Self::T);
+        base_root.exp(Self::from_canonical_u64(1u64 << Self::TWO_ADICITY as u64 - n_power as u64))
     }
 
     pub fn cyclic_subgroup_unknown_order(generator: Bls12Scalar) -> Vec<Bls12Scalar> {
@@ -392,24 +395,43 @@ impl Bls12Scalar {
         Self::cyclic_subgroup_unknown_order(generator).len()
     }
 
-    // TODO: Avoid BigUint. Maybe take Bls12Scalar, since larger exponents are unnecessary as per
-    // Fermat's little theorem.
-    pub fn exp(&self, power: BigUint) -> Bls12Scalar {
+    pub fn num_bits(&self) -> usize {
+        let mut n = 0;
+        for (i, limb) in self.to_canonical().iter().enumerate() {
+            for j in 0..64 {
+                if (limb >> j & 1) != 0 {
+                    n = i * 64 + j + 1;
+                }
+            }
+        }
+        n
+    }
+
+    pub fn exp(&self, power: Bls12Scalar) -> Bls12Scalar {
+        let power_bits = power.num_bits();
         let mut current = *self;
         let mut product = Bls12Scalar::ONE;
-        for byte in power.to_bytes_le() {
-            for i in 0..8 {
-                if (byte >> i & 1) != 0 {
+
+        for (i, limb) in power.to_canonical().iter().enumerate() {
+            for j in 0..64 {
+                // If we've gone through all the 1 bits already, no need to keep squaring.
+                let bit_index = i * 64 + j;
+                if bit_index == power_bits {
+                    return product;
+                }
+
+                if (limb >> j & 1) != 0 {
                     product = product * current;
                 }
                 current = current.square();
             }
         }
+
         product
     }
 
     pub fn exp_usize(&self, power: usize) -> Bls12Scalar {
-        self.exp(BigUint::from_usize(power).unwrap())
+        self.exp(Self::from_canonical_usize(power))
     }
 
     pub fn square(&self) -> Self {
@@ -902,10 +924,10 @@ mod tests {
 
     #[test]
     fn exp() {
-        assert_eq!(Bls12Scalar::THREE.exp(BigUint::zero()), Bls12Scalar::ONE);
-        assert_eq!(Bls12Scalar::THREE.exp(BigUint::one()), Bls12Scalar::THREE);
-        assert_eq!(Bls12Scalar::THREE.exp(BigUint::from_u8(2).unwrap()), Bls12Scalar::from_canonical_u64(9));
-        assert_eq!(Bls12Scalar::THREE.exp(BigUint::from_u8(3).unwrap()), Bls12Scalar::from_canonical_u64(27));
+        assert_eq!(Bls12Scalar::THREE.exp(Bls12Scalar::ZERO), Bls12Scalar::ONE);
+        assert_eq!(Bls12Scalar::THREE.exp(Bls12Scalar::ONE), Bls12Scalar::THREE);
+        assert_eq!(Bls12Scalar::THREE.exp(Bls12Scalar::from_canonical_u64(2)), Bls12Scalar::from_canonical_u64(9));
+        assert_eq!(Bls12Scalar::THREE.exp(Bls12Scalar::from_canonical_u64(3)), Bls12Scalar::from_canonical_u64(27));
     }
 
     #[test]
@@ -961,15 +983,24 @@ mod tests {
     }
 
     #[test]
+    fn num_bits() {
+        assert_eq!(Bls12Scalar::from_canonical_u64(0b10101).num_bits(), 5);
+        assert_eq!(Bls12Scalar::from_canonical_u64(u64::max_value()).num_bits(), 64);
+        assert_eq!(Bls12Scalar::from_canonical([0, 1, 0, 0]).num_bits(), 64 + 1);
+        assert_eq!(Bls12Scalar::from_canonical([0, 0, 0, 1]).num_bits(), 64 * 3 + 1);
+        assert_eq!(Bls12Scalar::from_canonical([0, 0, 0, 0b10101]).num_bits(), 64 * 3 + 5)
+    }
+
+    #[test]
     fn roots_of_unity() {
         for n_power in 0..10 {
             let n = 1 << n_power as u64;
             let root = Bls12Scalar::primitive_root_of_unity(n_power);
 
-            assert_eq!(root.exp(BigUint::from_u64(n).unwrap()), Bls12Scalar::ONE);
+            assert_eq!(root.exp(Bls12Scalar::from_canonical_u64(n)), Bls12Scalar::ONE);
 
             if n > 1 {
-                assert_ne!(root.exp(BigUint::from_u64(n - 1).unwrap()), Bls12Scalar::ONE)
+                assert_ne!(root.exp(Bls12Scalar::from_canonical_u64(n - 1)), Bls12Scalar::ONE)
             }
         }
     }
