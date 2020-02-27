@@ -13,16 +13,11 @@
 use std::cmp::Ordering;
 use std::cmp::Ordering::Less;
 use std::collections::HashSet;
-use std::convert::TryInto;
 use std::ops::{Add, Div, Mul, Neg, Sub};
-use std::str::FromStr;
 
-use num::{BigUint, FromPrimitive};
 use rand::RngCore;
 use rand::rngs::OsRng;
 use unroll::unroll_for_loops;
-
-use crate::conversions::{biguint_to_u64_vec, u64_slice_to_biguint};
 
 /// An element of the BLS12 group's base field.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -918,8 +913,6 @@ cmp_asymmetric!(cmp_7_6, 7, 6);
 
 #[cfg(test)]
 mod tests {
-    use num::{BigUint, FromPrimitive, One, Zero};
-
     use crate::conversions::u64_slice_to_biguint;
     use crate::field::{Bls12Base, Bls12Scalar, mul_12_6, mul_6_6};
 

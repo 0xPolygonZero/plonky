@@ -155,7 +155,7 @@ pub fn affine_multisummation_batch_inversion(summations: Vec<Vec<G1AffinePoint>>
 
 #[cfg(test)]
 mod tests {
-    use crate::{affine_multisummation_batch_inversion, affine_summation_batch_inversion, affine_summation_pairwise, G1_GENERATOR_AFFINE, G1AffinePoint, G1ProjectivePoint};
+    use crate::{affine_summation_batch_inversion, affine_summation_pairwise, G1_GENERATOR_AFFINE, G1ProjectivePoint};
 
     #[test]
     fn test_pairwise_affine_summation() {

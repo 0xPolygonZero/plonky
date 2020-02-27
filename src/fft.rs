@@ -1,6 +1,6 @@
 use rayon::prelude::*;
 
-use crate::{Bls12Base, Bls12Scalar};
+use crate::Bls12Scalar;
 
 /// Permutes `arr` such that each index is mapped to its reverse in binary.
 fn reverse_index_bits<T: Copy>(arr: Vec<T>) -> Vec<T> {
@@ -133,9 +133,6 @@ pub fn fft_with_precomputation_power_of_2(
 
 #[cfg(test)]
 mod tests {
-    use rand::RngCore;
-    use rand::rngs::OsRng;
-
     use crate::{Bls12Scalar, fft};
     use crate::fft::{log2_ceil, log2_strict, reverse_bits, reverse_index_bits};
 

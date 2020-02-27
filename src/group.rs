@@ -1,6 +1,6 @@
 use std::ops::Neg;
 
-use crate::{Bls12Base, Bls12Scalar};
+use crate::Bls12Base;
 
 // Parameters taken from the implementation of Bls12-377 in Zexe found here:
 // https://github.com/scipr-lab/zexe/blob/master/algebra/src/curves/bls12_377/g1.rs
@@ -161,7 +161,7 @@ impl Neg for G1ProjectivePoint {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12Base, Bls12Scalar, G1_GENERATOR_PROJECTIVE, G1ProjectivePoint};
+    use crate::{Bls12Scalar, G1_GENERATOR_PROJECTIVE, G1ProjectivePoint};
 
     #[test]
     fn test_naive_multiplication() {
