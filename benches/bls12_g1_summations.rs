@@ -20,14 +20,14 @@ fn criterion_benchmark(c: &mut Criterion) {
     {
         let summands = summands.clone();
         c.bench_function("G1 pairwise affine summation", move |b| b.iter(|| {
-            affine_summation_pairwise(black_box(summands.clone()));
+            affine_summation_pairwise(black_box(summands.clone()))
         }));
     }
 
     {
         let summands = summands.clone();
         c.bench_function("G1 pairwise affine summation (batch inversion)", move |b| b.iter(|| {
-            affine_summation_batch_inversion(black_box(summands.clone()));
+            affine_summation_batch_inversion(black_box(summands.clone()))
         }));
     }
 }

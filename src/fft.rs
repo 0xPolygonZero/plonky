@@ -1,13 +1,6 @@
-use chashmap::CHashMap;
 use rayon::prelude::*;
 
-use lazy_static::lazy_static;
-
 use crate::{Bls12Base, Bls12Scalar};
-
-lazy_static! {
-    static ref SUBGROUPS_BY_ORDER_POWER: CHashMap<usize, Vec<Bls12Scalar>> = CHashMap::new();
-}
 
 /// Permutes `arr` such that each index is mapped to its reverse in binary.
 fn reverse_index_bits<T: Copy>(arr: Vec<T>) -> Vec<T> {
@@ -44,18 +37,6 @@ fn log2_strict(n: usize) -> usize {
     let mut exp = log2_ceil(n);
     assert_eq!(1 << exp, n, "Input not a power of 2");
     exp
-}
-
-fn get_subgroup(order_power: usize) -> Vec<Bls12Scalar> {
-    match SUBGROUPS_BY_ORDER_POWER.get(&order_power) {
-        Some(subgroup) => subgroup.clone(),
-        None => {
-            let subgroup = Bls12Scalar::cyclic_subgroup_unknown_order(
-                Bls12Scalar::primitive_root_of_unity(order_power));
-            SUBGROUPS_BY_ORDER_POWER.insert(order_power, subgroup.clone());
-            subgroup
-        }
-    }
 }
 
 pub struct FftPrecomputation {

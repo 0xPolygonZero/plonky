@@ -9,19 +9,19 @@ fn criterion_benchmark(c: &mut Criterion) {
     let y = [44444444, 55555555, 66666666, 77777777, 88888888, 99999999];
 
     c.bench_function("[u64; 6] widening multiplication", move |b| b.iter(|| {
-        mul_6_6(black_box(x), black_box(y));
+        mul_6_6(black_box(x), black_box(y))
     }));
 
     c.bench_function("[u64; 6] comparison (lhs == rhs)", move |b| b.iter(|| {
-        cmp_6_6(black_box(x), black_box(x));
+        cmp_6_6(black_box(x), black_box(x))
     }));
 
     c.bench_function("[u64; 6] comparison (lhs < rhs)", move |b| b.iter(|| {
-        cmp_6_6(black_box(x), black_box(y));
+        cmp_6_6(black_box(x), black_box(y))
     }));
 
     c.bench_function("[u64; 6] comparison (lhs > rhs)", move |b| b.iter(|| {
-        cmp_6_6(black_box(y), black_box(x));
+        cmp_6_6(black_box(y), black_box(x))
     }));
 }
 

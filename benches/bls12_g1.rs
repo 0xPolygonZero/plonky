@@ -1,9 +1,8 @@
 use criterion::{black_box, Criterion};
 use criterion::criterion_group;
 use criterion::criterion_main;
-use num::BigUint;
 
-use plonky::{Bls12Base, Bls12Scalar, G1_GENERATOR_AFFINE, G1AffinePoint, G1ProjectivePoint, mul_6_6};
+use plonky::{Bls12Base, Bls12Scalar, G1_GENERATOR_AFFINE, G1ProjectivePoint};
 
 fn criterion_benchmark(c: &mut Criterion) {
     // We want a scalar with a Hamming weight of 0.5, to simulate the "average case".
@@ -18,34 +17,24 @@ fn criterion_benchmark(c: &mut Criterion) {
     let p2_projective = p1_projective + p1_projective;
 
     c.bench_function("BLS12 G1 affine + affine = projective addition", move |b| b.iter(|| {
-        let _result: G1ProjectivePoint = black_box(p1_affine) + black_box(p2_affine);
+        black_box(p1_affine) + black_box(p2_affine)
     }));
 
     c.bench_function("BLS12 G1 projective + affine = projective addition", move |b| b.iter(|| {
-        let _result: G1ProjectivePoint = black_box(p1_projective) + black_box(p2_affine);
+        black_box(p1_projective) + black_box(p2_affine)
     }));
 
     c.bench_function("BLS12 G1 projective + projective = projective addition", move |b| b.iter(|| {
-        let _result: G1ProjectivePoint = black_box(p1_projective) + black_box(p2_projective);
+        black_box(p1_projective) + black_box(p2_projective)
     }));
 
     c.bench_function("BLS12 G1 projective doubling", move |b| b.iter(|| {
-        black_box(p1_projective).double();
+        black_box(p1_projective).double()
     }));
 
     c.bench_function("BLS12 G1 projective multiplication", move |b| b.iter(|| {
-        black_box(s) * black_box(p1_projective);
+        black_box(s) * black_box(p1_projective)
     }));
-}
-
-fn u64_slice_to_biguint(n: &[u64]) -> BigUint {
-    let mut bytes_le = Vec::new();
-    for n_i in n {
-        for j in 0..8 {
-            bytes_le.push((n_i >> j * 8) as u8);
-        }
-    }
-    BigUint::from_bytes_le(&bytes_le)
 }
 
 criterion_group!(benches, criterion_benchmark);

@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use plonky::{Bls12Scalar, fft, fft_precompute, fft_with_precomputation, FftPrecomputation, G1_GENERATOR_PROJECTIVE, G1ProjectivePoint, msm_execute, msm_execute_parallel, msm_precompute, MsmPrecomputation};
+use plonky::{Bls12Scalar, fft_precompute, fft_with_precomputation, FftPrecomputation, G1_GENERATOR_PROJECTIVE, G1ProjectivePoint, msm_execute_parallel, msm_precompute, MsmPrecomputation};
 
 const DEGREE: usize = 1 << 17;
 
@@ -74,13 +74,6 @@ fn run_msms(w: usize, generators: &[G1ProjectivePoint], scalars: &[Bls12Scalar])
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!();
 
-//    println!("Computing MSM with one thread...");
-//    let start = Instant::now();
-//    let result = msm_execute(&precomputation, scalars, w);
-//    println!("Finished in {}s", start.elapsed().as_secs_f64());
-//    println!("Result: {:?}", result.to_affine());
-//    println!();
-
     let start = Instant::now();
     for _i in 0..9 {
         run_msm(&precomputation, w, scalars);
@@ -91,7 +84,6 @@ fn run_msms(w: usize, generators: &[G1ProjectivePoint], scalars: &[Bls12Scalar])
 fn run_msm(precomputation: &MsmPrecomputation, w: usize, scalars: &[Bls12Scalar]) {
     println!("Computing MSM in parallel...");
     let start = Instant::now();
-    let result = msm_execute_parallel(&precomputation, scalars, w);
+    msm_execute_parallel(&precomputation, scalars, w);
     println!("Finished in {}s", start.elapsed().as_secs_f64());
-//    println!("Result: {:?}", result.to_affine());
 }
