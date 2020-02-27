@@ -23,7 +23,6 @@ use rand::rngs::OsRng;
 use unroll::unroll_for_loops;
 
 use crate::conversions::{biguint_to_u64_vec, u64_slice_to_biguint};
-use crate::num_util::modinv;
 
 /// An element of the BLS12 group's base field.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -439,19 +438,90 @@ impl Bls12Scalar {
     }
 
     pub fn multiplicative_inverse(&self) -> Option<Self> {
-        // Let x R = self. We compute M((x R)^-1, R^3) = x^-1 R^-1 R^3 R^-1 = x^-1 R.
-        // We use BigUints for now, since we don't care much about inverse performance.
-        // TODO: Replace with code that doesn't use BigUints.
-        let self_biguint = u64_slice_to_biguint(&self.limbs);
-        let order_biguint = u64_slice_to_biguint(&Self::ORDER);
-        let opt_inverse_biguint = modinv(self_biguint, order_biguint);
+        if self.is_zero() {
+            None
+        } else {
+            // Let x R = self. We compute M((x R)^-1, R^3) = x^-1 R^-1 R^3 R^-1 = x^-1 R.
+            let self_r_inv = Self::nonzero_multiplicative_inverse_canonical(self.limbs);
+            Some(Self { limbs: Self::montgomery_multiply(self_r_inv, Self::R3) })
+        }
+    }
 
-        opt_inverse_biguint.map(|inverse_biguint| Self {
-            limbs: Self::montgomery_multiply(
-                biguint_to_u64_vec(inverse_biguint, 4).as_slice().try_into().unwrap(),
-                Bls12Scalar::R3,
-            )
-        })
+    fn nonzero_multiplicative_inverse_canonical(a: [u64; 4]) -> [u64; 4] {
+        // Based on Algorithm 16 of "Efficient Software-Implementation of Finite Fields with
+        // Applications to Cryptography".
+
+        let zero = [0, 0, 0, 0];
+        let one = [1, 0, 0, 0];
+
+        let mut u = a;
+        let mut v = Self::ORDER;
+        let mut b = one;
+        let mut c = zero;
+
+        while u != one && v != one {
+            while Self::is_even(u) {
+                u = Self::div2(u);
+                if Self::is_odd(b) {
+                    b = Self::add_asserting_no_overflow(b, Self::ORDER);
+                }
+                b = Self::div2(b);
+            }
+
+            while Self::is_even(v) {
+                v = Self::div2(v);
+                if Self::is_odd(c) {
+                    c = Self::add_asserting_no_overflow(c, Self::ORDER);
+                }
+                c = Self::div2(c);
+            }
+
+            if cmp_4_4(u, v) == Less {
+                v = sub_4_4(v, u);
+                if cmp_4_4(c, b) == Less {
+                    c = Self::add_asserting_no_overflow(c, Self::ORDER);
+                }
+                c = sub_4_4(c, b);
+            } else {
+                u = sub_4_4(u, v);
+                if cmp_4_4(b, c) == Less {
+                    b = Self::add_asserting_no_overflow(b, Self::ORDER);
+                }
+                b = sub_4_4(b, c);
+            }
+        }
+
+        if u == one {
+            b
+        } else {
+            c
+        }
+    }
+
+    fn add_asserting_no_overflow(a: [u64; 4], b: [u64; 4]) -> [u64; 4] {
+        let sum = add_4_4(a, b);
+        debug_assert_eq!(sum[4], 0);
+        [sum[0], sum[1], sum[2], sum[3]]
+    }
+
+    fn is_even(x: [u64; 4]) -> bool {
+        x[0] & 1 == 0
+    }
+
+    fn is_odd(x: [u64; 4]) -> bool {
+        x[0] & 1 == 1
+    }
+
+    /// Shift left (in the direction of increasing significance) by 1. Equivalent to integer
+    /// division by two.
+    #[unroll_for_loops]
+    fn div2(x: [u64; 4]) -> [u64; 4] {
+        let mut result = [0; 4];
+        for i in 0..3 {
+            result[i] = x[i] >> 1 | x[i + 1] << 63;
+        }
+        result[3] = x[3] >> 1;
+        result
     }
 
     pub fn batch_multiplicative_inverse(x: &[Self]) -> Vec<Self> {
@@ -459,6 +529,10 @@ impl Bls12Scalar {
         // elements, then derive the individual inverses from that via multiplication.
 
         let n = x.len();
+        if n == 0 {
+            return Vec::new();
+        }
+
         let mut a = Vec::with_capacity(n);
         a.push(x[0]);
         for i in 1..n {

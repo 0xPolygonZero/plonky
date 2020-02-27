@@ -26,6 +26,5 @@ mod group_adds;
 mod group_msm;
 mod group_multiplication;
 mod group_summations;
-mod num_util;
 mod plonk;
 mod poly_commit;
