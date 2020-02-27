@@ -18,7 +18,6 @@ pub use group_summations::*;
 pub use plonk::*;
 pub use poly_commit::*;
 
-mod conversions;
 mod field;
 mod fft;
 mod group;
@@ -28,3 +27,6 @@ mod group_multiplication;
 mod group_summations;
 mod plonk;
 mod poly_commit;
+
+#[cfg(test)]
+mod conversions;
