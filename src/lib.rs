@@ -5,11 +5,9 @@
 // We have tons of bigint literals in Montgomery form, which won't be readable with or without underscores.
 #![allow(clippy::unreadable_literal)]
 
-// Constant equality checks are usually due to macro-based loop unrolling.
-#![warn(clippy::eq_op)]
-
 pub use fft::*;
-pub use field::*;
+pub use bls_377_fr::*;
+pub use bls_377_fq::*;
 pub use group::*;
 pub use group_adds::*;
 pub use group_msm::*;
@@ -18,7 +16,8 @@ pub use group_summations::*;
 pub use plonk::*;
 pub use poly_commit::*;
 
-mod field;
+mod bls_377_fr;
+mod bls_377_fq;
 mod fft;
 mod group;
 mod group_adds;

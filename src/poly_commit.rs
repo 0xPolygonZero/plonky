@@ -42,7 +42,7 @@ mod tests {
 
     use num::BigUint;
 
-    use crate::field::{Bls12Base, Bls12Scalar};
+    use crate::{Bls12Base, Bls12Scalar};
     use crate::G1ProjectivePoint;
 
     #[test]

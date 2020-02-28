@@ -1,4 +1,4 @@
-use crate::field::Bls12Scalar;
+use crate::Bls12Scalar;
 
 /// A Plonk constraint has the form `L a + R b + O c + M a b + C = 0`.
 struct PlonkConstraint {

@@ -34,7 +34,7 @@ fn log2_ceil(n: usize) -> usize {
 
 /// Computes `log_2(n)`, panicking if `n` is not a power of two.
 fn log2_strict(n: usize) -> usize {
-    let mut exp = log2_ceil(n);
+    let exp = log2_ceil(n);
     assert_eq!(1 << exp, n, "Input not a power of 2");
     exp
 }

@@ -162,7 +162,6 @@ mod tests {
         let g_affine = G1_GENERATOR_AFFINE;
         let g2_affine = (g_affine + g_affine).to_affine();
         let g3_affine = (g_affine + g_affine + g_affine).to_affine();
-        let g_proj = g_affine.to_projective();
         let g2_proj = g2_affine.to_projective();
         let g3_proj = g3_affine.to_projective();
         assert_eq!(affine_summation_pairwise(vec![g_affine, g_affine]), g2_proj);
