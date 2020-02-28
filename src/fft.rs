@@ -85,6 +85,22 @@ pub fn fft_with_precomputation(
     }
 }
 
+pub fn ifft_with_precomputation_power_of_2(
+    points: &[Bls12Scalar],
+    precomputation: &FftPrecomputation,
+) -> Vec<Bls12Scalar> {
+    let n = points.len();
+    let n_inv = Bls12Scalar::from_canonical_usize(n).multiplicative_inverse().unwrap();
+    let mut result = fft_with_precomputation(points, precomputation);
+    // TODO: Could do this in-place with swaps.
+    let mut coefficients = Vec::with_capacity(n);
+    coefficients.push(result[0] * n_inv);
+    for x in result.into_iter().skip(1).rev() {
+        coefficients.push(x * n_inv);
+    }
+    coefficients
+}
+
 pub fn fft_with_precomputation_power_of_2(
     coefficients: &[Bls12Scalar],
     precomputation: &FftPrecomputation,
@@ -133,17 +149,29 @@ pub fn fft_with_precomputation_power_of_2(
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12Scalar, fft};
+    use crate::{Bls12Scalar, ifft_with_precomputation_power_of_2, fft_precompute, fft_with_precomputation};
     use crate::fft::{log2_ceil, log2_strict, reverse_bits, reverse_index_bits};
 
     #[test]
-    fn test_fft() {
+    fn fft_and_ifft() {
         let degree = 200;
+        let degree_padded = log2_ceil(degree);
         let mut coefficients = Vec::new();
         for i in 0..degree {
-            coefficients.push(Bls12Scalar::from_canonical_u64(i * 1337 % 100));
+            coefficients.push(Bls12Scalar::from_canonical_usize(i * 1337 % 100));
         }
-        assert_eq!(fft(&coefficients), evaluate_naive(coefficients));
+
+        let precomputation = fft_precompute(degree);
+        let points = fft_with_precomputation(&coefficients, &precomputation);
+        assert_eq!(points, evaluate_naive(&coefficients));
+
+        let interpolated_coefficients = ifft_with_precomputation_power_of_2(&points, &precomputation);
+        for i in 0..degree {
+            assert_eq!(interpolated_coefficients[i], coefficients[i]);
+        }
+        for i in degree..degree_padded {
+            assert_eq!(interpolated_coefficients[i], Bls12Scalar::ZERO);
+        }
     }
 
     #[test]
@@ -153,21 +181,21 @@ mod tests {
         assert_eq!(reverse_index_bits(vec!["a", "b", "c", "d"]), vec!["a", "c", "b", "d"]);
     }
 
-    fn evaluate_naive(coefficients: Vec<Bls12Scalar>) -> Vec<Bls12Scalar> {
+    fn evaluate_naive(coefficients: &[Bls12Scalar]) -> Vec<Bls12Scalar> {
         let degree = coefficients.len();
         let degree_padded = 1 << log2_ceil(degree);
 
         let mut coefficients_padded = Vec::with_capacity(degree_padded);
         for c in coefficients {
-            coefficients_padded.push(c);
+            coefficients_padded.push(*c);
         }
         for _i in degree..degree_padded {
             coefficients_padded.push(Bls12Scalar::ZERO);
         }
-        evaluate_naive_power_of_2(coefficients_padded)
+        evaluate_naive_power_of_2(&coefficients_padded)
     }
 
-    fn evaluate_naive_power_of_2(coefficients: Vec<Bls12Scalar>) -> Vec<Bls12Scalar> {
+    fn evaluate_naive_power_of_2(coefficients: &[Bls12Scalar]) -> Vec<Bls12Scalar> {
         let degree = coefficients.len();
         let degree_pow = log2_strict(degree);
 
