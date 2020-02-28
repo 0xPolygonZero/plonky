@@ -51,6 +51,9 @@ impl Bls12Base {
     pub const ORDER: [u64; 6] = [9586122913090633729, 1660523435060625408, 2230234197602682880,
         1883307231910630287, 14284016967150029115, 121098312706494698];
 
+    pub const ORDER_X2: [u64; 6] = [725501752471715842, 3321046870121250817, 4460468395205365760,
+        3766614463821260574, 10121289860590506614, 242196625412989397];
+
     /// R in the context of the Montgomery reduction, i.e. 2^384 % |F|.
     pub(crate) const R: [u64; 6] = [202099033278250856, 5854854902718660529, 11492539364873682930,
         8885205928937022213, 5545221690922665192, 39800542322357402];
@@ -85,15 +88,29 @@ impl Bls12Base {
     }
 
     pub fn double(&self) -> Self {
-        // TODO: Shift instead of adding.
-        *self + *self
+        let result = Self::mul2(self.limbs);
+        let limbs = if cmp_6_6(result, Self::ORDER) == Less {
+            result
+        } else {
+            sub_6_6(result, Self::ORDER)
+        };
+        Self { limbs }
     }
 
     pub fn triple(&self) -> Self {
-        // TODO: It's better to reduce in one step, so that we (potentially) subtract 2 * ORDER
-        // rather than subtracting ORDER twice. Doing two separate additions is probably suboptimal
-        // also.
-        self.double() + *self
+        // First compute (unreduced) self * 3 via a double and add, then reduce. We might need to do
+        // two comparisons, but at least we'll always do a single subtraction.
+
+        let mut sum = Self::mul2(self.limbs);
+        sum = Self::add_asserting_no_overflow(sum, self.limbs);
+        let limbs = if cmp_6_6(sum, Self::ORDER) == Less {
+            sum
+        } else if cmp_6_6(sum, Self::ORDER_X2) == Less {
+            sub_6_6(sum, Self::ORDER)
+        } else {
+            sub_6_6(sum, Self::ORDER_X2)
+        };
+        Self { limbs }
     }
 
     pub fn square(&self) -> Self {
@@ -180,7 +197,7 @@ impl Bls12Base {
         x[0] & 1 == 1
     }
 
-    /// Shift left (in the direction of increasing significance) by 1. Equivalent to integer
+    /// Shift in the direction of increasing significance by 1. Equivalent to integer
     /// division by two.
     #[unroll_for_loops]
     fn div2(x: [u64; 6]) -> [u64; 6] {
@@ -189,6 +206,20 @@ impl Bls12Base {
             result[i] = x[i] >> 1 | x[i + 1] << 63;
         }
         result[5] = x[5] >> 1;
+        result
+    }
+
+    /// Shift in the direction of increasing significance by 1. Equivalent to integer
+    /// multiplication by two. Assumes that the input's most significant bit is clear.
+    #[unroll_for_loops]
+    fn mul2(x: [u64; 6]) -> [u64; 6] {
+        debug_assert_eq!(x[5] >> 63, 0, "Most significant bit should be clear");
+
+        let mut result = [0; 6];
+        result[0] = x[0] << 1;
+        for i in 1..6 {
+            result[i] = x[i] << 1 | x[i - 1] >> 63;
+        }
         result
     }
 
