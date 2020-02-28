@@ -415,8 +415,6 @@ fn add_4_4_no_overflow(a: [u64; 4], b: [u64; 4]) -> [u64; 4] {
 /// Computes `a - b`. Assumes `a >= b`, otherwise the behavior is undefined.
 #[unroll_for_loops]
 fn sub_4_4(a: [u64; 4], b: [u64; 4]) -> [u64; 4] {
-    debug_assert!(4 == 4);
-
     let mut borrow = false;
     let mut difference = [0; 4];
     for i in 0..4 {

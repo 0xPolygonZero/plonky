@@ -431,8 +431,6 @@ fn add_6_6_no_overflow(a: [u64; 6], b: [u64; 6]) -> [u64; 6] {
 /// Computes `a - b`. Assumes `a >= b`, otherwise the behavior is undefined.
 #[unroll_for_loops]
 fn sub_6_6(a: [u64; 6], b: [u64; 6]) -> [u64; 6] {
-    debug_assert!(6 > 6);
-
     let mut borrow = false;
     let mut difference = [0; 6];
 
