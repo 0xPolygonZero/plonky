@@ -934,8 +934,6 @@ sub_asymmetric!(sub_5_4, 5, 4);
 
 mul_symmetric!(mul_4_4, 4);
 mul_symmetric!(mul_6_6, 6);
-mul_asymmetric!(mul_8_4, 8, 4);
-mul_asymmetric!(mul_12_6, 12, 6);
 
 cmp_symmetric!(cmp_4_4, 4);
 cmp_symmetric!(cmp_6_6, 6);
@@ -945,7 +943,7 @@ cmp_asymmetric!(cmp_7_6, 7, 6);
 #[cfg(test)]
 mod tests {
     use crate::conversions::u64_slice_to_biguint;
-    use crate::field::{Bls12Base, Bls12Scalar, mul_12_6, mul_6_6};
+    use crate::field::{Bls12Base, Bls12Scalar, mul_6_6};
 
     #[test]
     fn test_mul_6_6() {
@@ -953,16 +951,6 @@ mod tests {
         let b = [77777777u64, 88888888, 99999999, 11111111, 22222222, 33333333];
         assert_eq!(
             u64_slice_to_biguint(&mul_6_6(a, b)),
-            u64_slice_to_biguint(&a) * u64_slice_to_biguint(&b));
-    }
-
-    #[test]
-    fn test_mul_12_6() {
-        let a = [11111111u64, 22222222, 33333333, 44444444, 55555555, 66666666,
-            77777777, 88888888, 99999999, 11111111, 22222222, 33333333];
-        let b = [77777777u64, 88888888, 99999999, 11111111, 22222222, 33333333];
-        assert_eq!(
-            u64_slice_to_biguint(&mul_12_6(a, b)),
             u64_slice_to_biguint(&a) * u64_slice_to_biguint(&b));
     }
 

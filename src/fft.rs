@@ -91,7 +91,7 @@ pub fn ifft_with_precomputation_power_of_2(
 ) -> Vec<Bls12Scalar> {
     let n = points.len();
     let n_inv = Bls12Scalar::from_canonical_usize(n).multiplicative_inverse().unwrap();
-    let mut result = fft_with_precomputation(points, precomputation);
+    let result = fft_with_precomputation(points, precomputation);
     // TODO: Could do this in-place with swaps.
     let mut coefficients = Vec::with_capacity(n);
     coefficients.push(result[0] * n_inv);

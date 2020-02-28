@@ -10,25 +10,6 @@ pub fn u64_slice_to_biguint(n: &[u64]) -> BigUint {
     BigUint::from_bytes_le(&bytes_le)
 }
 
-pub fn biguint_to_u64_vec(biguint: BigUint, len: usize) -> Vec<u64> {
-    let mut vec = Vec::new();
-    for u32_pair in biguint.to_u32_digits().chunks(2) {
-        let mut limb = u32_pair[0] as u64;
-        if u32_pair.len() == 2 {
-            limb += (u32_pair[1] as u64) << 32;
-        }
-        vec.push(limb)
-    }
-
-    debug_assert!(vec.len() <= len);
-
-    while vec.len() < len {
-        vec.push(0);
-    }
-
-    vec
-}
-
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
