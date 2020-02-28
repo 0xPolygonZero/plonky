@@ -6,7 +6,7 @@ const DEGREE: usize = 1 << 17;
 
 fn main() {
     // Configure the main thread pool size.
-    rayon::ThreadPoolBuilder::new().num_threads(12).build_global().unwrap();
+    // rayon::ThreadPoolBuilder::new().num_threads(8).build_global().unwrap();
 
     run_all_ffts();
 

@@ -5,7 +5,7 @@ use criterion::criterion_main;
 use plonky::{affine_summation_batch_inversion, affine_summation_pairwise, G1_GENERATOR_PROJECTIVE, G1ProjectivePoint};
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let n = 23;
+    let n = 150;
 
     // We want a scalar with a Hamming weight of 0.5, to simulate the "average case".
     let mut summands = Vec::new();

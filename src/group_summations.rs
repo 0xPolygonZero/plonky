@@ -27,7 +27,7 @@ pub fn affine_multisummation_best(summations: Vec<Vec<G1AffinePoint>>) -> Vec<G1
         .sum();
 
     // This threshold is chosen based on data from the summation benchmarks.
-    if pairwise_sums < 46 {
+    if pairwise_sums < 70 {
         affine_multisummation_pairwise(summations)
     } else {
         affine_multisummation_batch_inversion(summations)
