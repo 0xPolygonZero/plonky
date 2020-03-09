@@ -8,6 +8,8 @@ use rand::RngCore;
 use rand::rngs::OsRng;
 use unroll::unroll_for_loops;
 
+use crate::Field;
+
 /// An element of the BLS12 group's base field.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Bls12Base {
@@ -16,20 +18,6 @@ pub struct Bls12Base {
 }
 
 impl Bls12Base {
-    pub const ZERO: Self = Self { limbs: [0; 6] };
-    pub const ONE: Self = Self {
-        limbs: [202099033278250856, 5854854902718660529, 11492539364873682930, 8885205928937022213,
-            5545221690922665192, 39800542322357402]
-    };
-    pub const TWO: Self = Self {
-        limbs: [404198066556501712, 11709709805437321058, 4538334656037814244, 17770411857874044427,
-            11090443381845330384, 79601084644714804]
-    };
-    pub const THREE: Self = Self {
-        limbs: [606297099834752568, 17564564708155981587, 16030874020911497174, 8208873713101515024,
-            16635665072767995577, 119401626967072206]
-    };
-
     pub const BITS: usize = 377;
 
     /// The order of the field:
@@ -85,51 +73,6 @@ impl Bls12Base {
         n
     }
 
-    pub fn double(&self) -> Self {
-        let result = Self::mul2(self.limbs);
-        let limbs = if cmp_6_6(result, Self::ORDER) == Less {
-            result
-        } else {
-            sub_6_6(result, Self::ORDER)
-        };
-        Self { limbs }
-    }
-
-    pub fn triple(&self) -> Self {
-        // First compute (unreduced) self * 3 via a double and add, then reduce. We might need to do
-        // two comparisons, but at least we'll always do a single subtraction.
-
-        let mut sum = Self::mul2(self.limbs);
-        sum = add_6_6_no_overflow(sum, self.limbs);
-        let limbs = if cmp_6_6(sum, Self::ORDER) == Less {
-            sum
-        } else if cmp_6_6(sum, Self::ORDER_X2) == Less {
-            sub_6_6(sum, Self::ORDER)
-        } else {
-            sub_6_6(sum, Self::ORDER_X2)
-        };
-        Self { limbs }
-    }
-
-    pub fn square(&self) -> Self {
-        // TODO: Some intermediate products are the redundant, so this can be made faster.
-        *self * *self
-    }
-
-    pub fn cube(&self) -> Self {
-        self.square() * *self
-    }
-
-    pub fn multiplicative_inverse(&self) -> Option<Self> {
-        if self.is_zero() {
-            None
-        } else {
-            // Let x R = self. We compute M((x R)^-1, R^3) = x^-1 R^-1 R^3 R^-1 = x^-1 R.
-            let self_r_inv = Self::nonzero_multiplicative_inverse_canonical(self.limbs);
-            Some(Self { limbs: Self::montgomery_multiply(self_r_inv, Self::R3) })
-        }
-    }
-
     fn nonzero_multiplicative_inverse_canonical(a: [u64; 6]) -> [u64; 6] {
         // Based on Algorithm 16 of "Efficient Software-Implementation of Finite Fields with
         // Applications to Cryptography".
@@ -143,20 +86,20 @@ impl Bls12Base {
         let mut c = zero;
 
         while u != one && v != one {
-            while Self::is_even(u) {
-                u = Self::div2(u);
-                if Self::is_odd(b) {
+            while is_even(u) {
+                u = div2(u);
+                if is_odd(b) {
                     b = add_6_6_no_overflow(b, Self::ORDER);
                 }
-                b = Self::div2(b);
+                b = div2(b);
             }
 
-            while Self::is_even(v) {
-                v = Self::div2(v);
-                if Self::is_odd(c) {
+            while is_even(v) {
+                v = div2(v);
+                if is_odd(c) {
                     c = add_6_6_no_overflow(c, Self::ORDER);
                 }
-                c = Self::div2(c);
+                c = div2(c);
             }
 
             if cmp_6_6(u, v) == Less {
@@ -179,97 +122,6 @@ impl Bls12Base {
         } else {
             c
         }
-    }
-
-    fn is_even(x: [u64; 6]) -> bool {
-        x[0] & 1 == 0
-    }
-
-    fn is_odd(x: [u64; 6]) -> bool {
-        x[0] & 1 == 1
-    }
-
-    /// Shift in the direction of increasing significance by 1. Equivalent to integer
-    /// division by two.
-    #[unroll_for_loops]
-    fn div2(x: [u64; 6]) -> [u64; 6] {
-        let mut result = [0; 6];
-        for i in 0..5 {
-            result[i] = x[i] >> 1 | x[i + 1] << 63;
-        }
-        result[5] = x[5] >> 1;
-        result
-    }
-
-    /// Shift in the direction of increasing significance by 1. Equivalent to integer
-    /// multiplication by two. Assumes that the input's most significant bit is clear.
-    #[unroll_for_loops]
-    fn mul2(x: [u64; 6]) -> [u64; 6] {
-        debug_assert_eq!(x[5] >> 63, 0, "Most significant bit should be clear");
-
-        let mut result = [0; 6];
-        result[0] = x[0] << 1;
-        for i in 1..6 {
-            result[i] = x[i] << 1 | x[i - 1] >> 63;
-        }
-        result
-    }
-
-    pub fn batch_multiplicative_inverse_opt(x: &[Self]) -> Vec<Option<Self>> {
-        let n = x.len();
-        let mut x_nonzero = Vec::with_capacity(n);
-        let mut index_map = Vec::with_capacity(n);
-
-        for x_i in x {
-            if !x_i.is_zero() {
-                index_map.push(x_nonzero.len());
-                x_nonzero.push(*x_i);
-            } else {
-                // Push an intentionally out-of-bounds index to make sure it isn't used.
-                index_map.push(n);
-            }
-        }
-
-        let x_inv = Self::batch_multiplicative_inverse(&x_nonzero);
-
-        let mut result = Vec::with_capacity(n);
-        for i in 0..n {
-            if !x[i].is_zero() {
-                result.push(Some(x_inv[index_map[i]]));
-            } else {
-                result.push(None);
-            }
-        }
-        result
-    }
-
-    pub fn batch_multiplicative_inverse(x: &[Self]) -> Vec<Self> {
-        // This is Montgomery's trick. At a high level, we invert the product of the given field
-        // elements, then derive the individual inverses from that via multiplication.
-
-        let n = x.len();
-        if n == 0 {
-            return Vec::new();
-        }
-
-        let mut a = Vec::with_capacity(n);
-        a.push(x[0]);
-        for i in 1..n {
-            a.push(a[i - 1] * x[i]);
-        }
-
-        let mut a_inv = vec![Self::ZERO; n];
-        a_inv[n - 1] = a[n - 1].multiplicative_inverse().expect("No inverse");
-        for i in (0..n - 1).rev() {
-            a_inv[i] = x[i + 1] * a_inv[i + 1];
-        }
-
-        let mut x_inv = Vec::with_capacity(n);
-        x_inv.push(a_inv[0]);
-        for i in 1..n {
-            x_inv.push(a[i - 1] * a_inv[i]);
-        }
-        x_inv
     }
 
     // TODO: replace with a CSPRNG
@@ -479,10 +331,95 @@ pub fn mul_6_6(a: [u64; 6], b: [u64; 6]) -> [u64; 6 + 6] {
     acc
 }
 
+impl Field for Bls12Base {
+    const ZERO: Self = Self {
+        limbs: [0; 6]
+    };
+    const ONE: Self = Self {
+        limbs: [202099033278250856, 5854854902718660529, 11492539364873682930, 8885205928937022213,
+            5545221690922665192, 39800542322357402]
+    };
+    const TWO: Self = Self {
+        limbs: [404198066556501712, 11709709805437321058, 4538334656037814244, 17770411857874044427,
+            11090443381845330384, 79601084644714804]
+    };
+    const THREE: Self = Self {
+        limbs: [606297099834752568, 17564564708155981587, 16030874020911497174, 8208873713101515024,
+            16635665072767995577, 119401626967072206]
+    };
+
+    fn multiplicative_inverse_assuming_nonzero(&self) -> Self {
+        // Let x R = self. We compute M((x R)^-1, R^3) = x^-1 R^-1 R^3 R^-1 = x^-1 R.
+        let self_r_inv = Self::nonzero_multiplicative_inverse_canonical(self.limbs);
+        Self { limbs: Self::montgomery_multiply(self_r_inv, Self::R3) }
+    }
+
+    fn double(&self) -> Self {
+        let result = mul2(self.limbs);
+        let limbs = if cmp_6_6(result, Self::ORDER) == Less {
+            result
+        } else {
+            sub_6_6(result, Self::ORDER)
+        };
+        Self { limbs }
+    }
+
+    fn triple(&self) -> Self {
+        // First compute (unreduced) self * 3 via a double and add, then reduce. We might need to do
+        // two comparisons, but at least we'll always do a single subtraction.
+
+        let mut sum = mul2(self.limbs);
+        sum = add_6_6_no_overflow(sum, self.limbs);
+        let limbs = if cmp_6_6(sum, Self::ORDER) == Less {
+            sum
+        } else if cmp_6_6(sum, Self::ORDER_X2) == Less {
+            sub_6_6(sum, Self::ORDER)
+        } else {
+            sub_6_6(sum, Self::ORDER_X2)
+        };
+        Self { limbs }
+    }
+}
+
+fn is_even(x: [u64; 6]) -> bool {
+    x[0] & 1 == 0
+}
+
+fn is_odd(x: [u64; 6]) -> bool {
+    x[0] & 1 == 1
+}
+
+/// Shift in the direction of increasing significance by 1. Equivalent to integer
+/// division by two.
+#[unroll_for_loops]
+fn div2(x: [u64; 6]) -> [u64; 6] {
+    let mut result = [0; 6];
+    for i in 0..5 {
+        result[i] = x[i] >> 1 | x[i + 1] << 63;
+    }
+    result[5] = x[5] >> 1;
+    result
+}
+
+/// Shift in the direction of increasing significance by 1. Equivalent to integer
+/// multiplication by two. Assumes that the input's most significant bit is clear.
+#[unroll_for_loops]
+fn mul2(x: [u64; 6]) -> [u64; 6] {
+    debug_assert_eq!(x[5] >> 63, 0, "Most significant bit should be clear");
+
+    let mut result = [0; 6];
+    result[0] = x[0] << 1;
+    for i in 1..6 {
+        result[i] = x[i] << 1 | x[i - 1] >> 63;
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::{Bls12Base, Field, mul_6_6};
+    use crate::bls_377_scalar::div2;
     use crate::conversions::u64_slice_to_biguint;
-    use crate::{Bls12Base, mul_6_6};
 
     #[test]
     fn test_mul_6_6() {
@@ -570,10 +507,10 @@ mod tests {
 
     #[test]
     fn test_div2() {
-        assert_eq!(Bls12Base::div2([40, 0, 0, 0, 0, 0]), [20, 0, 0, 0, 0, 0]);
+        assert_eq!(div2([40, 0, 0, 0, 0, 0]), [20, 0, 0, 0, 0, 0]);
 
         assert_eq!(
-            Bls12Base::div2(
+            div2(
                 [15668009436471190370, 3102040391300197453, 4166322749169705801, 3518225024268476800, 11231577158546850254, 226224965816356276]),
             [17057376755090370993, 10774392232504874534, 2083161374584852900, 1759112512134238400, 5615788579273425127, 113112482908178138]);
     }

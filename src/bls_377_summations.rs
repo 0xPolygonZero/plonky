@@ -1,6 +1,6 @@
 use std::iter::Sum;
 
-use crate::{Bls12Base, G1AffinePoint, G1ProjectivePoint};
+use crate::{Bls12Base, G1AffinePoint, G1ProjectivePoint, Field};
 
 impl Sum<G1AffinePoint> for G1ProjectivePoint {
     fn sum<I: Iterator<Item=G1AffinePoint>>(iter: I) -> Self {

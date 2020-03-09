@@ -1,6 +1,6 @@
 use std::ops::Add;
 
-use crate::{G1AffinePoint, G1ProjectivePoint};
+use crate::{G1AffinePoint, G1ProjectivePoint, Field};
 
 impl Add<G1ProjectivePoint> for G1ProjectivePoint {
     type Output = G1ProjectivePoint;

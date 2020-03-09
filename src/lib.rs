@@ -5,25 +5,29 @@
 // We have tons of bigint literals in Montgomery form, which won't be readable with or without underscores.
 #![allow(clippy::unreadable_literal)]
 
+pub use bls_377_adds::*;
+pub use bls_377_base::*;
+pub use bls_377_curve::*;
+pub use bls_377_scalar::*;
+pub use bls_377_summations::*;
 pub use fft::*;
-pub use bls_377_fr::*;
-pub use bls_377_fq::*;
+pub use field::*;
 pub use group::*;
-pub use group_adds::*;
 pub use group_msm::*;
 pub use group_multiplication::*;
-pub use group_summations::*;
 pub use plonk::*;
 pub use poly_commit::*;
 
-mod bls_377_fr;
-mod bls_377_fq;
+mod bls_377_adds;
+mod bls_377_base;
+mod bls_377_curve;
+mod bls_377_scalar;
+mod bls_377_summations;
 mod fft;
+mod field;
 mod group;
-mod group_adds;
 mod group_msm;
 mod group_multiplication;
-mod group_summations;
 mod plonk;
 mod poly_commit;
 
