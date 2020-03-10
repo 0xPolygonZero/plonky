@@ -6,30 +6,30 @@
 #![allow(clippy::unreadable_literal)]
 
 pub use bigint_arithmetic::*;
-pub use bls12_377_adds::*;
 pub use bls12_377_base::*;
 pub use bls12_377_curve::*;
 pub use bls12_377_scalar::*;
-pub use bls12_377_summations::*;
+pub use curve::*;
+pub use curve_adds::*;
+pub use curve_msm::*;
+pub use curve_multiplication::*;
+pub use curve_summations::*;
 pub use fft::*;
 pub use field::*;
-pub use group::*;
-pub use group_msm::*;
-pub use group_multiplication::*;
 pub use plonk::*;
 pub use poly_commit::*;
 
 mod bigint_arithmetic;
-mod bls12_377_adds;
+mod curve_adds;
 mod bls12_377_base;
 mod bls12_377_curve;
 mod bls12_377_scalar;
-mod bls12_377_summations;
+mod curve_summations;
 mod fft;
 mod field;
-mod group;
-mod group_msm;
-mod group_multiplication;
+mod curve;
+mod curve_msm;
+mod curve_multiplication;
 mod plonk;
 mod poly_commit;
 

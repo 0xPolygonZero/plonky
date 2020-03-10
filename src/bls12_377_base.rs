@@ -2,24 +2,23 @@
 
 use std::cmp::Ordering;
 use std::cmp::Ordering::Less;
+use std::convert::TryInto;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 use rand::RngCore;
 use rand::rngs::OsRng;
 use unroll::unroll_for_loops;
 
-use crate::{Field, mul2_6, sub_6_6, add_6_6_no_overflow, cmp_6_6, is_even_6, div2_6, is_odd_6};
+use crate::{add_6_6_no_overflow, cmp_6_6, div2_6, Field, is_even_6, is_odd_6, mul2_6, sub_6_6};
 
 /// An element of the BLS12 group's base field.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
-pub struct Bls12Base {
+pub struct Bls12377Base {
     /// Montgomery representation, encoded with little-endian u64 limbs.
     pub limbs: [u64; 6],
 }
 
-impl Bls12Base {
-    pub const BITS: usize = 377;
-
+impl Bls12377Base {
     /// The order of the field:
     /// 258664426012969094010652733694893533536393512754914660539884262666720468348340822774968888139573360124440321458177
     pub const ORDER: [u64; 6] = [9586122913090633729, 1660523435060625408, 2230234197602682880,
@@ -124,20 +123,6 @@ impl Bls12Base {
         }
     }
 
-    // TODO: replace with a CSPRNG
-    pub fn rand() -> Self {
-        let mut limbs = [0; 6];
-
-        for limb_i in &mut limbs {
-            *limb_i = OsRng.next_u64();
-        }
-
-        // Remove a few of the most significant bits to ensure we're in range.
-        limbs[5] >>= 4;
-
-        Self { limbs }
-    }
-
     #[unroll_for_loops]
     fn montgomery_multiply(a: [u64; 6], b: [u64; 6]) -> [u64; 6] {
         // Interleaved Montgomery multiplication, as described in Algorithm 2 of
@@ -158,7 +143,7 @@ impl Bls12Base {
             c[(i + 6) % 7] += carry;
 
             // q = u c mod r = u c[0] mod r.
-            let q = Bls12Base::MU.wrapping_mul(c[i]);
+            let q = Bls12377Base::MU.wrapping_mul(c[i]);
 
             // C += N q
             carry = 0;
@@ -181,25 +166,25 @@ impl Bls12Base {
     }
 }
 
-impl Add<Bls12Base> for Bls12Base {
-    type Output = Bls12Base;
+impl Add<Bls12377Base> for Bls12377Base {
+    type Output = Bls12377Base;
 
-    fn add(self, rhs: Bls12Base) -> Bls12Base {
+    fn add(self, rhs: Bls12377Base) -> Bls12377Base {
         // First we do a widening addition, then we reduce if necessary.
         let sum = add_6_6_no_overflow(self.limbs, rhs.limbs);
-        let limbs = if cmp_6_6(sum, Bls12Base::ORDER) == Less {
+        let limbs = if cmp_6_6(sum, Bls12377Base::ORDER) == Less {
             sum
         } else {
-            sub_6_6(sum, Bls12Base::ORDER)
+            sub_6_6(sum, Bls12377Base::ORDER)
         };
-        Bls12Base { limbs }
+        Bls12377Base { limbs }
     }
 }
 
-impl Sub<Bls12Base> for Bls12Base {
-    type Output = Bls12Base;
+impl Sub<Bls12377Base> for Bls12377Base {
+    type Output = Bls12377Base;
 
-    fn sub(self, rhs: Bls12Base) -> Self::Output {
+    fn sub(self, rhs: Bls12377Base) -> Self::Output {
         let limbs = if cmp_6_6(self.limbs, rhs.limbs) == Ordering::Less {
             // Underflow occurs, so we compute the difference as `self + (-rhs)`.
             add_6_6_no_overflow(self.limbs, (-rhs).limbs)
@@ -211,45 +196,47 @@ impl Sub<Bls12Base> for Bls12Base {
     }
 }
 
-impl Mul<Bls12Base> for Bls12Base {
-    type Output = Bls12Base;
+impl Mul<Bls12377Base> for Bls12377Base {
+    type Output = Bls12377Base;
 
-    fn mul(self, rhs: Bls12Base) -> Bls12Base {
+    fn mul(self, rhs: Bls12377Base) -> Bls12377Base {
         Self { limbs: Self::montgomery_multiply(self.limbs, rhs.limbs) }
     }
 }
 
-impl Mul<u64> for Bls12Base {
-    type Output = Bls12Base;
+impl Mul<u64> for Bls12377Base {
+    type Output = Bls12377Base;
 
     fn mul(self, rhs: u64) -> Self::Output {
         // TODO: Do a 6x1 multiplication instead of padding to 6x6.
-        let rhs_field = Bls12Base::from_canonical_u64(rhs);
+        let rhs_field = Bls12377Base::from_canonical_u64(rhs);
         self * rhs_field
     }
 }
 
-impl Div<Bls12Base> for Bls12Base {
-    type Output = Bls12Base;
+impl Div<Bls12377Base> for Bls12377Base {
+    type Output = Bls12377Base;
 
-    fn div(self, rhs: Bls12Base) -> Bls12Base {
+    fn div(self, rhs: Bls12377Base) -> Bls12377Base {
         self * rhs.multiplicative_inverse().expect("No inverse")
     }
 }
 
-impl Neg for Bls12Base {
-    type Output = Bls12Base;
+impl Neg for Bls12377Base {
+    type Output = Bls12377Base;
 
-    fn neg(self) -> Bls12Base {
-        if self == Bls12Base::ZERO {
-            Bls12Base::ZERO
+    fn neg(self) -> Bls12377Base {
+        if self == Bls12377Base::ZERO {
+            Bls12377Base::ZERO
         } else {
-            Bls12Base { limbs: sub_6_6(Bls12Base::ORDER, self.limbs) }
+            Bls12377Base { limbs: sub_6_6(Bls12377Base::ORDER, self.limbs) }
         }
     }
 }
 
-impl Field for Bls12Base {
+impl Field for Bls12377Base {
+    const BITS: usize = 377;
+
     const ZERO: Self = Self {
         limbs: [0; 6]
     };
@@ -265,6 +252,18 @@ impl Field for Bls12Base {
         limbs: [606297099834752568, 17564564708155981587, 16030874020911497174, 8208873713101515024,
             16635665072767995577, 119401626967072206]
     };
+
+    fn to_canonical_vec(&self) -> Vec<u64> {
+        self.to_canonical().to_vec()
+    }
+
+    fn from_canonical_vec(v: Vec<u64>) -> Self {
+        Self::from_canonical(v[..].try_into().unwrap())
+    }
+
+    fn from_canonical_u64(n: u64) -> Self {
+        Self::from_canonical([n, 0, 0, 0, 0, 0])
+    }
 
     fn multiplicative_inverse_assuming_nonzero(&self) -> Self {
         // Let x R = self. We compute M((x R)^-1, R^3) = x^-1 R^-1 R^3 R^-1 = x^-1 R.
@@ -297,21 +296,34 @@ impl Field for Bls12Base {
         };
         Self { limbs }
     }
+
+    fn rand() -> Self {
+        let mut limbs = [0; 6];
+
+        for limb_i in &mut limbs {
+            *limb_i = OsRng.next_u64();
+        }
+
+        // Remove a few of the most significant bits to ensure we're in range.
+        limbs[5] >>= 4;
+
+        Self { limbs }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12Base, Field};
+    use crate::{Bls12377Base, Field};
     use crate::conversions::u64_slice_to_biguint;
 
     #[test]
     fn bls12base_to_and_from_canonical() {
         let a = [1, 2, 3, 4, 0, 0];
         let a_biguint = u64_slice_to_biguint(&a);
-        let order_biguint = u64_slice_to_biguint(&Bls12Base::ORDER);
-        let r_biguint = u64_slice_to_biguint(&Bls12Base::R);
+        let order_biguint = u64_slice_to_biguint(&Bls12377Base::ORDER);
+        let r_biguint = u64_slice_to_biguint(&Bls12377Base::R);
 
-        let a_bls12base = Bls12Base::from_canonical(a);
+        let a_bls12base = Bls12377Base::from_canonical(a);
         assert_eq!(u64_slice_to_biguint(&a_bls12base.limbs),
                    &a_biguint * &r_biguint % &order_biguint);
         assert_eq!(u64_slice_to_biguint(&a_bls12base.to_canonical()), a_biguint);
@@ -324,10 +336,10 @@ mod tests {
 
         let a_biguint = u64_slice_to_biguint(&a);
         let b_biguint = u64_slice_to_biguint(&b);
-        let order_biguint = u64_slice_to_biguint(&Bls12Base::ORDER);
+        let order_biguint = u64_slice_to_biguint(&Bls12377Base::ORDER);
 
-        let a_blsbase = Bls12Base::from_canonical(a);
-        let b_blsbase = Bls12Base::from_canonical(b);
+        let a_blsbase = Bls12377Base::from_canonical(a);
+        let b_blsbase = Bls12377Base::from_canonical(b);
 
         assert_eq!(
             u64_slice_to_biguint(&(a_blsbase * b_blsbase).to_canonical()),
@@ -336,7 +348,7 @@ mod tests {
 
     #[test]
     fn test_bls12_rand() {
-        let random_element = Bls12Base::rand();
+        let random_element = Bls12377Base::rand();
 
         for i in 0..4 {
             assert_ne!(random_element.limbs[i], 0x0);
@@ -346,20 +358,20 @@ mod tests {
     #[test]
     fn negation() {
         for i in 0..25 {
-            let i_blsbase = Bls12Base::from_canonical_u64(i);
-            assert_eq!(i_blsbase + -i_blsbase, Bls12Base::ZERO);
+            let i_blsbase = Bls12377Base::from_canonical_u64(i);
+            assert_eq!(i_blsbase + -i_blsbase, Bls12377Base::ZERO);
         }
     }
 
     #[test]
     fn multiplicative_inverse() {
         for i in 0..25 {
-            let i_blsbase = Bls12Base::from_canonical_u64(i);
+            let i_blsbase = Bls12377Base::from_canonical_u64(i);
             let i_inv_blsbase = i_blsbase.multiplicative_inverse();
             if i == 0 {
                 assert!(i_inv_blsbase.is_none());
             } else {
-                assert_eq!(i_blsbase * i_inv_blsbase.unwrap(), Bls12Base::ONE);
+                assert_eq!(i_blsbase * i_inv_blsbase.unwrap(), Bls12377Base::ONE);
             }
         }
     }
@@ -368,23 +380,23 @@ mod tests {
     fn batch_multiplicative_inverse() {
         let mut x = Vec::new();
         for i in 1..25 {
-            x.push(Bls12Base::from_canonical_u64(i));
+            x.push(Bls12377Base::from_canonical_u64(i));
         }
 
-        let x_inv = Bls12Base::batch_multiplicative_inverse(&x);
+        let x_inv = Bls12377Base::batch_multiplicative_inverse(&x);
         assert_eq!(x.len(), x_inv.len());
 
         for (x_i, x_i_inv) in x.into_iter().zip(x_inv) {
-            assert_eq!(x_i * x_i_inv, Bls12Base::ONE);
+            assert_eq!(x_i * x_i_inv, Bls12377Base::ONE);
         }
     }
 
     #[test]
     fn num_bits() {
-        assert_eq!(Bls12Base::from_canonical_u64(0b10101).num_bits(), 5);
-        assert_eq!(Bls12Base::from_canonical_u64(u64::max_value()).num_bits(), 64);
-        assert_eq!(Bls12Base::from_canonical([0, 1, 0, 0, 0, 0]).num_bits(), 64 + 1);
-        assert_eq!(Bls12Base::from_canonical([0, 0, 0, 0, 0, 1]).num_bits(), 64 * 5 + 1);
-        assert_eq!(Bls12Base::from_canonical([0, 0, 0, 0, 0, 0b10101]).num_bits(), 64 * 5 + 5)
+        assert_eq!(Bls12377Base::from_canonical_u64(0b10101).num_bits(), 5);
+        assert_eq!(Bls12377Base::from_canonical_u64(u64::max_value()).num_bits(), 64);
+        assert_eq!(Bls12377Base::from_canonical([0, 1, 0, 0, 0, 0]).num_bits(), 64 + 1);
+        assert_eq!(Bls12377Base::from_canonical([0, 0, 0, 0, 0, 1]).num_bits(), 64 * 5 + 1);
+        assert_eq!(Bls12377Base::from_canonical([0, 0, 0, 0, 0, 0b10101]).num_bits(), 64 * 5 + 5)
     }
 }

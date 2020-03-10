@@ -1,8 +1,11 @@
 use std::time::Instant;
 
-use plonky::{Bls12Scalar, fft_precompute, fft_with_precomputation, FftPrecomputation, G1_GENERATOR_PROJECTIVE, G1ProjectivePoint, msm_execute_parallel, msm_precompute, MsmPrecomputation};
+use plonky::{Bls12377, Curve, fft_precompute, fft_with_precomputation, FftPrecomputation, Field, G1_GENERATOR_PROJECTIVE, msm_execute_parallel, msm_precompute, MsmPrecomputation, ProjectivePoint};
 
 const DEGREE: usize = 1 << 17;
+
+type C = Bls12377;
+type SF = <C as Curve>::ScalarField;
 
 fn main() {
     // Configure the main thread pool size.
@@ -14,7 +17,7 @@ fn main() {
     let mut scalars = Vec::with_capacity(DEGREE);
     for _i in 0..DEGREE {
         generators.push(G1_GENERATOR_PROJECTIVE);
-        scalars.push(Bls12Scalar::rand());
+        scalars.push(SF::rand());
     }
 
     // Here's a quick Python snippet to calculate optimal window sizes:
@@ -55,10 +58,10 @@ fn run_all_ffts() {
     println!("All FFTs took {}s", start.elapsed().as_secs_f64());
 }
 
-fn run_fft(size: usize, precomputation: &FftPrecomputation) {
+fn run_fft(size: usize, precomputation: &FftPrecomputation<SF>) {
     let mut coefficients = Vec::new();
     for i in 0..size {
-        coefficients.push(Bls12Scalar::from_canonical_usize(i));
+        coefficients.push(SF::from_canonical_usize(i));
     }
 
     println!("Running FFT of size {}...", size);
@@ -67,7 +70,7 @@ fn run_fft(size: usize, precomputation: &FftPrecomputation) {
     println!("Finished in {}s", start.elapsed().as_secs_f64());
 }
 
-fn run_msms(w: usize, generators: &[G1ProjectivePoint], scalars: &[Bls12Scalar]) {
+fn run_msms(w: usize, generators: &[ProjectivePoint<C>], scalars: &[SF]) {
     println!("Precomputing...");
     let start = Instant::now();
     let precomputation = msm_precompute(generators, w);
@@ -81,7 +84,7 @@ fn run_msms(w: usize, generators: &[G1ProjectivePoint], scalars: &[Bls12Scalar])
     println!("All MSMs took {}s", start.elapsed().as_secs_f64());
 }
 
-fn run_msm(precomputation: &MsmPrecomputation, w: usize, scalars: &[Bls12Scalar]) {
+fn run_msm(precomputation: &MsmPrecomputation<C>, w: usize, scalars: &[SF]) {
     println!("Computing MSM in parallel...");
     let start = Instant::now();
     msm_execute_parallel(&precomputation, scalars, w);

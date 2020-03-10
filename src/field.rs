@@ -1,15 +1,29 @@
-use std::ops::{Add, Div, Mul, Sub, Neg};
+use std::collections::HashSet;
+use std::hash::Hash;
+use std::ops::{Add, Div, Mul, Neg, Sub};
 
-pub trait Field: Sized + Copy + Eq
-    + Neg<Output=Self>
-    + Add<Self, Output=Self>
-    + Sub<Self, Output=Self>
-    + Mul<Self, Output=Self>
-    + Div<Self, Output=Self> {
+pub trait Field: Sized + Copy + Eq + Send + Sync
++ Neg<Output=Self>
++ Add<Self, Output=Self>
++ Sub<Self, Output=Self>
++ Mul<Self, Output=Self>
++ Div<Self, Output=Self> {
+    const BITS: usize;
+
     const ZERO: Self;
     const ONE: Self;
     const TWO: Self;
     const THREE: Self;
+
+    fn to_canonical_vec(&self) -> Vec<u64>;
+
+    fn from_canonical_vec(v: Vec<u64>) -> Self;
+
+    fn from_canonical_u64(n: u64) -> Self;
+
+    fn from_canonical_usize(n: usize) -> Self {
+        Self::from_canonical_u64(n as u64)
+    }
 
     #[inline(always)]
     fn is_zero(&self) -> bool {
@@ -108,4 +122,41 @@ pub trait Field: Sized + Copy + Eq
         }
         x_inv
     }
+
+    fn cyclic_subgroup_unknown_order(generator: Self) -> Vec<Self> where Self: Hash {
+        let mut subgroup_vec = Vec::new();
+        let mut subgroup_set = HashSet::new();
+        let mut current = Self::ONE;
+        loop {
+            if !subgroup_set.insert(current) {
+                break;
+            }
+            subgroup_vec.push(current);
+            current = current * generator;
+        }
+        subgroup_vec
+    }
+
+    fn cyclic_subgroup_known_order(generator: Self, order: usize) -> Vec<Self> {
+        let mut subgroup = Vec::new();
+        let mut current = Self::ONE;
+        for _i in 0..order {
+            subgroup.push(current);
+            current = current * generator;
+        }
+        subgroup
+    }
+
+    fn generator_order(generator: Self) -> usize where Self: Hash {
+        Self::cyclic_subgroup_unknown_order(generator).len()
+    }
+
+    fn rand() -> Self;
+}
+
+pub trait TwoAdicField: Field {
+    const TWO_ADICITY: usize;
+
+    /// Computes a `2^n_power`th primitive root of unity.
+    fn primitive_root_of_unity(n_power: usize) -> Self;
 }

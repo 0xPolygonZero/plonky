@@ -1,20 +1,22 @@
+/// TODO: double check formulas for general SW curves
+
 use std::ops::Add;
 
-use crate::{G1AffinePoint, G1ProjectivePoint, Field};
+use crate::{AffinePoint, Curve, Field, ProjectivePoint};
 
-impl Add<G1ProjectivePoint> for G1ProjectivePoint {
-    type Output = G1ProjectivePoint;
+impl<C: Curve> Add<ProjectivePoint<C>> for ProjectivePoint<C> {
+    type Output = ProjectivePoint<C>;
 
-    fn add(self, rhs: G1ProjectivePoint) -> Self::Output {
-        if self.is_zero() {
+    fn add(self, rhs: ProjectivePoint<C>) -> Self::Output {
+        let ProjectivePoint { x: x1, y: y1, z: z1, zero: zero1 } = self;
+        let ProjectivePoint { x: x2, y: y2, z: z2, zero: zero2 } = rhs;
+
+        if zero1 {
             return rhs;
         }
-        if rhs.is_zero() {
+        if zero2 {
             return self;
         }
-
-        let G1ProjectivePoint { x: x1, y: y1, z: z1 } = self;
-        let G1ProjectivePoint { x: x2, y: y2, z: z2 } = rhs;
 
         let x1z2 = x1 * z2;
         let y1z2 = y1 * z2;
@@ -28,7 +30,7 @@ impl Add<G1ProjectivePoint> for G1ProjectivePoint {
                 return self.double();
             }
             if y1z2 == -y2z1 {
-                return G1ProjectivePoint::ZERO;
+                return ProjectivePoint::ZERO;
             }
         }
 
@@ -43,23 +45,23 @@ impl Add<G1ProjectivePoint> for G1ProjectivePoint {
         let x3 = v * a;
         let y3 = u * (r - a) - vvv * y1z2;
         let z3 = vvv * z1z2;
-        G1ProjectivePoint { x: x3, y: y3, z: z3 }
+        ProjectivePoint::nonzero(x3, y3, z3)
     }
 }
 
-impl Add<G1AffinePoint> for G1ProjectivePoint {
-    type Output = G1ProjectivePoint;
+impl<C: Curve> Add<AffinePoint<C>> for ProjectivePoint<C> {
+    type Output = ProjectivePoint<C>;
 
-    fn add(self, rhs: G1AffinePoint) -> Self::Output {
-        if self.is_zero() {
+    fn add(self, rhs: AffinePoint<C>) -> Self::Output {
+        let ProjectivePoint { x: x1, y: y1, z: z1, zero: zero1 } = self;
+        let AffinePoint { x: x2, y: y2, zero: zero2 } = rhs;
+
+        if zero1 {
             return rhs.to_projective();
         }
-        if rhs.is_zero() {
+        if zero2 {
             return self;
         }
-
-        let G1ProjectivePoint { x: x1, y: y1, z: z1 } = self;
-        let G1AffinePoint { x: x2, y: y2 } = rhs;
 
         let x2z1 = x2 * z1;
         let y2z1 = y2 * z1;
@@ -71,7 +73,7 @@ impl Add<G1AffinePoint> for G1ProjectivePoint {
                 return self.double();
             }
             if y1 == -y2z1 {
-                return G1ProjectivePoint::ZERO;
+                return ProjectivePoint::ZERO;
             }
         }
 
@@ -85,23 +87,23 @@ impl Add<G1AffinePoint> for G1ProjectivePoint {
         let x3 = v * a;
         let y3 = u * (r - a) - vvv * y1;
         let z3 = vvv * z1;
-        G1ProjectivePoint { x: x3, y: y3, z: z3 }
+        ProjectivePoint::nonzero(x3, y3, z3)
     }
 }
 
-impl Add<G1AffinePoint> for G1AffinePoint {
-    type Output = G1ProjectivePoint;
+impl<C: Curve> Add<AffinePoint<C>> for AffinePoint<C> {
+    type Output = ProjectivePoint<C>;
 
-    fn add(self, rhs: G1AffinePoint) -> Self::Output {
-        if self.is_zero() {
+    fn add(self, rhs: AffinePoint<C>) -> Self::Output {
+        let AffinePoint { x: x1, y: y1, zero: zero1 } = self;
+        let AffinePoint { x: x2, y: y2, zero: zero2 } = rhs;
+
+        if zero1 {
             return rhs.to_projective();
         }
-        if rhs.is_zero() {
+        if zero2 {
             return self.to_projective();
         }
-
-        let G1AffinePoint { x: x1, y: y1 } = self;
-        let G1AffinePoint { x: x2, y: y2 } = rhs;
 
         // Check if we're doubling or adding inverses.
         if x1 == x2 {
@@ -109,7 +111,7 @@ impl Add<G1AffinePoint> for G1AffinePoint {
                 return self.to_projective().double();
             }
             if y1 == -y2 {
-                return G1ProjectivePoint::ZERO;
+                return ProjectivePoint::ZERO;
             }
         }
 
@@ -123,6 +125,6 @@ impl Add<G1AffinePoint> for G1AffinePoint {
         let x3 = v * a;
         let y3 = u * (r - a) - vvv * y1;
         let z3 = vvv;
-        G1ProjectivePoint { x: x3, y: y3, z: z3 }
+        ProjectivePoint::nonzero(x3, y3, z3)
     }
 }

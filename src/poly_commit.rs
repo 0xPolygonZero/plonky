@@ -1,19 +1,15 @@
-use crate::{Bls12Scalar, G1ProjectivePoint, Field};
+use crate::{Curve, Field, ProjectivePoint};
 
-pub struct KZG10 {
-
-}
+struct KZG10;
 
 impl KZG10 {
-
     /// Taken from the scipr-lab implementation here: https://github.com/scipr-lab/poly-commit/blob/master/src/kzg10/mod.rs
     ///
     /// For now, only produces G1 points, for a polynomial of degree max_degree
-    pub fn setup (generator: G1ProjectivePoint, max_degree: u64) -> Vec<G1ProjectivePoint> {
+    pub fn setup<C: Curve>(generator: ProjectivePoint<C>, max_degree: u64) -> Vec<ProjectivePoint<C>> {
+        let alpha = C::ScalarField::rand();
 
-        let alpha = Bls12Scalar::rand();
-
-        let mut powers_of_alpha = vec![Bls12Scalar::ONE];
+        let mut powers_of_alpha = vec![C::ScalarField::ONE];
         let mut cur = alpha;
         for _ in 0..max_degree {
             powers_of_alpha.push(cur);
@@ -27,7 +23,8 @@ impl KZG10 {
         projective_params.push(generator);
 
         for pow in powers_of_alpha {
-            projective_params.push(pow * generator);
+            // TODO: Investigate error.
+            // projective_params.push(pow * generator);
         }
 
         //TODO: normalize projective coordinates and pass them as affine points
@@ -38,13 +35,6 @@ impl KZG10 {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
-    use num::BigUint;
-
-    use crate::{Bls12Base, Bls12Scalar};
-    use crate::G1ProjectivePoint;
-
     #[test]
     fn test_setup() {
         //let generator_x = Bls12Base { limbs: [] };

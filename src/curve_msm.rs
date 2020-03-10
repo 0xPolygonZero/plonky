@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use rayon::prelude::*;
 
-use crate::{affine_multisummation_best, Bls12Scalar, G1AffinePoint, G1ProjectivePoint};
+use crate::{affine_multisummation_best, AffinePoint, Curve, Field, ProjectivePoint};
 
 /// In Yao's method, we compute an affine summation for each digit. In a parallel setting, it would
 /// be easiest to assign individual summations to threads, but this would be sub-optimal because
@@ -12,14 +12,14 @@ use crate::{affine_multisummation_best, Bls12Scalar, G1AffinePoint, G1Projective
 /// uneven distributions of work among threads.
 const DIGITS_PER_CHUNK: usize = 80;
 
-pub struct MsmPrecomputation {
+pub struct MsmPrecomputation<C: Curve> {
     /// For each generator (in the order they were passed to `msm_precompute`), contains a vector
     /// of powers, i.e. [(2^w)^i] for i < DIGITS.
     // TODO: Use compressed coordinates here.
-    powers_per_generator: Vec<Vec<G1AffinePoint>>,
+    powers_per_generator: Vec<Vec<AffinePoint<C>>>,
 }
 
-pub fn msm_precompute(generators: &[G1ProjectivePoint], w: usize) -> MsmPrecomputation {
+pub fn msm_precompute<C: Curve>(generators: &[ProjectivePoint<C>], w: usize) -> MsmPrecomputation<C> {
     MsmPrecomputation {
         powers_per_generator: generators.into_par_iter()
             .map(|&g| precompute_single_generator(g, w))
@@ -27,9 +27,9 @@ pub fn msm_precompute(generators: &[G1ProjectivePoint], w: usize) -> MsmPrecompu
     }
 }
 
-fn precompute_single_generator(g: G1ProjectivePoint, w: usize) -> Vec<G1AffinePoint> {
-    let digits = (Bls12Scalar::BITS + w - 1) / w;
-    let mut powers: Vec<G1ProjectivePoint> = Vec::with_capacity(digits);
+fn precompute_single_generator<C: Curve>(g: ProjectivePoint<C>, w: usize) -> Vec<AffinePoint<C>> {
+    let digits = (C::ScalarField::BITS + w - 1) / w;
+    let mut powers: Vec<ProjectivePoint<C>> = Vec::with_capacity(digits);
     powers.push(g);
     for i in 1..digits {
         let mut power_i_proj = powers[i - 1];
@@ -38,16 +38,16 @@ fn precompute_single_generator(g: G1ProjectivePoint, w: usize) -> Vec<G1AffinePo
         }
         powers.push(power_i_proj);
     }
-    G1ProjectivePoint::batch_to_affine(&powers)
+    ProjectivePoint::batch_to_affine(&powers)
 }
 
-pub fn msm_execute(
-    precomputation: &MsmPrecomputation,
-    scalars: &[Bls12Scalar],
+pub fn msm_execute<C: Curve>(
+    precomputation: &MsmPrecomputation<C>,
+    scalars: &[C::ScalarField],
     w: usize,
-) -> G1ProjectivePoint {
+) -> ProjectivePoint<C> {
     assert_eq!(precomputation.powers_per_generator.len(), scalars.len());
-    let digits = (Bls12Scalar::BITS + w - 1) / w;
+    let digits = (C::ScalarField::BITS + w - 1) / w;
     let base = 1 << w;
 
     // This is a variant of Yao's method, adapted to the multi-scalar setting. Because we use
@@ -61,14 +61,14 @@ pub fn msm_execute(
         digit_occurrences.push(Vec::new());
     }
     for (i, scalar) in scalars.iter().enumerate() {
-        let digits = to_digits(scalar, w);
+        let digits = to_digits::<C>(scalar, w);
         for (j, &digit) in digits.iter().enumerate() {
             digit_occurrences[digit].push((i, j));
         }
     }
 
-    let mut y = G1ProjectivePoint::ZERO;
-    let mut u = G1ProjectivePoint::ZERO;
+    let mut y = ProjectivePoint::ZERO;
+    let mut u = ProjectivePoint::ZERO;
 
     for digit in (1..base).rev() {
         for &(i, j) in &digit_occurrences[digit] {
@@ -80,13 +80,13 @@ pub fn msm_execute(
     y
 }
 
-pub fn msm_execute_parallel(
-    precomputation: &MsmPrecomputation,
-    scalars: &[Bls12Scalar],
+pub fn msm_execute_parallel<C: Curve>(
+    precomputation: &MsmPrecomputation<C>,
+    scalars: &[C::ScalarField],
     w: usize,
-) -> G1ProjectivePoint {
+) -> ProjectivePoint<C> {
     assert_eq!(precomputation.powers_per_generator.len(), scalars.len());
-    let digits = (Bls12Scalar::BITS + w - 1) / w;
+    let digits = (C::ScalarField::BITS + w - 1) / w;
     let base = 1 << w;
 
     // This is a variant of Yao's method, adapted to the multi-scalar setting. Because we use
@@ -100,7 +100,7 @@ pub fn msm_execute_parallel(
         digit_occurrences.push(Vec::new());
     }
     for (i, scalar) in scalars.iter().enumerate() {
-        let digits = to_digits(scalar, w);
+        let digits = to_digits::<C>(scalar, w);
         for (j, &digit) in digits.iter().enumerate() {
             digit_occurrences[digit].push((i, j));
         }
@@ -109,9 +109,9 @@ pub fn msm_execute_parallel(
     // For each digit, we add up the powers associated with all occurrences that digit.
     let digits: Vec<usize> = (0..base).collect();
     let start = Instant::now();
-    let digit_acc: Vec<G1ProjectivePoint> = digits.par_chunks(DIGITS_PER_CHUNK)
+    let digit_acc: Vec<ProjectivePoint<C>> = digits.par_chunks(DIGITS_PER_CHUNK)
         .flat_map(|chunk| {
-            let summations: Vec<Vec<G1AffinePoint>> = chunk.iter()
+            let summations: Vec<Vec<AffinePoint<C>>> = chunk.iter()
                 .map(|&digit| digit_occurrences[digit].iter()
                     .map(|&(i, j)| precomputation.powers_per_generator[i][j])
                     .collect())
@@ -122,8 +122,8 @@ pub fn msm_execute_parallel(
     println!("Computing the per-digit summations (in parallel) took {}s", start.elapsed().as_secs_f64());
 
     let start = Instant::now();
-    let mut y = G1ProjectivePoint::ZERO;
-    let mut u = G1ProjectivePoint::ZERO;
+    let mut y = ProjectivePoint::ZERO;
+    let mut u = ProjectivePoint::ZERO;
     for digit in (1..base).rev() {
         u = u + digit_acc[digit];
         y = y + u;
@@ -132,20 +132,21 @@ pub fn msm_execute_parallel(
     y
 }
 
-pub(crate) fn to_digits(x: &Bls12Scalar, w: usize) -> Vec<usize> {
-    let num_digits = (Bls12Scalar::BITS + w - 1) / w;
+pub(crate) fn to_digits<C: Curve>(x: &C::ScalarField, w: usize) -> Vec<usize> {
+    let scalar_bits = C::ScalarField::BITS;
+    let num_digits = (scalar_bits + w - 1) / w;
 
     // Convert x to a bool array.
-    let x_canonical = x.to_canonical();
-    let mut x_bits = [false; Bls12Scalar::BITS];
-    for i in 0..Bls12Scalar::BITS {
-        x_bits[i] = (x_canonical[i / 64] >> (i as u64 % 64) & 1) != 0;
+    let x_canonical = x.to_canonical_vec();
+    let mut x_bits = Vec::with_capacity(scalar_bits);
+    for i in 0..scalar_bits {
+        x_bits.push((x_canonical[i / 64] >> (i as u64 % 64) & 1) != 0);
     }
 
     let mut digits = Vec::with_capacity(num_digits);
     for i in 0..num_digits {
         let mut digit = 0;
-        for j in ((i * w)..((i + 1) * w).min(Bls12Scalar::BITS)).rev() {
+        for j in ((i * w)..((i + 1) * w).min(scalar_bits)).rev() {
             digit <<= 1;
             digit |= x_bits[j] as usize;
         }
@@ -156,7 +157,7 @@ pub(crate) fn to_digits(x: &Bls12Scalar, w: usize) -> Vec<usize> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12Scalar, G1_GENERATOR_PROJECTIVE, msm_execute, msm_precompute, to_digits};
+    use crate::{Bls12377, Bls12377Scalar, G1_GENERATOR_PROJECTIVE, msm_execute, msm_precompute, to_digits};
 
     #[test]
     fn test_to_digits() {
@@ -165,9 +166,9 @@ mod tests {
             0b1100110011001100110011001100110011001100110011001100110011001100,
             0b1111000011110000111100001111000011110000111100001111000011110000,
             0b0000111111111111111111111111111111111111111111111111111111111111];
-        let x = Bls12Scalar::from_canonical(x_canonical);
+        let x = Bls12377Scalar::from_canonical(x_canonical);
         assert_eq!(x.to_canonical(), x_canonical);
-        assert_eq!(to_digits(&x, 17), vec![
+        assert_eq!(to_digits::<Bls12377>(&x, 17), vec![
             0b01010101010101010,
             0b10101010101010101,
             0b01010101010101010,
@@ -194,9 +195,9 @@ mod tests {
         let generator_2 = generator_1 + generator_1;
         let generator_3 = generator_1 + generator_2;
 
-        let scalar_1 = Bls12Scalar::from_canonical([11111111, 22222222, 33333333, 44444444]);
-        let scalar_2 = Bls12Scalar::from_canonical([22222222, 22222222, 33333333, 44444444]);
-        let scalar_3 = Bls12Scalar::from_canonical([33333333, 22222222, 33333333, 44444444]);
+        let scalar_1 = Bls12377Scalar::from_canonical([11111111, 22222222, 33333333, 44444444]);
+        let scalar_2 = Bls12377Scalar::from_canonical([22222222, 22222222, 33333333, 44444444]);
+        let scalar_3 = Bls12377Scalar::from_canonical([33333333, 22222222, 33333333, 44444444]);
 
         let generators = vec![generator_1, generator_2, generator_3];
         let scalars = vec![scalar_1, scalar_2, scalar_3];

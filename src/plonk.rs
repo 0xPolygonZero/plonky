@@ -1,23 +1,23 @@
-use crate::Bls12Scalar;
+use crate::Bls12377Scalar;
 
 /// A Plonk constraint has the form `L a + R b + O c + M a b + C = 0`.
 struct PlonkConstraint {
     /// The coefficient of a, the left input.
-    l: Bls12Scalar,
+    l: Bls12377Scalar,
     /// The coefficient of b, the right input.
-    r: Bls12Scalar,
+    r: Bls12377Scalar,
     /// The coefficient of c, the output.
-    o: Bls12Scalar,
+    o: Bls12377Scalar,
     /// The coefficient of ab, the product.
-    m: Bls12Scalar,
+    m: Bls12377Scalar,
     /// The constant which stands on its own.
-    c: Bls12Scalar,
+    c: Bls12377Scalar,
 }
 
 struct Witness {
-    l: Vec<Bls12Scalar>,
-    r: Vec<Bls12Scalar>,
-    o: Vec<Bls12Scalar>,
+    l: Vec<Bls12377Scalar>,
+    r: Vec<Bls12377Scalar>,
+    o: Vec<Bls12377Scalar>,
 }
 
 impl Witness {
@@ -26,7 +26,7 @@ impl Witness {
     }
 
     /// Get the i'th wire within the concatenated list (a, b, c).
-    fn get_wire(&self, mut i: usize) -> Bls12Scalar {
+    fn get_wire(&self, mut i: usize) -> Bls12377Scalar {
         let n = self.num_gates();
         if i < n {
             return self.l[i];

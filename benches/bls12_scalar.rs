@@ -2,11 +2,11 @@ use criterion::{black_box, Criterion};
 use criterion::criterion_group;
 use criterion::criterion_main;
 
-use plonky::{Bls12Scalar, Field};
+use plonky::{Bls12377Scalar, Field};
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let x = Bls12Scalar::from_canonical([11111111, 22222222, 33333333, 44444444]);
-    let y = Bls12Scalar::from_canonical([44444444, 55555555, 66666666, 77777777]);
+    let x = Bls12377Scalar::from_canonical([11111111, 22222222, 33333333, 44444444]);
+    let y = Bls12377Scalar::from_canonical([44444444, 55555555, 66666666, 77777777]);
 
     c.bench_function("Bls12Scalar field addition", move |b| b.iter(|| {
         black_box(y) + black_box(x)

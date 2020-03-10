@@ -1,6 +1,6 @@
 use rayon::prelude::*;
 
-use crate::{Bls12Scalar, Field};
+use crate::{Field, TwoAdicField};
 
 /// Permutes `arr` such that each index is mapped to its reverse in binary.
 fn reverse_index_bits<T: Copy>(arr: Vec<T>) -> Vec<T> {
@@ -39,24 +39,24 @@ fn log2_strict(n: usize) -> usize {
     exp
 }
 
-pub struct FftPrecomputation {
+pub struct FftPrecomputation<F: TwoAdicField> {
     /// For each layer index i, stores the cyclic subgroup corresponding to the evaluation domain of
     /// layer i. The indices within these subgroup vectors are bit-reversed.
-    subgroups_rev: Vec<Vec<Bls12Scalar>>,
+    subgroups_rev: Vec<Vec<F>>,
 }
 
-pub fn fft(coefficients: &[Bls12Scalar]) -> Vec<Bls12Scalar> {
+pub fn fft<F: TwoAdicField>(coefficients: &[F]) -> Vec<F> {
     let precomputation = fft_precompute(coefficients.len());
     fft_with_precomputation(coefficients, &precomputation)
 }
 
-pub fn fft_precompute(degree: usize) -> FftPrecomputation {
+pub fn fft_precompute<F: TwoAdicField>(degree: usize) -> FftPrecomputation<F> {
     let degree_pow = log2_ceil(degree);
 
     let mut subgroups_rev = Vec::new();
     for i in 0..=degree_pow {
-        let g_i = Bls12Scalar::primitive_root_of_unity(i);
-        let subgroup = Bls12Scalar::cyclic_subgroup_known_order(g_i, 1 << i);
+        let g_i = F::primitive_root_of_unity(i);
+        let subgroup = F::cyclic_subgroup_known_order(g_i, 1 << i);
         let subgroup_rev = reverse_index_bits(subgroup);
         subgroups_rev.push(subgroup_rev);
     }
@@ -64,10 +64,10 @@ pub fn fft_precompute(degree: usize) -> FftPrecomputation {
     FftPrecomputation { subgroups_rev }
 }
 
-pub fn fft_with_precomputation(
-    coefficients: &[Bls12Scalar],
-    precomputation: &FftPrecomputation,
-) -> Vec<Bls12Scalar> {
+pub fn fft_with_precomputation<F: TwoAdicField>(
+    coefficients: &[F],
+    precomputation: &FftPrecomputation<F>,
+) -> Vec<F> {
     let degree = coefficients.len();
     let degree_padded = 1 << log2_ceil(degree);
 
@@ -79,18 +79,18 @@ pub fn fft_with_precomputation(
             coefficients_padded.push(c);
         }
         for _i in degree..degree_padded {
-            coefficients_padded.push(Bls12Scalar::ZERO);
+            coefficients_padded.push(F::ZERO);
         }
         fft_with_precomputation_power_of_2(&coefficients_padded, precomputation)
     }
 }
 
-pub fn ifft_with_precomputation_power_of_2(
-    points: &[Bls12Scalar],
-    precomputation: &FftPrecomputation,
-) -> Vec<Bls12Scalar> {
+pub fn ifft_with_precomputation_power_of_2<F: TwoAdicField>(
+    points: &[F],
+    precomputation: &FftPrecomputation<F>,
+) -> Vec<F> {
     let n = points.len();
-    let n_inv = Bls12Scalar::from_canonical_usize(n).multiplicative_inverse().unwrap();
+    let n_inv = F::from_canonical_usize(n).multiplicative_inverse().unwrap();
     let result = fft_with_precomputation(points, precomputation);
     // TODO: Could do this in-place with swaps.
     let mut coefficients = Vec::with_capacity(n);
@@ -101,10 +101,10 @@ pub fn ifft_with_precomputation_power_of_2(
     coefficients
 }
 
-pub fn fft_with_precomputation_power_of_2(
-    coefficients: &[Bls12Scalar],
-    precomputation: &FftPrecomputation,
-) -> Vec<Bls12Scalar> {
+pub fn fft_with_precomputation_power_of_2<F: TwoAdicField>(
+    coefficients: &[F],
+    precomputation: &FftPrecomputation<F>,
+) -> Vec<F> {
     let degree = coefficients.len();
     let half_degree = coefficients.len() >> 1;
     let degree_pow = log2_strict(degree);
@@ -149,7 +149,7 @@ pub fn fft_with_precomputation_power_of_2(
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12Scalar, ifft_with_precomputation_power_of_2, fft_precompute, fft_with_precomputation, Field};
+    use crate::{Bls12377Scalar, fft_precompute, fft_with_precomputation, Field, ifft_with_precomputation_power_of_2, TwoAdicField};
     use crate::fft::{log2_ceil, log2_strict, reverse_bits, reverse_index_bits};
 
     #[test]
@@ -158,7 +158,7 @@ mod tests {
         let degree_padded = log2_ceil(degree);
         let mut coefficients = Vec::new();
         for i in 0..degree {
-            coefficients.push(Bls12Scalar::from_canonical_usize(i * 1337 % 100));
+            coefficients.push(Bls12377Scalar::from_canonical_usize(i * 1337 % 100));
         }
 
         let precomputation = fft_precompute(degree);
@@ -170,7 +170,7 @@ mod tests {
             assert_eq!(interpolated_coefficients[i], coefficients[i]);
         }
         for i in degree..degree_padded {
-            assert_eq!(interpolated_coefficients[i], Bls12Scalar::ZERO);
+            assert_eq!(interpolated_coefficients[i], Bls12377Scalar::ZERO);
         }
     }
 
@@ -181,7 +181,7 @@ mod tests {
         assert_eq!(reverse_index_bits(vec!["a", "b", "c", "d"]), vec!["a", "c", "b", "d"]);
     }
 
-    fn evaluate_naive(coefficients: &[Bls12Scalar]) -> Vec<Bls12Scalar> {
+    fn evaluate_naive<F: TwoAdicField>(coefficients: &[F]) -> Vec<F> {
         let degree = coefficients.len();
         let degree_padded = 1 << log2_ceil(degree);
 
@@ -190,24 +190,24 @@ mod tests {
             coefficients_padded.push(*c);
         }
         for _i in degree..degree_padded {
-            coefficients_padded.push(Bls12Scalar::ZERO);
+            coefficients_padded.push(F::ZERO);
         }
         evaluate_naive_power_of_2(&coefficients_padded)
     }
 
-    fn evaluate_naive_power_of_2(coefficients: &[Bls12Scalar]) -> Vec<Bls12Scalar> {
+    fn evaluate_naive_power_of_2<F: TwoAdicField>(coefficients: &[F]) -> Vec<F> {
         let degree = coefficients.len();
         let degree_pow = log2_strict(degree);
 
-        let g = Bls12Scalar::primitive_root_of_unity(degree_pow);
-        let powers_of_g = Bls12Scalar::cyclic_subgroup_known_order(g, degree);
+        let g = F::primitive_root_of_unity(degree_pow);
+        let powers_of_g = F::cyclic_subgroup_known_order(g, degree);
 
         powers_of_g.into_iter().map(|x| evaluate_at_naive(&coefficients, x)).collect()
     }
 
-    fn evaluate_at_naive(coefficients: &[Bls12Scalar], point: Bls12Scalar) -> Bls12Scalar {
-        let mut sum = Bls12Scalar::ZERO;
-        let mut point_power = Bls12Scalar::ONE;
+    fn evaluate_at_naive<F: TwoAdicField>(coefficients: &[F], point: F) -> F {
+        let mut sum = F::ZERO;
+        let mut point_power = F::ONE;
         for &c in coefficients {
             sum = sum + c * point_power;
             point_power = point_power * point;
