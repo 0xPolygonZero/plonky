@@ -5,6 +5,7 @@
 // We have tons of bigint literals in Montgomery form, which won't be readable with or without underscores.
 #![allow(clippy::unreadable_literal)]
 
+pub use bigint_arithmetic::*;
 pub use bls_377_adds::*;
 pub use bls_377_base::*;
 pub use bls_377_curve::*;
@@ -18,6 +19,7 @@ pub use group_multiplication::*;
 pub use plonk::*;
 pub use poly_commit::*;
 
+mod bigint_arithmetic;
 mod bls_377_adds;
 mod bls_377_base;
 mod bls_377_curve;
