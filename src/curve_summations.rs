@@ -123,7 +123,11 @@ pub fn affine_multisummation_batch_inversion<C: Curve>(summations: Vec<Vec<Affin
 
                 if p1 == p2 {
                     // This is the doubling case.
-                    let quotient = x1.square().triple() * inverse;
+                    let mut numerator = x1.square().triple();
+                    if C::A.is_nonzero() {
+                        numerator = numerator + C::A;
+                    }
+                    let quotient = numerator * inverse;
                     let x3 = quotient.square() - x1.double();
                     let y3 = quotient * (x1 - x3) - y1;
                     AffinePoint::nonzero(x3, y3)
