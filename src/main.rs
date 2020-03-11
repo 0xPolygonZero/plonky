@@ -1,8 +1,8 @@
 use std::time::Instant;
 
-use plonky::{Bls12377, Curve, fft_precompute, fft_with_precomputation, FftPrecomputation, Field, G1_GENERATOR_PROJECTIVE, msm_execute_parallel, msm_precompute, MsmPrecomputation, ProjectivePoint};
+use plonky::{Bls12377, Curve, fft_precompute, fft_with_precomputation, FftPrecomputation, Field, BLS12_377_GENERATOR_PROJECTIVE, msm_execute_parallel, msm_precompute, MsmPrecomputation, ProjectivePoint};
 
-const DEGREE: usize = 1 << 17;
+const DEGREE: usize = 1 << 16;
 
 type C = Bls12377;
 type SF = <C as Curve>::ScalarField;
@@ -16,7 +16,7 @@ fn main() {
     let mut generators = Vec::with_capacity(DEGREE);
     let mut scalars = Vec::with_capacity(DEGREE);
     for _i in 0..DEGREE {
-        generators.push(G1_GENERATOR_PROJECTIVE);
+        generators.push(BLS12_377_GENERATOR_PROJECTIVE);
         scalars.push(SF::rand());
     }
 

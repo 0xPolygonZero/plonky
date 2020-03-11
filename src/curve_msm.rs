@@ -157,7 +157,7 @@ pub(crate) fn to_digits<C: Curve>(x: &C::ScalarField, w: usize) -> Vec<usize> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12377, Bls12377Scalar, G1_GENERATOR_PROJECTIVE, msm_execute, msm_precompute, to_digits};
+    use crate::{Bls12377, Bls12377Scalar, BLS12_377_GENERATOR_PROJECTIVE, msm_execute, msm_precompute, to_digits};
 
     #[test]
     fn test_to_digits() {
@@ -191,7 +191,7 @@ mod tests {
     fn test_msm() {
         let w = 5;
 
-        let generator_1 = G1_GENERATOR_PROJECTIVE;
+        let generator_1 = BLS12_377_GENERATOR_PROJECTIVE;
         let generator_2 = generator_1 + generator_1;
         let generator_3 = generator_1 + generator_2;
 

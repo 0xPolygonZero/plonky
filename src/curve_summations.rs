@@ -155,11 +155,11 @@ pub fn affine_multisummation_batch_inversion<C: Curve>(summations: Vec<Vec<Affin
 
 #[cfg(test)]
 mod tests {
-    use crate::{affine_summation_batch_inversion, affine_summation_pairwise, Bls12377, G1_GENERATOR_AFFINE, ProjectivePoint};
+    use crate::{affine_summation_batch_inversion, affine_summation_pairwise, Bls12377, BLS12_377_GENERATOR_AFFINE, ProjectivePoint};
 
     #[test]
     fn test_pairwise_affine_summation() {
-        let g_affine = G1_GENERATOR_AFFINE;
+        let g_affine = BLS12_377_GENERATOR_AFFINE;
         let g2_affine = (g_affine + g_affine).to_affine();
         let g3_affine = (g_affine + g_affine + g_affine).to_affine();
         let g2_proj = g2_affine.to_projective();
@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn test_pairwise_affine_summation_batch_inversion() {
-        let g = G1_GENERATOR_AFFINE;
+        let g = BLS12_377_GENERATOR_AFFINE;
         let g_proj = g.to_projective();
         assert_eq!(affine_summation_batch_inversion::<Bls12377>(vec![g, g]), g_proj + g_proj);
         assert_eq!(affine_summation_batch_inversion::<Bls12377>(vec![g, g, g]), g_proj + g_proj + g_proj);
