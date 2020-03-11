@@ -120,7 +120,10 @@ impl<C: Curve> ProjectivePoint<C> {
 
         let xx = x.square();
         let zz = z.square();
-        let w = C::A * zz + xx.triple();
+        let mut w = xx.triple();
+        if C::A.is_nonzero() {
+            w  = w + C::A * zz;
+        }
         let s = y.double() * z;
         let r = y * s;
         let rr = r.square();

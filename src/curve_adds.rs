@@ -1,5 +1,3 @@
-/// TODO: double check formulas for general SW curves
-
 use std::ops::Add;
 
 use crate::{AffinePoint, Curve, Field, ProjectivePoint};
