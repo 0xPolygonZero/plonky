@@ -42,7 +42,7 @@ pub const BLS12_377_GENERATOR_PROJECTIVE: ProjectivePoint<Bls12377> = Projective
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12377, Bls12377Scalar, Field, BLS12_377_GENERATOR_PROJECTIVE, ProjectivePoint};
+    use crate::{Bls12377, Bls12377Scalar, BLS12_377_GENERATOR_PROJECTIVE, Field, ProjectivePoint};
 
     #[test]
     fn test_naive_multiplication() {

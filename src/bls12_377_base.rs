@@ -6,7 +6,7 @@ use std::ops::{Add, Div, Mul, Neg, Sub};
 
 use unroll::unroll_for_loops;
 
-use crate::{add_6_6_no_overflow, cmp_6_6, Field, mul2_6, sub_6_6, rand_range_6};
+use crate::{add_6_6_no_overflow, cmp_6_6, Field, mul2_6, rand_range_6, sub_6_6};
 use crate::bigint_inverse::nonzero_multiplicative_inverse_6;
 
 /// An element of the BLS12 group's base field.
