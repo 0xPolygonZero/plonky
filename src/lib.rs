@@ -18,8 +18,13 @@ pub use fft::*;
 pub use field::*;
 pub use plonk::*;
 pub use poly_commit::*;
+pub use tweedledee_base::*;
+pub use tweedledee_curve::*;
+pub use tweedledum_base::*;
+pub use tweedledum_curve::*;
 
 mod bigint_arithmetic;
+mod bigint_inverse;
 mod curve_adds;
 mod bls12_377_base;
 mod bls12_377_curve;
@@ -32,6 +37,10 @@ mod curve_msm;
 mod curve_multiplication;
 mod plonk;
 mod poly_commit;
+mod tweedledee_base;
+mod tweedledee_curve;
+mod tweedledum_base;
+mod tweedledum_curve;
 
 #[cfg(test)]
 mod conversions;

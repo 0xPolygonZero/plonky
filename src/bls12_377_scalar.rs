@@ -1,6 +1,5 @@
 //! This module implements field arithmetic for BLS12-377's scalar field.
 
-use std::cmp::Ordering;
 use std::cmp::Ordering::Less;
 use std::convert::TryInto;
 use std::ops::{Add, Div, Mul, Neg, Sub};
@@ -9,7 +8,8 @@ use rand::RngCore;
 use rand::rngs::OsRng;
 use unroll::unroll_for_loops;
 
-use crate::{add_4_4_no_overflow, cmp_4_4, div2_4, Field, is_even_4, is_odd_4, sub_4_4, TwoAdicField};
+use crate::{add_4_4_no_overflow, cmp_4_4, Field, sub_4_4, TwoAdicField};
+use crate::bigint_inverse::nonzero_multiplicative_inverse_4;
 
 /// An element of the BLS12 group's scalar field.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -58,10 +58,7 @@ impl Bls12377Scalar {
         Self::montgomery_multiply(self.limbs, [1, 0, 0, 0])
     }
 
-    pub fn is_zero(&self) -> bool {
-        *self == Self::ZERO
-    }
-
+    // TODO: Move to Field.
     pub fn num_bits(&self) -> usize {
         let mut n = 0;
         for (i, limb) in self.to_canonical().iter().enumerate() {
@@ -74,6 +71,7 @@ impl Bls12377Scalar {
         n
     }
 
+    // TODO: Move to Field.
     pub fn exp(&self, power: Bls12377Scalar) -> Bls12377Scalar {
         let power_bits = power.num_bits();
         let mut current = *self;
@@ -97,59 +95,9 @@ impl Bls12377Scalar {
         product
     }
 
+    // TODO: Move to Field.
     pub fn exp_usize(&self, power: usize) -> Bls12377Scalar {
         self.exp(Self::from_canonical_usize(power))
-    }
-
-    fn nonzero_multiplicative_inverse_canonical(a: [u64; 4]) -> [u64; 4] {
-        // Based on Algorithm 16 of "Efficient Software-Implementation of Finite Fields with
-        // Applications to Cryptography".
-
-        let zero = [0, 0, 0, 0];
-        let one = [1, 0, 0, 0];
-
-        let mut u = a;
-        let mut v = Self::ORDER;
-        let mut b = one;
-        let mut c = zero;
-
-        while u != one && v != one {
-            while is_even_4(u) {
-                u = div2_4(u);
-                if is_odd_4(b) {
-                    b = add_4_4_no_overflow(b, Self::ORDER);
-                }
-                b = div2_4(b);
-            }
-
-            while is_even_4(v) {
-                v = div2_4(v);
-                if is_odd_4(c) {
-                    c = add_4_4_no_overflow(c, Self::ORDER);
-                }
-                c = div2_4(c);
-            }
-
-            if cmp_4_4(u, v) == Less {
-                v = sub_4_4(v, u);
-                if cmp_4_4(c, b) == Less {
-                    c = add_4_4_no_overflow(c, Self::ORDER);
-                }
-                c = sub_4_4(c, b);
-            } else {
-                u = sub_4_4(u, v);
-                if cmp_4_4(b, c) == Less {
-                    b = add_4_4_no_overflow(b, Self::ORDER);
-                }
-                b = sub_4_4(b, c);
-            }
-        }
-
-        if u == one {
-            b
-        } else {
-            c
-        }
     }
 
     #[unroll_for_loops]
@@ -172,7 +120,7 @@ impl Bls12377Scalar {
             c[(i + 4) % 5] += carry;
 
             // q = u c mod r = u c[0] mod r.
-            let q = Bls12377Scalar::MU.wrapping_mul(c[i]);
+            let q = Self::MU.wrapping_mul(c[i]);
 
             // C += N q
             carry = 0;
@@ -188,7 +136,7 @@ impl Bls12377Scalar {
 
         let mut result = [c[4], c[0], c[1], c[2]];
         // Final conditional subtraction.
-        if cmp_4_4(result, Self::ORDER) != Ordering::Less {
+        if cmp_4_4(result, Self::ORDER) != Less {
             result = sub_4_4(result, Self::ORDER);
         }
         result
@@ -196,25 +144,25 @@ impl Bls12377Scalar {
 }
 
 impl Add<Bls12377Scalar> for Bls12377Scalar {
-    type Output = Bls12377Scalar;
+    type Output = Self;
 
-    fn add(self, rhs: Bls12377Scalar) -> Bls12377Scalar {
+    fn add(self, rhs: Self) -> Self {
         // First we do a widening addition, then we reduce if necessary.
         let sum = add_4_4_no_overflow(self.limbs, rhs.limbs);
-        let limbs = if cmp_4_4(sum, Bls12377Scalar::ORDER) == Less {
+        let limbs = if cmp_4_4(sum, Self::ORDER) == Less {
             sum
         } else {
-            sub_4_4(sum, Bls12377Scalar::ORDER)
+            sub_4_4(sum, Self::ORDER)
         };
-        Bls12377Scalar { limbs }
+        Self { limbs }
     }
 }
 
 impl Sub<Bls12377Scalar> for Bls12377Scalar {
-    type Output = Bls12377Scalar;
+    type Output = Self;
 
-    fn sub(self, rhs: Bls12377Scalar) -> Self::Output {
-        let limbs = if cmp_4_4(self.limbs, rhs.limbs) == Ordering::Less {
+    fn sub(self, rhs: Self) -> Self {
+        let limbs = if cmp_4_4(self.limbs, rhs.limbs) == Less {
             // Underflow occurs, so we compute the difference as `self + (-rhs)`.
             add_4_4_no_overflow(self.limbs, (-rhs).limbs)
         } else {
@@ -225,30 +173,30 @@ impl Sub<Bls12377Scalar> for Bls12377Scalar {
     }
 }
 
-impl Mul<Bls12377Scalar> for Bls12377Scalar {
-    type Output = Bls12377Scalar;
+impl Mul<Self> for Bls12377Scalar {
+    type Output = Self;
 
-    fn mul(self, rhs: Bls12377Scalar) -> Bls12377Scalar {
+    fn mul(self, rhs: Self) -> Self {
         Self { limbs: Self::montgomery_multiply(self.limbs, rhs.limbs) }
     }
 }
 
 impl Div<Bls12377Scalar> for Bls12377Scalar {
-    type Output = Bls12377Scalar;
+    type Output = Self;
 
-    fn div(self, rhs: Bls12377Scalar) -> Bls12377Scalar {
+    fn div(self, rhs: Self) -> Self {
         self * rhs.multiplicative_inverse().expect("No inverse")
     }
 }
 
 impl Neg for Bls12377Scalar {
-    type Output = Bls12377Scalar;
+    type Output = Self;
 
-    fn neg(self) -> Bls12377Scalar {
-        if self == Bls12377Scalar::ZERO {
-            Bls12377Scalar::ZERO
+    fn neg(self) -> Self {
+        if self == Self::ZERO {
+            Self::ZERO
         } else {
-            Bls12377Scalar { limbs: sub_4_4(Bls12377Scalar::ORDER, self.limbs) }
+            Self { limbs: sub_4_4(Self::ORDER, self.limbs) }
         }
     }
 }
@@ -275,7 +223,7 @@ impl Field for Bls12377Scalar {
 
     fn multiplicative_inverse_assuming_nonzero(&self) -> Self {
         // Let x R = self. We compute M((x R)^-1, R^3) = x^-1 R^-1 R^3 R^-1 = x^-1 R.
-        let self_r_inv = Self::nonzero_multiplicative_inverse_canonical(self.limbs);
+        let self_r_inv = nonzero_multiplicative_inverse_4(self.limbs, Self::ORDER);
         Self { limbs: Self::montgomery_multiply(self_r_inv, Self::R3) }
     }
 

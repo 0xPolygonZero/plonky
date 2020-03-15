@@ -1,15 +1,13 @@
 //! This module implements field arithmetic for BLS12-377's base field.
 
-use std::cmp::Ordering;
 use std::cmp::Ordering::Less;
 use std::convert::TryInto;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
-use rand::RngCore;
-use rand::rngs::OsRng;
 use unroll::unroll_for_loops;
 
-use crate::{add_6_6_no_overflow, cmp_6_6, div2_6, Field, is_even_6, is_odd_6, mul2_6, sub_6_6};
+use crate::{add_6_6_no_overflow, cmp_6_6, Field, mul2_6, sub_6_6, rand_range_6};
+use crate::bigint_inverse::nonzero_multiplicative_inverse_6;
 
 /// An element of the BLS12 group's base field.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -24,6 +22,7 @@ impl Bls12377Base {
     pub const ORDER: [u64; 6] = [9586122913090633729, 1660523435060625408, 2230234197602682880,
         1883307231910630287, 14284016967150029115, 121098312706494698];
 
+    /// Twice the order of the field.
     pub const ORDER_X2: [u64; 6] = [725501752471715842, 3321046870121250817, 4460468395205365760,
         3766614463821260574, 10121289860590506614, 242196625412989397];
 
@@ -31,11 +30,11 @@ impl Bls12377Base {
     pub(crate) const R: [u64; 6] = [202099033278250856, 5854854902718660529, 11492539364873682930,
         8885205928937022213, 5545221690922665192, 39800542322357402];
 
-    /// R^2 in the context of the Montgomery reduction, i.e. 2^384^2 % |F|.
+    /// R^2 in the context of the Montgomery reduction, i.e. 2^(384*2) % |F|.
     pub(crate) const R2: [u64; 6] = [13224372171368877346, 227991066186625457, 2496666625421784173,
         13825906835078366124, 9475172226622360569, 30958721782860680];
 
-    /// R^3 in the context of the Montgomery reduction, i.e. 2^384^3 % |F|.
+    /// R^3 in the context of the Montgomery reduction, i.e. 2(384*3) % |F|.
     pub(crate) const R3: [u64; 6] = [6349885463227391520, 16505482940020594053, 3163973454937060627,
         7650090842119774734, 4571808961100582073, 73846176275226021];
 
@@ -47,19 +46,12 @@ impl Bls12377Base {
         Self { limbs: Self::montgomery_multiply(c, Self::R2) }
     }
 
-    pub fn from_canonical_u64(c: u64) -> Self {
-        Self::from_canonical([c, 0, 0, 0, 0, 0])
-    }
-
     pub fn to_canonical(&self) -> [u64; 6] {
         // Let x * R = self. We compute M(x * R, 1) = x * R * R^-1 = x.
         Self::montgomery_multiply(self.limbs, [1, 0, 0, 0, 0, 0])
     }
 
-    pub fn is_zero(&self) -> bool {
-        *self == Self::ZERO
-    }
-
+    // TODO: Move to Field.
     pub fn num_bits(&self) -> usize {
         let mut n = 0;
         for (i, limb) in self.to_canonical().iter().enumerate() {
@@ -70,57 +62,6 @@ impl Bls12377Base {
             }
         }
         n
-    }
-
-    fn nonzero_multiplicative_inverse_canonical(a: [u64; 6]) -> [u64; 6] {
-        // Based on Algorithm 16 of "Efficient Software-Implementation of Finite Fields with
-        // Applications to Cryptography".
-
-        let zero = [0, 0, 0, 0, 0, 0];
-        let one = [1, 0, 0, 0, 0, 0];
-
-        let mut u = a;
-        let mut v = Self::ORDER;
-        let mut b = one;
-        let mut c = zero;
-
-        while u != one && v != one {
-            while is_even_6(u) {
-                u = div2_6(u);
-                if is_odd_6(b) {
-                    b = add_6_6_no_overflow(b, Self::ORDER);
-                }
-                b = div2_6(b);
-            }
-
-            while is_even_6(v) {
-                v = div2_6(v);
-                if is_odd_6(c) {
-                    c = add_6_6_no_overflow(c, Self::ORDER);
-                }
-                c = div2_6(c);
-            }
-
-            if cmp_6_6(u, v) == Less {
-                v = sub_6_6(v, u);
-                if cmp_6_6(c, b) == Less {
-                    c = add_6_6_no_overflow(c, Self::ORDER);
-                }
-                c = sub_6_6(c, b);
-            } else {
-                u = sub_6_6(u, v);
-                if cmp_6_6(b, c) == Less {
-                    b = add_6_6_no_overflow(b, Self::ORDER);
-                }
-                b = sub_6_6(b, c);
-            }
-        }
-
-        if u == one {
-            b
-        } else {
-            c
-        }
     }
 
     #[unroll_for_loops]
@@ -143,7 +84,7 @@ impl Bls12377Base {
             c[(i + 6) % 7] += carry;
 
             // q = u c mod r = u c[0] mod r.
-            let q = Bls12377Base::MU.wrapping_mul(c[i]);
+            let q = Self::MU.wrapping_mul(c[i]);
 
             // C += N q
             carry = 0;
@@ -159,7 +100,7 @@ impl Bls12377Base {
 
         let mut result = [c[6], c[0], c[1], c[2], c[3], c[4]];
         // Final conditional subtraction.
-        if cmp_6_6(result, Self::ORDER) != Ordering::Less {
+        if cmp_6_6(result, Self::ORDER) != Less {
             result = sub_6_6(result, Self::ORDER);
         }
         result
@@ -167,25 +108,25 @@ impl Bls12377Base {
 }
 
 impl Add<Bls12377Base> for Bls12377Base {
-    type Output = Bls12377Base;
+    type Output = Self;
 
-    fn add(self, rhs: Bls12377Base) -> Bls12377Base {
+    fn add(self, rhs: Self) -> Self {
         // First we do a widening addition, then we reduce if necessary.
         let sum = add_6_6_no_overflow(self.limbs, rhs.limbs);
-        let limbs = if cmp_6_6(sum, Bls12377Base::ORDER) == Less {
+        let limbs = if cmp_6_6(sum, Self::ORDER) == Less {
             sum
         } else {
-            sub_6_6(sum, Bls12377Base::ORDER)
+            sub_6_6(sum, Self::ORDER)
         };
-        Bls12377Base { limbs }
+        Self { limbs }
     }
 }
 
 impl Sub<Bls12377Base> for Bls12377Base {
-    type Output = Bls12377Base;
+    type Output = Self;
 
-    fn sub(self, rhs: Bls12377Base) -> Self::Output {
-        let limbs = if cmp_6_6(self.limbs, rhs.limbs) == Ordering::Less {
+    fn sub(self, rhs: Self) -> Self::Output {
+        let limbs = if cmp_6_6(self.limbs, rhs.limbs) == Less {
             // Underflow occurs, so we compute the difference as `self + (-rhs)`.
             add_6_6_no_overflow(self.limbs, (-rhs).limbs)
         } else {
@@ -197,39 +138,39 @@ impl Sub<Bls12377Base> for Bls12377Base {
 }
 
 impl Mul<Bls12377Base> for Bls12377Base {
-    type Output = Bls12377Base;
+    type Output = Self;
 
-    fn mul(self, rhs: Bls12377Base) -> Bls12377Base {
+    fn mul(self, rhs: Self) -> Self {
         Self { limbs: Self::montgomery_multiply(self.limbs, rhs.limbs) }
     }
 }
 
 impl Mul<u64> for Bls12377Base {
-    type Output = Bls12377Base;
+    type Output = Self;
 
     fn mul(self, rhs: u64) -> Self::Output {
         // TODO: Do a 6x1 multiplication instead of padding to 6x6.
-        let rhs_field = Bls12377Base::from_canonical_u64(rhs);
+        let rhs_field = Self::from_canonical_u64(rhs);
         self * rhs_field
     }
 }
 
 impl Div<Bls12377Base> for Bls12377Base {
-    type Output = Bls12377Base;
+    type Output = Self;
 
-    fn div(self, rhs: Bls12377Base) -> Bls12377Base {
+    fn div(self, rhs: Self) -> Self {
         self * rhs.multiplicative_inverse().expect("No inverse")
     }
 }
 
 impl Neg for Bls12377Base {
-    type Output = Bls12377Base;
+    type Output = Self;
 
-    fn neg(self) -> Bls12377Base {
-        if self == Bls12377Base::ZERO {
-            Bls12377Base::ZERO
+    fn neg(self) -> Self {
+        if self == Self::ZERO {
+            Self::ZERO
         } else {
-            Bls12377Base { limbs: sub_6_6(Bls12377Base::ORDER, self.limbs) }
+            Self { limbs: sub_6_6(Bls12377Base::ORDER, self.limbs) }
         }
     }
 }
@@ -267,7 +208,7 @@ impl Field for Bls12377Base {
 
     fn multiplicative_inverse_assuming_nonzero(&self) -> Self {
         // Let x R = self. We compute M((x R)^-1, R^3) = x^-1 R^-1 R^3 R^-1 = x^-1 R.
-        let self_r_inv = Self::nonzero_multiplicative_inverse_canonical(self.limbs);
+        let self_r_inv = nonzero_multiplicative_inverse_6(self.limbs, Self::ORDER);
         Self { limbs: Self::montgomery_multiply(self_r_inv, Self::R3) }
     }
 
@@ -298,16 +239,7 @@ impl Field for Bls12377Base {
     }
 
     fn rand() -> Self {
-        let mut limbs = [0; 6];
-
-        for limb_i in &mut limbs {
-            *limb_i = OsRng.next_u64();
-        }
-
-        // Remove a few of the most significant bits to ensure we're in range.
-        limbs[5] >>= 4;
-
-        Self { limbs }
+        Self { limbs: rand_range_6(Self::ORDER) }
     }
 }
 

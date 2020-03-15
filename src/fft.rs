@@ -1,6 +1,6 @@
 use rayon::prelude::*;
 
-use crate::{Field, TwoAdicField};
+use crate::TwoAdicField;
 
 /// Permutes `arr` such that each index is mapped to its reverse in binary.
 fn reverse_index_bits<T: Copy>(arr: Vec<T>) -> Vec<T> {

@@ -1,22 +1,23 @@
 use std::cmp::Ordering;
+use std::cmp::Ordering::{Equal, Greater, Less};
 
+use rand::RngCore;
+use rand::rngs::OsRng;
 use unroll::unroll_for_loops;
 
 /// This module provides functions for big integer arithmetic using little-endian encoded u64
 /// arrays.
-
 #[unroll_for_loops]
 pub(crate) fn cmp_4_4(a: [u64; 4], b: [u64; 4]) -> Ordering {
     for i in (0..4).rev() {
         if a[i] < b[i] {
-            return Ordering::Less;
+            return Less;
         }
         if a[i] > b[i] {
-            return Ordering::Greater;
+            return Greater;
         }
     }
-
-    Ordering::Equal
+    Equal
 }
 
 /// Public only for use with Criterion benchmarks.
@@ -24,14 +25,13 @@ pub(crate) fn cmp_4_4(a: [u64; 4], b: [u64; 4]) -> Ordering {
 pub fn cmp_6_6(a: [u64; 6], b: [u64; 6]) -> Ordering {
     for i in (0..6).rev() {
         if a[i] < b[i] {
-            return Ordering::Less;
+            return Less;
         }
         if a[i] > b[i] {
-            return Ordering::Greater;
+            return Greater;
         }
     }
-
-    Ordering::Equal
+    Equal
 }
 
 /// Computes `a + b`. Assumes that there is no overflow; this is verified only in debug builds.
@@ -226,6 +226,48 @@ pub(crate) fn div2_6(x: [u64; 6]) -> [u64; 6] {
     }
     result[5] = x[5] >> 1;
     result
+}
+
+pub(crate) fn rand_range_6(limit_exclusive: [u64; 6]) -> [u64; 6] {
+    // Our approach is to repeatedly generate random u64 arrays until one of them happens to be
+    // within the limit. This could take a lot of attempts if the limit has many leading zero bits,
+    // though. It is more efficient to generate n-bit random numbers, where n is the number of bits
+    // in the limit.
+    let bits_to_strip = limit_exclusive[5].leading_zeros();
+
+    let mut limbs = [0; 6];
+
+    loop {
+        for limb_i in &mut limbs {
+            *limb_i = OsRng.next_u64();
+        }
+        limbs[5] >>= bits_to_strip;
+
+        if cmp_6_6(limbs, limit_exclusive) == Less {
+            return limbs;
+        }
+    }
+}
+
+pub(crate) fn rand_range_4(limit_exclusive: [u64; 4]) -> [u64; 4] {
+    // Our approach is to repeatedly generate random u64 arrays until one of them happens to be
+    // within the limit. This could take a lot of attempts if the limit has many leading zero bits,
+    // though. It is more efficient to generate n-bit random numbers, where n is the number of bits
+    // in the limit.
+    let bits_to_strip = limit_exclusive[3].leading_zeros();
+
+    let mut limbs = [0; 4];
+
+    loop {
+        for limb_i in &mut limbs {
+            *limb_i = OsRng.next_u64();
+        }
+        limbs[3] >>= bits_to_strip;
+
+        if cmp_4_4(limbs, limit_exclusive) == Less {
+            return limbs;
+        }
+    }
 }
 
 #[cfg(test)]
