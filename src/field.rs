@@ -14,6 +14,8 @@ pub trait Field: Sized + Copy + Eq + Send + Sync
     const ONE: Self;
     const TWO: Self;
     const THREE: Self;
+    const FOUR: Self;
+    const FIVE: Self;
 
     fn to_canonical_vec(&self) -> Vec<u64>;
 
