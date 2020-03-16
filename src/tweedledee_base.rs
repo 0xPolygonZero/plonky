@@ -182,5 +182,19 @@ impl TwoAdicField for TweedledeeBase {
     const TWO_ADICITY: usize = 34;
 
     /// 1684996666696914987166688442938726917102595538363933628829375605749
-    const T: Self = Self { limbs: [15733503085723200501, 14854217, 0, 268435456] };
+    const T: Self = Self { limbs: [9524180637049683969, 255193519543715529, 0, 4611686017353646080] };
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{TweedledeeBase, Field, TwoAdicField};
+
+    #[test]
+    fn primitive_root_order() {
+        for n_power in 0..10 {
+            let root = TweedledeeBase::primitive_root_of_unity(n_power);
+            let order = TweedledeeBase::generator_order(root);
+            assert_eq!(order, 1 << n_power, "2^{}'th primitive root", n_power);
+        }
+    }
 }

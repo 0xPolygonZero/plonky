@@ -38,12 +38,6 @@ impl Bls12377Scalar {
     /// In the context of Montgomery multiplication, µ = -|F|^-1 mod 2^64.
     const MU: u64 = 725501752471715839;
 
-    /// Generator of [1, order).
-    const GENERATOR: Bls12377Scalar = Bls12377Scalar {
-        limbs: [
-            1855201571499933546, 8511318076631809892, 6222514765367795509, 1122129207579058019]
-    };
-
     pub fn from_canonical(c: [u64; 4]) -> Self {
         // We compute M(c, R^2) = c * R^2 * R^-1 = c * R.
         Self { limbs: Self::montgomery_multiply(c, Self::R2) }
@@ -165,8 +159,7 @@ impl Field for Bls12377Scalar {
     const FOUR: Self = Self { limbs: [16163137587655999434, 1588334981690687431, 11094542470912991159, 1141836277676842951] };
     const FIVE: Self = Self { limbs: [6006113053051977660, 3366551019440832441, 5772352412093595556, 754655161751966990] };
 
-    /// 11
-    const MULTIPLICATIVE_SUBGROUP_GENERATOR: Self = Self { limbs: [6006113053051977660, 3366551019440832441, 5772352412093595556, 754655161751966990] };
+    const MULTIPLICATIVE_SUBGROUP_GENERATOR: Self = Self { limbs: [1855201571499933546, 8511318076631809892, 6222514765367795509, 1122129207579058019] };
 
     fn to_canonical_vec(&self) -> Vec<u64> {
         self.to_canonical().to_vec()
