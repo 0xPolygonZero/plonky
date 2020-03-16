@@ -18,7 +18,7 @@ impl TweedledeeBase {
     /// The order of the field: 28948022309329048855892746252171976963322203655954433126947083963168578338817
     const ORDER: [u64; 4] = [9524180637049683969, 255193519543715529, 0, 4611686018427387904];
 
-    /// Twice the order of the field:
+    /// Twice the order of the field: 57896044618658097711785492504343953926644407311908866253894167926337156677634
     const ORDER_X2: [u64; 4] = [601617200389816322, 510387039087431059, 0, 9223372036854775808];
 
     /// R in the context of the Montgomery reduction, i.e. 2^256 % |F|.
@@ -153,6 +153,8 @@ impl Field for TweedledeeBase {
     const FOUR: Self = Self { limbs: [4711243033931153393, 14618841280553818673, 18446744073709551615, 4611686018427387903] };
     const FIVE: Self = Self { limbs: [3508008633151520749, 13598067202378956555, 18446744073709551615, 4611686018427387903] };
 
+    const MULTIPLICATIVE_SUBGROUP_GENERATOR: Self = Self::FIVE;
+
     fn to_canonical_vec(&self) -> Vec<u64> {
         self.to_canonical().to_vec()
     }
@@ -179,8 +181,6 @@ impl Field for TweedledeeBase {
 impl TwoAdicField for TweedledeeBase {
     const TWO_ADICITY: usize = 34;
 
-    fn primitive_root_of_unity(n_power: usize) -> Self {
-        assert!(n_power <= Self::TWO_ADICITY);
-        todo!()
-    }
+    /// 1684996666696914987166688442938726917102595538363933628829375605749
+    const T: Self = Self { limbs: [15733503085723200501, 14854217, 0, 268435456] };
 }

@@ -202,6 +202,8 @@ impl Field for Bls12377Base {
             13442091487463296847, 77904398905292312]
     };
 
+    const MULTIPLICATIVE_SUBGROUP_GENERATOR: Self = Self::FIVE;
+
     fn to_canonical_vec(&self) -> Vec<u64> {
         self.to_canonical().to_vec()
     }

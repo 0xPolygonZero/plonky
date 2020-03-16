@@ -153,6 +153,8 @@ impl Field for TweedledumBase {
     const FOUR: Self = Self { limbs: [10176471330476523505, 14618841279833423391, 18446744073709551615, 4611686018427387903] };
     const FIVE: Self = Self { limbs: [592367636130562029, 13598067201466455865, 18446744073709551615, 4611686018427387903] };
 
+    const MULTIPLICATIVE_SUBGROUP_GENERATOR: Self = Self::FIVE;
+
     fn to_canonical_vec(&self) -> Vec<u64> {
         self.to_canonical().to_vec()
     }
@@ -179,8 +181,6 @@ impl Field for TweedledumBase {
 impl TwoAdicField for TweedledumBase {
     const TWO_ADICITY: usize = 33;
 
-    fn primitive_root_of_unity(n_power: usize) -> Self {
-        assert!(n_power <= Self::TWO_ADICITY);
-        todo!()
-    }
+    /// 3369993333393829974333376885877453834205191076727970393464588218993
+    const T: Self = Self { limbs: [13123397903573856881, 29708435, 0, 536870912] };
 }

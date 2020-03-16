@@ -17,6 +17,8 @@ pub trait Field: Sized + Copy + Eq + Send + Sync
     const FOUR: Self;
     const FIVE: Self;
 
+    const MULTIPLICATIVE_SUBGROUP_GENERATOR: Self;
+
     fn to_canonical_vec(&self) -> Vec<u64>;
 
     fn from_canonical_vec(v: Vec<u64>) -> Self;
@@ -153,12 +155,58 @@ pub trait Field: Sized + Copy + Eq + Send + Sync
         Self::cyclic_subgroup_unknown_order(generator).len()
     }
 
+    fn exp(&self, power: Self) -> Self {
+        let power_bits = power.num_bits();
+        let mut current = *self;
+        let mut product = Self::ONE;
+
+        for (i, limb) in power.to_canonical_vec().iter().enumerate() {
+            for j in 0..64 {
+                // If we've gone through all the 1 bits already, no need to keep squaring.
+                let bit_index = i * 64 + j;
+                if bit_index == power_bits {
+                    return product;
+                }
+
+                if (limb >> j & 1) != 0 {
+                    product = product * current;
+                }
+                current = current.square();
+            }
+        }
+
+        product
+    }
+
+    fn exp_usize(&self, power: usize) -> Self {
+        self.exp(Self::from_canonical_usize(power))
+    }
+
+    fn num_bits(&self) -> usize {
+        let mut n = 0;
+        for (i, limb) in self.to_canonical_vec().iter().enumerate() {
+            for j in 0..64 {
+                if (limb >> j & 1) != 0 {
+                    n = i * 64 + j + 1;
+                }
+            }
+        }
+        n
+    }
+
     fn rand() -> Self;
 }
 
 pub trait TwoAdicField: Field {
     const TWO_ADICITY: usize;
 
+    /// `T = (ORDER - 1) / 2^TWO_ADICITY`
+    const T: Self;
+
     /// Computes a `2^n_power`th primitive root of unity.
-    fn primitive_root_of_unity(n_power: usize) -> Self;
+    fn primitive_root_of_unity(n_power: usize) -> Self {
+        assert!(n_power <= Self::TWO_ADICITY);
+        let base_root = Self::MULTIPLICATIVE_SUBGROUP_GENERATOR.exp(Self::T);
+        base_root.exp(Self::from_canonical_u64(1u64 << Self::TWO_ADICITY as u64 - n_power as u64))
+    }
 }

@@ -38,10 +38,6 @@ impl Bls12377Scalar {
     /// In the context of Montgomery multiplication, µ = -|F|^-1 mod 2^64.
     const MU: u64 = 725501752471715839;
 
-    /// t = (r - 1) / 2^s =
-    /// 60001509534603559531609739528203892656505753216962260608619555
-    const T: Self = Self { limbs: [725501752471715841, 6461107452199829505, 6968279316240510977, 1345280370688042326] };
-
     /// Generator of [1, order).
     const GENERATOR: Bls12377Scalar = Bls12377Scalar {
         limbs: [
@@ -56,48 +52,6 @@ impl Bls12377Scalar {
     pub fn to_canonical(&self) -> [u64; 4] {
         // Let x * R = self. We compute M(x * R, 1) = x * R * R^-1 = x.
         Self::montgomery_multiply(self.limbs, [1, 0, 0, 0])
-    }
-
-    // TODO: Move to Field.
-    pub fn num_bits(&self) -> usize {
-        let mut n = 0;
-        for (i, limb) in self.to_canonical().iter().enumerate() {
-            for j in 0..64 {
-                if (limb >> j & 1) != 0 {
-                    n = i * 64 + j + 1;
-                }
-            }
-        }
-        n
-    }
-
-    // TODO: Move to Field.
-    pub fn exp(&self, power: Bls12377Scalar) -> Bls12377Scalar {
-        let power_bits = power.num_bits();
-        let mut current = *self;
-        let mut product = Bls12377Scalar::ONE;
-
-        for (i, limb) in power.to_canonical().iter().enumerate() {
-            for j in 0..64 {
-                // If we've gone through all the 1 bits already, no need to keep squaring.
-                let bit_index = i * 64 + j;
-                if bit_index == power_bits {
-                    return product;
-                }
-
-                if (limb >> j & 1) != 0 {
-                    product = product * current;
-                }
-                current = current.square();
-            }
-        }
-
-        product
-    }
-
-    // TODO: Move to Field.
-    pub fn exp_usize(&self, power: usize) -> Bls12377Scalar {
-        self.exp(Self::from_canonical_usize(power))
     }
 
     #[unroll_for_loops]
@@ -211,6 +165,9 @@ impl Field for Bls12377Scalar {
     const FOUR: Self = Self { limbs: [16163137587655999434, 1588334981690687431, 11094542470912991159, 1141836277676842951] };
     const FIVE: Self = Self { limbs: [6006113053051977660, 3366551019440832441, 5772352412093595556, 754655161751966990] };
 
+    /// 11
+    const MULTIPLICATIVE_SUBGROUP_GENERATOR: Self = Self { limbs: [6006113053051977660, 3366551019440832441, 5772352412093595556, 754655161751966990] };
+
     fn to_canonical_vec(&self) -> Vec<u64> {
         self.to_canonical().to_vec()
     }
@@ -246,11 +203,8 @@ impl Field for Bls12377Scalar {
 impl TwoAdicField for Bls12377Scalar {
     const TWO_ADICITY: usize = 47;
 
-    fn primitive_root_of_unity(n_power: usize) -> Self {
-        assert!(n_power <= Self::TWO_ADICITY);
-        let base_root = Self::GENERATOR.exp(Self::T);
-        base_root.exp(Self::from_canonical_u64(1u64 << Self::TWO_ADICITY as u64 - n_power as u64))
-    }
+    /// 60001509534603559531609739528203892656505753216962260608619555
+    const T: Self = Self { limbs: [725501752471715841, 6461107452199829505, 6968279316240510977, 1345280370688042326] };
 }
 
 #[cfg(test)]
