@@ -1,9 +1,9 @@
 use crate::{Curve, Field, TweedledeeBase, TweedledumBase};
 
 #[derive(Debug, Copy, Clone)]
-pub struct Bls12377;
+pub struct Tweedledum;
 
-impl Curve for Bls12377 {
+impl Curve for Tweedledum {
     type BaseField = TweedledumBase;
     type ScalarField = TweedledeeBase;
 
