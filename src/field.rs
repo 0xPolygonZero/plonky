@@ -16,6 +16,7 @@ pub trait Field: Sized + Copy + Eq + Send + Sync
     const THREE: Self;
     const FOUR: Self;
     const FIVE: Self;
+    const NEG_ONE: Self;
 
     const MULTIPLICATIVE_SUBGROUP_GENERATOR: Self;
 

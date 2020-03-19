@@ -1,10 +1,11 @@
 use std::time::Instant;
 
-use plonky::{Bls12377, BLS12_377_GENERATOR_PROJECTIVE, Curve, fft_precompute, fft_with_precomputation, FftPrecomputation, Field, msm_execute_parallel, msm_precompute, MsmPrecomputation, ProjectivePoint};
+use plonky::{Curve, fft_precompute, fft_with_precomputation, FftPrecomputation, Field, msm_execute_parallel, msm_precompute, MsmPrecomputation, ProjectivePoint, Tweedledee, TWEEDLEDEE_GENERATOR_PROJECTIVE};
 
-const DEGREE: usize = 1 << 16;
+const DEGREE: usize = 1 << 12;
+const MSM_COUNT: usize = 10 + 1 + 7; // 10 wires, Z, and 7 components of t
 
-type C = Bls12377;
+type C = Tweedledee;
 type SF = <C as Curve>::ScalarField;
 
 fn main() {
@@ -16,20 +17,20 @@ fn main() {
     let mut generators = Vec::with_capacity(DEGREE);
     let mut scalars = Vec::with_capacity(DEGREE);
     for _i in 0..DEGREE {
-        generators.push(BLS12_377_GENERATOR_PROJECTIVE);
+        generators.push(TWEEDLEDEE_GENERATOR_PROJECTIVE);
         scalars.push(SF::rand());
     }
 
     // Here's a quick Python snippet to calculate optimal window sizes:
-    //     degree = 2**17
-    //     parallelism = 8
-    //     field_bits = 253
+    //     degree = 2**12
+    //     parallelism = 4
+    //     field_bits = 254
     //     group_ops = lambda w: 2**w + degree * ceil(field_bits / w) / parallelism
     //     min(range(1, 50), key=group_ops)
     // This is oversimplified though, as it doesn't account for the different summation methods we
     // use for different problem sizes. So some trial and error is needed to find the best config.
 
-    for w in 14..=14 {
+    for w in 11..=11 {
         println!();
         println!("MSM WITH WINDOW SIZE {}", w);
         run_msms(w, &generators, &scalars);
@@ -40,18 +41,13 @@ fn run_all_ffts() {
     // As per the paper, we do 8 FFTs of size 4n, 5 FFTs of size 2n and 12 FFTs of size n.
     let start = Instant::now();
 
-    let fft_4n_precomputation = fft_precompute(4 * DEGREE);
-    for _i in 0..8 {
-        run_fft(4 * DEGREE, &fft_4n_precomputation);
-    }
-
-    let fft_2n_precomputation = fft_precompute(2 * DEGREE);
-    for _i in 0..5 {
-        run_fft(2 * DEGREE, &fft_2n_precomputation);
+    let fft_8n_precomputation = fft_precompute(8 * DEGREE);
+    for _i in 0..11 {
+        run_fft(8 * DEGREE, &fft_8n_precomputation);
     }
 
     let fft_n_precomputation = fft_precompute(DEGREE);
-    for _i in 0..12 {
+    for _i in 0..7 {
         run_fft(DEGREE, &fft_n_precomputation);
     }
 
@@ -78,7 +74,7 @@ fn run_msms(w: usize, generators: &[ProjectivePoint<C>], scalars: &[SF]) {
     println!();
 
     let start = Instant::now();
-    for _i in 0..9 {
+    for _i in 0..MSM_COUNT {
         run_msm(&precomputation, w, scalars);
     }
     println!("All MSMs took {}s", start.elapsed().as_secs_f64());

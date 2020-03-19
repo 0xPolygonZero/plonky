@@ -33,6 +33,10 @@ name = "bls12_scalar"
 harness = false
 
 [[bench]]
+name = "tweedledee_base"
+harness = false
+
+[[bench]]
 name = "bls12_g1"
 harness = false
 
