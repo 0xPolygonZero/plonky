@@ -36,6 +36,11 @@ pub trait Field: Sized + Copy + Eq + Send + Sync
     }
 
     #[inline(always)]
+    fn is_one(&self) -> bool {
+        *self == Self::ONE
+    }
+
+    #[inline(always)]
     fn is_nonzero(&self) -> bool {
         *self != Self::ZERO
     }
@@ -69,6 +74,11 @@ pub trait Field: Sized + Copy + Eq + Send + Sync
     #[inline(always)]
     fn triple(&self) -> Self {
         *self * Self::THREE
+    }
+
+    #[inline(always)]
+    fn quadruple(&self) -> Self {
+        *self * Self::FOUR
     }
 
     fn batch_multiplicative_inverse_opt<F: Field>(x: &[F]) -> Vec<Option<F>> {

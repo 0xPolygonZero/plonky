@@ -11,6 +11,12 @@ pub trait Curve: Sized + Copy {
     const B: Self::BaseField;
 }
 
+/// A curve with the endomorphism described in the Halo paper, i.e. `phi((x, y)) = (zeta_p x, y)`,
+/// where `phi(P) = [zeta_q] P` for some `zeta_q` of multiplicative order 3.
+pub trait HaloEndomorphismCurve: Curve {
+    const ZETA: Self::BaseField;
+}
+
 /// A point on a short Weierstrass curve, represented in affine coordinates.
 #[derive(Copy, Clone, Debug)]
 pub struct AffinePoint<C: Curve> {
@@ -27,7 +33,6 @@ impl<C: Curve> AffinePoint<C> {
     };
 
     pub fn nonzero(x: C::BaseField, y: C::BaseField) -> Self {
-        // TODO: debug_assert on curve.
         let point = Self { x, y, zero: false };
         debug_assert!(point.is_valid());
         point

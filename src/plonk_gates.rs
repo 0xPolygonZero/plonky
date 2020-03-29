@@ -1,4 +1,5 @@
-use crate::{GateInput, WitnessGenerator, Field, PartialWitness};
+use crate::{GateInput, WitnessGenerator, Field, PartialWitness, AffinePoint, HaloEndomorphismCurve};
+use std::marker::PhantomData;
 
 trait Gate<F: Field>: WitnessGenerator<F> {
     const ID: usize;
@@ -28,9 +29,13 @@ impl<F: Field> WitnessGenerator<F> for NoopGate {
     }
 }
 
-struct MsmGate { index: usize }
+/// `C` is the curve of the inner proof.
+struct MsmGate<C: HaloEndomorphismCurve> {
+    index: usize,
+    _phantom: PhantomData<C>,
+}
 
-impl MsmGate {
+impl<C: HaloEndomorphismCurve> MsmGate<C> {
     const WIRE_GROUP_ACC_X: usize = 0;
     const WIRE_GROUP_ACC_Y: usize = 1;
     const WIRE_SCALAR_ACC_UNSIGNED: usize = 2;
@@ -42,17 +47,87 @@ impl MsmGate {
     const WIRE_INVERSE: usize = 8;
 }
 
-impl<F: Field> Gate<F> for MsmGate {
+impl<C: HaloEndomorphismCurve> Gate<C::BaseField> for MsmGate<C> {
     const ID: usize = 1;
 }
 
-impl<F: Field> WitnessGenerator<F> for MsmGate {
+impl<C: HaloEndomorphismCurve> WitnessGenerator<C::BaseField> for MsmGate<C> {
     fn dependencies(&self) -> Vec<GateInput> {
-        todo!()
+        vec![
+            GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_X },
+            GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_Y },
+            GateInput { gate: self.index, input: Self::WIRE_SCALAR_ACC_UNSIGNED },
+            GateInput { gate: self.index, input: Self::WIRE_SCALAR_ACC_SIGNED },
+            GateInput { gate: self.index, input: Self::WIRE_ADDEND_X },
+            GateInput { gate: self.index, input: Self::WIRE_ADDEND_Y },
+            GateInput { gate: self.index, input: Self::WIRE_SCALAR_BIT_0 },
+            GateInput { gate: self.index, input: Self::WIRE_SCALAR_BIT_1 },
+        ]
     }
 
-    fn generate(&self, witness: &PartialWitness<F>) -> PartialWitness<F> {
-        todo!()
+    fn generate(&self, witness: &PartialWitness<C::BaseField>) -> PartialWitness<C::BaseField> {
+        let group_acc_old_x_target = GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_X };
+        let group_acc_new_x_target = GateInput { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_X };
+        let group_acc_old_y_target = GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
+        let group_acc_new_y_target = GateInput { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_Y };
+
+        let scalar_acc_unsigned_old_target = GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
+        let scalar_acc_unsigned_new_target = GateInput { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_Y };
+        let scalar_acc_signed_old_target = GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
+        let scalar_acc_signed_new_target = GateInput { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_Y };
+
+        let addend_x_target = GateInput { gate: self.index, input: Self::WIRE_ADDEND_X };
+        let addend_y_target = GateInput { gate: self.index, input: Self::WIRE_ADDEND_Y };
+        let scalar_bit_0_target = GateInput { gate: self.index, input: Self::WIRE_SCALAR_BIT_0 };
+        let scalar_bit_1_target = GateInput { gate: self.index, input: Self::WIRE_SCALAR_BIT_1 };
+
+        let group_acc_old_x = witness.wire_values[&group_acc_old_x_target];
+        let group_acc_old_y = witness.wire_values[&group_acc_old_y_target];
+        let group_acc_old = AffinePoint::<C>::nonzero(group_acc_old_x, group_acc_old_y);
+
+        let scalar_acc_unsigned_old = witness.wire_values[&scalar_acc_unsigned_old_target];
+        let scalar_acc_signed_old = witness.wire_values[&scalar_acc_signed_old_target];
+
+        let scalar_bit_0 = witness.wire_values[&scalar_bit_0_target];
+        let scalar_bit_1 = witness.wire_values[&scalar_bit_1_target];
+        debug_assert!(scalar_bit_0.is_zero() || scalar_bit_0.is_one());
+        debug_assert!(scalar_bit_1.is_zero() || scalar_bit_1.is_one());
+
+        let p_x = witness.wire_values[&addend_x_target];
+        let p_y = witness.wire_values[&addend_y_target];
+
+        let mut s_i_x = p_x;
+        if scalar_bit_0 == C::BaseField::ONE {
+            s_i_x = s_i_x * C::ZETA;
+        }
+        let mut s_i_y = p_y;
+        if scalar_bit_1 == C::BaseField::ZERO {
+            s_i_y = -s_i_y;
+        }
+        let s_i = AffinePoint::nonzero(s_i_x, s_i_y);
+        let group_acc_new = group_acc_old + s_i;
+
+        let scalar_acc_unsigned_new = scalar_acc_unsigned_old.quadruple()
+            + scalar_bit_0 + scalar_bit_1.double();
+
+        // This is based on Algorithm 2 in the Halo paper.
+        let mut scalar_acc_signed_limb = if scalar_bit_0 == C::BaseField::ONE {
+            C::BaseField::ONE
+        } else {
+            C::BaseField::NEG_ONE
+        };
+        if scalar_bit_1 == C::BaseField::ONE {
+            scalar_acc_signed_limb = scalar_acc_signed_limb * C::ZETA;
+        }
+        let scalar_acc_signed_new = scalar_acc_signed_old.double() + scalar_acc_signed_limb;
+
+        let mut result = PartialWitness::new();
+        result.wire_values.insert(group_acc_new_x_target, group_acc_new.x);
+        result.wire_values.insert(group_acc_new_y_target, group_acc_new.y);
+        result.wire_values.insert(scalar_acc_unsigned_new_target, scalar_acc_unsigned_new);
+        result.wire_values.insert(scalar_acc_signed_new_target, scalar_acc_signed_new);
+
+        result
     }
 }
 
