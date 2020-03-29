@@ -36,6 +36,8 @@ mod curve;
 mod curve_msm;
 mod curve_multiplication;
 mod plonk;
+mod plonk_gates;
+mod plonk_recursion;
 mod poly_commit;
 mod tweedledee_base;
 mod tweedledee_curve;

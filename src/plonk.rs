@@ -1,41 +1,118 @@
-use crate::Bls12377Scalar;
+use crate::Field;
+use std::time::Instant;
+use std::collections::HashMap;
 
-/// A Plonk constraint has the form `L a + R b + O c + M a b + C = 0`.
-struct PlonkConstraint {
-    /// The coefficient of a, the left input.
-    l: Bls12377Scalar,
-    /// The coefficient of b, the right input.
-    r: Bls12377Scalar,
-    /// The coefficient of c, the output.
-    o: Bls12377Scalar,
-    /// The coefficient of ab, the product.
-    m: Bls12377Scalar,
-    /// The constant which stands on its own.
-    c: Bls12377Scalar,
+pub(crate) const NUM_WIRES: usize = 9;
+pub(crate) const GRID_WIDTH: usize = 65;
+pub(crate) const QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER: usize = 7;
+
+pub struct PartialWitness<F: Field> {
+    pub wire_values: HashMap<GateInput, F>,
 }
 
-struct Witness {
-    l: Vec<Bls12377Scalar>,
-    r: Vec<Bls12377Scalar>,
-    o: Vec<Bls12377Scalar>,
+impl<F: Field> PartialWitness<F> {
+    pub fn new() -> Self {
+        PartialWitness { wire_values: HashMap::new() }
+    }
 }
 
-impl Witness {
-    pub fn num_gates(&self) -> usize {
-        self.l.len()
+pub struct Witness<F: Field> {
+    wire_values: Vec<Vec<F>>,
+}
+
+pub trait WitnessGenerator<F: Field> {
+    fn dependencies(&self) -> Vec<GateInput>;
+
+    /// Given a partial witness, return any newly generated values. The caller will merge them in.
+    fn generate(&self, witness: &PartialWitness<F>) -> PartialWitness<F>;
+}
+
+pub struct Circuit<F: Field> {
+    gate_ids: Vec<usize>,
+    routing_target_partitions: RoutingTargetPartitions,
+    generators: Vec<Box<dyn WitnessGenerator<F>>>,
+}
+
+impl<F: Field> Circuit<F> {
+    fn generate_witness(&self) {
+        let start = Instant::now();
+        println!("Witness generation took {}s", start.elapsed().as_secs_f32());
+        todo!()
+    }
+}
+
+#[derive(Eq, PartialEq, Hash, Debug)]
+pub struct CircuitInput {
+    pub index: usize,
+}
+
+#[derive(Eq, PartialEq, Hash, Debug)]
+pub struct GateInput {
+    pub gate: usize,
+    pub input: usize,
+}
+
+#[derive(Eq, PartialEq, Hash, Debug)]
+pub enum RoutingTarget {
+    CircuitInput(CircuitInput),
+    GateInput(GateInput),
+}
+
+pub struct CircuitBuilder<F: Field> {
+    circuit_input_index: usize,
+    gate_ids: Vec<usize>,
+    copy_constraints: Vec<(RoutingTarget, RoutingTarget)>,
+    generators: Vec<Box<dyn WitnessGenerator<F>>>,
+}
+
+impl<F: Field> CircuitBuilder<F> {
+    pub fn new() -> Self {
+        CircuitBuilder {
+            circuit_input_index: 0,
+            gate_ids: Vec::new(),
+            copy_constraints: Vec::new(),
+            generators: Vec::new(),
+        }
     }
 
-    /// Get the i'th wire within the concatenated list (a, b, c).
-    fn get_wire(&self, mut i: usize) -> Bls12377Scalar {
-        let n = self.num_gates();
-        if i < n {
-            return self.l[i];
-        }
-        i -= n;
-        if i < n {
-            return self.r[i];
-        }
-        i -= n;
-        self.o[i]
+    pub fn add_circuit_input(&mut self) -> CircuitInput {
+        let index = self.circuit_input_index;
+        self.circuit_input_index += 1;
+        CircuitInput { index }
     }
+
+    pub fn add_gate(&mut self) {
+        todo!()
+    }
+
+    /// Add a copy constraint between two routing targets.
+    pub fn copy(&mut self, target_1: RoutingTarget, target_2: RoutingTarget) {
+        self.copy_constraints.push((target_1, target_2));
+    }
+
+    pub fn build(&self) -> Circuit<F> {
+        // TODO: Shift indices
+        // TODO: Add dummy gates through which public inputs can be routed to other gates.
+        todo!()
+    }
+
+    fn get_routing_partitions(&self) -> RoutingTargetPartitions {
+        todo!()
+    }
+}
+
+struct RoutingTargetPartitions {
+    partitions: Vec<Vec<RoutingTarget>>,
+    indices: HashMap<RoutingTarget, usize>,
+}
+
+impl RoutingTargetPartitions {
+    fn to_gate_inputs(&self) -> GateInputPartitions {
+        todo!()
+    }
+}
+
+struct GateInputPartitions {
+    partitions: Vec<Vec<GateInput>>,
+    indices: HashMap<GateInput, usize>,
 }
