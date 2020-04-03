@@ -1,6 +1,7 @@
 use crate::Field;
 use std::time::Instant;
 use std::collections::HashMap;
+use crate::plonk_gates::Gate;
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const GRID_WIDTH: usize = 65;
@@ -65,6 +66,13 @@ pub struct CircuitBuilder<F: Field> {
     generators: Vec<Box<dyn WitnessGenerator<F>>>,
 }
 
+pub struct MsmEndoPart {
+    scalar: RoutingTarget,
+    x: RoutingTarget,
+    y: RoutingTarget,
+    truncate_to_128: bool,
+}
+
 impl<F: Field> CircuitBuilder<F> {
     pub fn new() -> Self {
         CircuitBuilder {
@@ -75,14 +83,28 @@ impl<F: Field> CircuitBuilder<F> {
         }
     }
 
+    pub fn add_public_input(&mut self) {
+        todo!()
+    }
+
+    pub fn add_public_inputs(&mut self, n: usize) {
+        todo!()
+    }
+
     pub fn add_circuit_input(&mut self) -> CircuitInput {
         let index = self.circuit_input_index;
         self.circuit_input_index += 1;
         CircuitInput { index }
     }
 
-    pub fn add_gate(&mut self) {
-        todo!()
+    pub fn add_msm_endo(&mut self, parts: &[MsmEndoPart]) {
+        todo!();
+    }
+
+    /// Adds a gate to the circuit, without doing any routing.
+    fn add_gate<G: Gate<F>>(&mut self, gate: G) {
+        self.gate_ids.push(G::ID);
+        self.generators.push(Box::new(gate));
     }
 
     /// Add a copy constraint between two routing targets.

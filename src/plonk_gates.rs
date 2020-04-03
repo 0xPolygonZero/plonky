@@ -1,17 +1,17 @@
 use crate::{GateInput, WitnessGenerator, Field, PartialWitness, AffinePoint, HaloEndomorphismCurve};
 use std::marker::PhantomData;
 
-trait Gate<F: Field>: WitnessGenerator<F> {
+pub(crate) trait Gate<F: Field>: 'static + WitnessGenerator<F> {
     const ID: usize;
 }
 
-struct NoopGate { index: usize }
+pub(crate) struct NoopGate { index: usize }
 
 impl NoopGate {
-    const BUFFER_0: usize = 0;
-    const BUFFER_1: usize = 1;
-    const BUFFER_2: usize = 2;
-    const BUFFER_3: usize = 3;
+    const WIRE_BUFFER_0: usize = 0;
+    const WIRE_BUFFER_1: usize = 1;
+    const WIRE_BUFFER_2: usize = 2;
+    const WIRE_BUFFER_3: usize = 3;
 }
 
 impl<F: Field> Gate<F> for NoopGate {
@@ -30,7 +30,7 @@ impl<F: Field> WitnessGenerator<F> for NoopGate {
 }
 
 /// `C` is the curve of the inner proof.
-struct MsmGate<C: HaloEndomorphismCurve> {
+pub(crate) struct MsmGate<C: HaloEndomorphismCurve> {
     index: usize,
     _phantom: PhantomData<C>,
 }
@@ -131,7 +131,7 @@ impl<C: HaloEndomorphismCurve> WitnessGenerator<C::BaseField> for MsmGate<C> {
     }
 }
 
-struct RescueGate { index: usize }
+pub(crate) struct RescueGate { index: usize }
 
 impl RescueGate {
     const WIRE_INPUT_0: usize = 0;
@@ -230,18 +230,18 @@ impl<F: Field> WitnessGenerator<F> for RescueGate {
     }
 }
 
-struct Base4SumGate { index: usize }
+pub(crate) struct Base4SumGate { index: usize }
 
 impl Base4SumGate {
-    const ACC: usize = 0;
-    const LIMB_0: usize = 1;
-    const LIMB_1: usize = 2;
-    const LIMB_2: usize = 3;
-    const LIMB_3: usize = 4;
-    const LIMB_4: usize = 5;
-    const LIMB_5: usize = 6;
-    const LIMB_6: usize = 7;
-    const LIMB_7: usize = 8;
+    const WIRE_ACC: usize = 0;
+    const WIRE_LIMB_0: usize = 1;
+    const WIRE_LIMB_1: usize = 2;
+    const WIRE_LIMB_2: usize = 3;
+    const WIRE_LIMB_3: usize = 4;
+    const WIRE_LIMB_4: usize = 5;
+    const WIRE_LIMB_5: usize = 6;
+    const WIRE_LIMB_6: usize = 7;
+    const WIRE_LIMB_7: usize = 8;
 }
 
 impl<F: Field> Gate<F> for Base4SumGate {
@@ -250,32 +250,56 @@ impl<F: Field> Gate<F> for Base4SumGate {
 
 impl<F: Field> WitnessGenerator<F> for Base4SumGate {
     fn dependencies(&self) -> Vec<GateInput> {
-        todo!()
+        Vec::new()
     }
 
-    fn generate(&self, witness: &PartialWitness<F>) -> PartialWitness<F> {
-        todo!()
+    fn generate(&self, _witness: &PartialWitness<F>) -> PartialWitness<F> {
+        // For base 4 decompositions, we don't do any witness generation on a per-gate level.
+        // Instead, we have a single generator which generates values for an entire decomposition.
+        PartialWitness::new()
     }
 }
 
-struct MiscGate { index: usize }
-
-impl MiscGate {
-    const MULTIPLICAND_0: usize = 0;
-    const MULTIPLICAND_1: usize = 1;
-    const ADDEND: usize = 2;
+/// A "multiply, add, and rescale" gate.
+pub(crate) struct MaddGate<F: Field> {
+    index: usize,
+    scalar: F
 }
 
-impl<F: Field> Gate<F> for MiscGate {
+impl<F: Field> MaddGate<F> {
+    const WIRE_MULTIPLICAND_0: usize = 0;
+    const WIRE_MULTIPLICAND_1: usize = 1;
+    const WIRE_ADDEND: usize = 2;
+    const WIRE_OUTPUT: usize = 3;
+}
+
+impl<F: Field> Gate<F> for MaddGate<F> {
     const ID: usize = 4;
 }
 
-impl<F: Field> WitnessGenerator<F> for MiscGate {
+impl<F: Field> WitnessGenerator<F> for MaddGate<F> {
     fn dependencies(&self) -> Vec<GateInput> {
-        unimplemented!()
+        vec![
+            GateInput { gate: self.index, input: Self::WIRE_MULTIPLICAND_0 },
+            GateInput { gate: self.index, input: Self::WIRE_MULTIPLICAND_1 },
+            GateInput { gate: self.index, input: Self::WIRE_ADDEND },
+        ]
     }
 
     fn generate(&self, witness: &PartialWitness<F>) -> PartialWitness<F> {
-        unimplemented!()
+        let multiplicand_0_target = GateInput { gate: self.index, input: Self::WIRE_MULTIPLICAND_0 };
+        let multiplicand_1_target = GateInput { gate: self.index, input: Self::WIRE_MULTIPLICAND_1 };
+        let addend_target = GateInput { gate: self.index, input: Self::WIRE_ADDEND };
+        let output_target = GateInput { gate: self.index, input: Self::WIRE_OUTPUT };
+
+        let multiplicand_0 = witness.wire_values[&multiplicand_0_target];
+        let multiplicand_1 = witness.wire_values[&multiplicand_1_target];
+        let addend = witness.wire_values[&addend_target];
+
+        let output = multiplicand_0 * multiplicand_1 + addend;
+
+        let mut result = PartialWitness::new();
+        result.wire_values.insert(output_target, output);
+        result
     }
 }

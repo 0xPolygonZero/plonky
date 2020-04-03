@@ -3,7 +3,7 @@ use std::ops::Neg;
 use crate::Field;
 
 /// A short Weierstrass curve.
-pub trait Curve: Sized + Copy {
+pub trait Curve: 'static + Sized + Copy {
     type BaseField: Field;
     type ScalarField: Field;
 

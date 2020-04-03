@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::hash::Hash;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
-pub trait Field: Sized + Copy + Eq + Send + Sync
+pub trait Field: 'static + Sized + Copy + Eq + Send + Sync
 + Neg<Output=Self>
 + Add<Self, Output=Self>
 + Sub<Self, Output=Self>

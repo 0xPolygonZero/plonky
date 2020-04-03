@@ -19,6 +19,20 @@ struct RecursiveCircuit<F: Field> {
 fn recursive_verification_circuit<F: Field>(degree_pow: usize) -> RecursiveCircuit<F> {
     let mut builder = CircuitBuilder::new();
 
+    let inner_c_is_noop = builder.add_public_input();
+    let inner_c_is_msm = builder.add_public_input();
+    let inner_c_is_rescue = builder.add_public_input();
+    let inner_c_is_base4sum = builder.add_public_input();
+    let inner_c_is_madd = builder.add_public_input();
+    let inner_c_const = builder.add_public_input();
+
+    let inner_o_is_noop = builder.add_public_input();
+    let inner_o_is_msm = builder.add_public_input();
+    let inner_o_is_rescue = builder.add_public_input();
+    let inner_o_is_base4sum = builder.add_public_input();
+    let inner_o_is_madd = builder.add_public_input();
+    let inner_o_t = builder.add_public_inputs(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER);
+
     // A commitment to each wire polynomial.
     let mut c_wires = Vec::with_capacity(NUM_WIRES);
     for _i in 0..NUM_WIRES {
