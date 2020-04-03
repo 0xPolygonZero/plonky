@@ -47,6 +47,11 @@ impl<C: Curve> AffinePoint<C> {
         let Self { x, y, zero } = *self;
         ProjectivePoint { x, y, z: C::BaseField::ONE, zero }
     }
+
+    pub fn double(&self) -> Self {
+        // TODO: This is a very lazy implementation...
+        self.to_projective().double().to_affine()
+    }
 }
 
 impl<C: Curve> PartialEq for AffinePoint<C> {

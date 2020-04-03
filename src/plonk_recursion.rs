@@ -20,17 +20,22 @@ fn recursive_verification_circuit<F: Field>(degree_pow: usize) -> RecursiveCircu
     let mut builder = CircuitBuilder::new();
 
     let inner_c_is_noop = builder.add_public_input();
-    let inner_c_is_msm = builder.add_public_input();
+    let inner_c_is_curve_add = builder.add_public_input();
+    let inner_c_is_curve_dbl = builder.add_public_input();
+    let inner_c_is_curve_endo = builder.add_public_input();
     let inner_c_is_rescue = builder.add_public_input();
     let inner_c_is_base4sum = builder.add_public_input();
     let inner_c_is_madd = builder.add_public_input();
     let inner_c_const = builder.add_public_input();
 
     let inner_o_is_noop = builder.add_public_input();
-    let inner_o_is_msm = builder.add_public_input();
+    let inner_o_is_curve_add = builder.add_public_input();
+    let inner_o_is_curve_dbl = builder.add_public_input();
+    let inner_o_is_curve_endo = builder.add_public_input();
     let inner_o_is_rescue = builder.add_public_input();
     let inner_o_is_base4sum = builder.add_public_input();
     let inner_o_is_madd = builder.add_public_input();
+    let inner_o_const = builder.add_public_input();
     let inner_o_t = builder.add_public_inputs(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER);
 
     // A commitment to each wire polynomial.

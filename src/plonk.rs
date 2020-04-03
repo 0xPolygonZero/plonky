@@ -83,11 +83,11 @@ impl<F: Field> CircuitBuilder<F> {
         }
     }
 
-    pub fn add_public_input(&mut self) {
+    pub fn add_public_input(&mut self) -> GateInput {
         todo!()
     }
 
-    pub fn add_public_inputs(&mut self, n: usize) {
+    pub fn add_public_inputs(&mut self, n: usize) -> Vec<GateInput> {
         todo!()
     }
 

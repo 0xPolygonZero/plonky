@@ -1,4 +1,4 @@
-use crate::{GateInput, WitnessGenerator, Field, PartialWitness, AffinePoint, HaloEndomorphismCurve};
+use crate::{GateInput, WitnessGenerator, Field, PartialWitness, AffinePoint, HaloEndomorphismCurve, Curve};
 use std::marker::PhantomData;
 
 pub(crate) trait Gate<F: Field>: 'static + WitnessGenerator<F> {
@@ -29,13 +29,146 @@ impl<F: Field> WitnessGenerator<F> for NoopGate {
     }
 }
 
-/// `C` is the curve of the inner proof.
-pub(crate) struct MsmGate<C: HaloEndomorphismCurve> {
+/// A gate which performs incomplete point addition, conditioned on an input bit. In order to
+/// facilitate MSMs which use this gate, it also adds the bit to an accumulator. `C` is the curve
+/// of the inner proof.
+pub(crate) struct CurveAddGate<C: Curve> {
     index: usize,
     _phantom: PhantomData<C>,
 }
 
-impl<C: HaloEndomorphismCurve> MsmGate<C> {
+impl<C: Curve> CurveAddGate<C> {
+    const WIRE_GROUP_ACC_X: usize = 0;
+    const WIRE_GROUP_ACC_Y: usize = 1;
+    const WIRE_SCALAR_ACC_OLD: usize = 2;
+    const WIRE_SCALAR_ACC_NEW: usize = 3;
+    const WIRE_ADDEND_X: usize = 4;
+    const WIRE_ADDEND_Y: usize = 5;
+    const WIRE_SCALAR_BIT: usize = 6;
+    const WIRE_INVERSE: usize = 7;
+}
+
+impl<C: Curve> Gate<C::BaseField> for CurveAddGate<C> {
+    const ID: usize = 1;
+}
+
+impl<C: Curve> WitnessGenerator<C::BaseField> for CurveAddGate<C> {
+    fn dependencies(&self) -> Vec<GateInput> {
+        vec![
+            GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_X },
+            GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_Y },
+            GateInput { gate: self.index, input: Self::WIRE_SCALAR_ACC_OLD },
+            GateInput { gate: self.index, input: Self::WIRE_ADDEND_X },
+            GateInput { gate: self.index, input: Self::WIRE_ADDEND_Y },
+            GateInput { gate: self.index, input: Self::WIRE_SCALAR_BIT },
+        ]
+    }
+
+    fn generate(&self, witness: &PartialWitness<<C as Curve>::BaseField>) -> PartialWitness<<C as Curve>::BaseField> {
+        let group_acc_old_x_target = GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_X };
+        let group_acc_new_x_target = GateInput { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_X };
+        let group_acc_old_y_target = GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
+        let group_acc_new_y_target = GateInput { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_Y };
+        let scalar_acc_old_target = GateInput { gate: self.index, input: Self::WIRE_SCALAR_ACC_OLD };
+        let scalar_acc_new_target = GateInput { gate: self.index, input: Self::WIRE_SCALAR_ACC_NEW };
+        let addend_x_target = GateInput { gate: self.index, input: Self::WIRE_ADDEND_X };
+        let addend_y_target = GateInput { gate: self.index, input: Self::WIRE_ADDEND_Y };
+        let scalar_bit_target = GateInput { gate: self.index, input: Self::WIRE_SCALAR_BIT };
+        let inverse_target = GateInput { gate: self.index, input: Self::WIRE_INVERSE };
+
+        let group_acc_old_x = witness.wire_values[&group_acc_old_x_target];
+        let group_acc_old_y = witness.wire_values[&group_acc_old_y_target];
+        let group_acc_old = AffinePoint::<C>::nonzero(group_acc_old_x, group_acc_old_y);
+
+        let scalar_acc_old = witness.wire_values[&scalar_acc_old_target];
+
+        let addend_x = witness.wire_values[&addend_x_target];
+        let addend_y = witness.wire_values[&addend_y_target];
+        let addend = AffinePoint::<C>::nonzero(addend_x, addend_y);
+
+        let scalar_bit = witness.wire_values[&scalar_bit_target];
+        debug_assert!(scalar_bit.is_zero() || scalar_bit.is_one());
+
+        let mut group_acc_new = group_acc_old;
+        if scalar_bit.is_one() {
+            group_acc_new = (group_acc_new + addend).to_affine();
+        }
+
+        let scalar_acc_new = scalar_acc_old.double() + scalar_bit;
+
+        // Here's where our abstraction leaks a bit. Although we already have the sum, we need to
+        // redo part of the computation in order to populate the purported inverse wire.
+        let dx = group_acc_old_x - addend_x;
+        let dy = group_acc_old_y - addend_y;
+        let inverse = dx.multiplicative_inverse().expect("x_1 = x_2");
+
+        let mut result = PartialWitness::new();
+        result.wire_values.insert(group_acc_new_x_target, group_acc_new.x);
+        result.wire_values.insert(group_acc_new_y_target, group_acc_new.y);
+        result.wire_values.insert(scalar_acc_new_target, scalar_acc_new);
+        result.wire_values.insert(inverse_target, inverse);
+        result
+    }
+}
+
+/// A curve which performs point doubling.
+pub(crate) struct CurveDblGate<C: Curve> {
+    index: usize,
+    _phantom: PhantomData<C>,
+}
+
+impl<C: Curve> CurveDblGate<C> {
+    const WIRE_X_OLD: usize = 0;
+    const WIRE_Y_OLD: usize = 1;
+    const WIRE_X_NEW: usize = 2;
+    const WIRE_Y_NEW: usize = 3;
+    const WIRE_INVERSE: usize = 4;
+}
+
+impl<C: Curve> Gate<C::BaseField> for CurveDblGate<C> {
+    const ID: usize = 2;
+}
+
+impl<C: Curve> WitnessGenerator<C::BaseField> for CurveDblGate<C> {
+    fn dependencies(&self) -> Vec<GateInput> {
+        vec![
+            GateInput { gate: self.index, input: Self::WIRE_X_OLD },
+            GateInput { gate: self.index, input: Self::WIRE_Y_OLD },
+        ]
+    }
+
+    fn generate(&self, witness: &PartialWitness<<C as Curve>::BaseField>) -> PartialWitness<<C as Curve>::BaseField> {
+        let x_old_target = GateInput { gate: self.index, input: Self::WIRE_X_OLD };
+        let y_old_target = GateInput { gate: self.index, input: Self::WIRE_Y_OLD };
+        let x_new_target = GateInput { gate: self.index, input: Self::WIRE_X_NEW };
+        let y_new_target = GateInput { gate: self.index, input: Self::WIRE_Y_NEW };
+        let inverse_target = GateInput { gate: self.index, input: Self::WIRE_INVERSE };
+
+        let x_old = witness.wire_values[&x_old_target];
+        let y_old = witness.wire_values[&y_old_target];
+        let old = AffinePoint::<C>::nonzero(x_old, y_old);
+        let new = old.double();
+
+        // Here's where our abstraction leaks a bit. Although we already have the result, we need to
+        // redo part of the computation in order to populate the purported inverse wire.
+        let inverse = y_old.double().multiplicative_inverse().expect("y = 0");
+
+        let mut result = PartialWitness::new();
+        result.wire_values.insert(inverse_target, inverse);
+        result.wire_values.insert(x_new_target, new.x);
+        result.wire_values.insert(y_new_target, new.y);
+        result
+    }
+}
+
+/// A gate which performs an iteration of an simultaneous doubling MSM loop, employing the
+/// endomorphism described in the Halo paper. `C` is the curve of the inner proof.
+pub(crate) struct CurveEndoGate<C: HaloEndomorphismCurve> {
+    index: usize,
+    _phantom: PhantomData<C>,
+}
+
+impl<C: HaloEndomorphismCurve> CurveEndoGate<C> {
     const WIRE_GROUP_ACC_X: usize = 0;
     const WIRE_GROUP_ACC_Y: usize = 1;
     const WIRE_SCALAR_ACC_UNSIGNED: usize = 2;
@@ -47,11 +180,11 @@ impl<C: HaloEndomorphismCurve> MsmGate<C> {
     const WIRE_INVERSE: usize = 8;
 }
 
-impl<C: HaloEndomorphismCurve> Gate<C::BaseField> for MsmGate<C> {
-    const ID: usize = 1;
+impl<C: HaloEndomorphismCurve> Gate<C::BaseField> for CurveEndoGate<C> {
+    const ID: usize = 3;
 }
 
-impl<C: HaloEndomorphismCurve> WitnessGenerator<C::BaseField> for MsmGate<C> {
+impl<C: HaloEndomorphismCurve> WitnessGenerator<C::BaseField> for CurveEndoGate<C> {
     fn dependencies(&self) -> Vec<GateInput> {
         vec![
             GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_X },
@@ -80,6 +213,7 @@ impl<C: HaloEndomorphismCurve> WitnessGenerator<C::BaseField> for MsmGate<C> {
         let addend_y_target = GateInput { gate: self.index, input: Self::WIRE_ADDEND_Y };
         let scalar_bit_0_target = GateInput { gate: self.index, input: Self::WIRE_SCALAR_BIT_0 };
         let scalar_bit_1_target = GateInput { gate: self.index, input: Self::WIRE_SCALAR_BIT_1 };
+        let inverse_target = GateInput { gate: self.index, input: Self::WIRE_INVERSE };
 
         let group_acc_old_x = witness.wire_values[&group_acc_old_x_target];
         let group_acc_old_y = witness.wire_values[&group_acc_old_y_target];
@@ -121,11 +255,18 @@ impl<C: HaloEndomorphismCurve> WitnessGenerator<C::BaseField> for MsmGate<C> {
         }
         let scalar_acc_signed_new = scalar_acc_signed_old.double() + scalar_acc_signed_limb;
 
+        // Here's where our abstraction leaks a bit. Although we already have the sum, we need to
+        // redo part of the computation in order to populate the purported inverse wire.
+        let dx = group_acc_old_x - p_x;
+        let dy = group_acc_old_y - p_y;
+        let inverse = dx.multiplicative_inverse().expect("x_1 = x_2");
+
         let mut result = PartialWitness::new();
         result.wire_values.insert(group_acc_new_x_target, group_acc_new.x);
         result.wire_values.insert(group_acc_new_y_target, group_acc_new.y);
         result.wire_values.insert(scalar_acc_unsigned_new_target, scalar_acc_unsigned_new);
         result.wire_values.insert(scalar_acc_signed_new_target, scalar_acc_signed_new);
+        result.wire_values.insert(inverse_target, inverse);
 
         result
     }
@@ -157,7 +298,7 @@ impl RescueGate {
 }
 
 impl<F: Field> Gate<F> for RescueGate {
-    const ID: usize = 2;
+    const ID: usize = 4;
 }
 
 impl<F: Field> WitnessGenerator<F> for RescueGate {
@@ -245,7 +386,7 @@ impl Base4SumGate {
 }
 
 impl<F: Field> Gate<F> for Base4SumGate {
-    const ID: usize = 3;
+    const ID: usize = 5;
 }
 
 impl<F: Field> WitnessGenerator<F> for Base4SumGate {
@@ -274,7 +415,7 @@ impl<F: Field> MaddGate<F> {
 }
 
 impl<F: Field> Gate<F> for MaddGate<F> {
-    const ID: usize = 4;
+    const ID: usize = 6;
 }
 
 impl<F: Field> WitnessGenerator<F> for MaddGate<F> {
