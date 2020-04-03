@@ -1,4 +1,4 @@
-use crate::{GateInput, WitnessGenerator, Field, PartialWitness, AffinePoint, HaloEndomorphismCurve, Curve};
+use crate::{GateInput, WitnessGenerator, Field, PartialWitness, AffinePoint, HaloEndomorphismCurve, Curve, GRID_WIDTH};
 use std::marker::PhantomData;
 
 pub(crate) trait Gate<F: Field>: 'static + WitnessGenerator<F> {
@@ -205,9 +205,9 @@ impl<C: HaloEndomorphismCurve> WitnessGenerator<C::BaseField> for CurveEndoGate<
         let group_acc_new_y_target = GateInput { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_Y };
 
         let scalar_acc_unsigned_old_target = GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
-        let scalar_acc_unsigned_new_target = GateInput { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_Y };
+        let scalar_acc_unsigned_new_target = GateInput { gate: self.index + GRID_WIDTH, input: Self::WIRE_GROUP_ACC_Y };
         let scalar_acc_signed_old_target = GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
-        let scalar_acc_signed_new_target = GateInput { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_Y };
+        let scalar_acc_signed_new_target = GateInput { gate: self.index + GRID_WIDTH, input: Self::WIRE_GROUP_ACC_Y };
 
         let addend_x_target = GateInput { gate: self.index, input: Self::WIRE_ADDEND_X };
         let addend_y_target = GateInput { gate: self.index, input: Self::WIRE_ADDEND_Y };
