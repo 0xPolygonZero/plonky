@@ -437,7 +437,8 @@ impl<F: Field> WitnessGenerator<F> for MaddGate<F> {
         let multiplicand_1 = witness.wire_values[&multiplicand_1_target];
         let addend = witness.wire_values[&addend_target];
 
-        let output = multiplicand_0 * multiplicand_1 + addend;
+        let mad = multiplicand_0 * multiplicand_1 + addend;
+        let output = self.scalar * mad;
 
         let mut result = PartialWitness::new();
         result.wire_values.insert(output_target, output);
