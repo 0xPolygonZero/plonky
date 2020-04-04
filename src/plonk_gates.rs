@@ -5,20 +5,27 @@ pub(crate) trait Gate<F: Field>: 'static + WitnessGenerator<F> {
     const ID: usize;
 }
 
-pub(crate) struct NoopGate { index: usize }
+/// A gate which doesn't perform any arithmetic, but just acts as a buffer for receiving data. This
+/// is used in a couple ways:
+/// * Public inputs can be "received" via `WIRE_BUFFER_PI`.
+/// * Some gates, such as the Rescue round gate, "output" their results using one of the next gate's
+///   "input" wires. The last such gate has no next gate of the same type, so we add a buffer gate
+///   for receiving the last gate's output.
+pub(crate) struct BufferGate { pub index: usize }
 
-impl NoopGate {
-    const WIRE_BUFFER_0: usize = 0;
-    const WIRE_BUFFER_1: usize = 1;
-    const WIRE_BUFFER_2: usize = 2;
-    const WIRE_BUFFER_3: usize = 3;
+impl BufferGate {
+    pub const WIRE_BUFFER_0: usize = 0;
+    pub const WIRE_BUFFER_1: usize = 1;
+    pub const WIRE_BUFFER_2: usize = 2;
+    pub const WIRE_BUFFER_3: usize = 3;
+    pub const WIRE_BUFFER_PI: usize = 4;
 }
 
-impl<F: Field> Gate<F> for NoopGate {
+impl<F: Field> Gate<F> for BufferGate {
     const ID: usize = 0;
 }
 
-impl<F: Field> WitnessGenerator<F> for NoopGate {
+impl<F: Field> WitnessGenerator<F> for BufferGate {
     fn dependencies(&self) -> Vec<GateInput> {
         Vec::new()
     }
@@ -33,7 +40,7 @@ impl<F: Field> WitnessGenerator<F> for NoopGate {
 /// facilitate MSMs which use this gate, it also adds the bit to an accumulator. `C` is the curve
 /// of the inner proof.
 pub(crate) struct CurveAddGate<C: Curve> {
-    index: usize,
+    pub index: usize,
     _phantom: PhantomData<C>,
 }
 
@@ -113,7 +120,7 @@ impl<C: Curve> WitnessGenerator<C::BaseField> for CurveAddGate<C> {
 
 /// A curve which performs point doubling.
 pub(crate) struct CurveDblGate<C: Curve> {
-    index: usize,
+    pub index: usize,
     _phantom: PhantomData<C>,
 }
 
@@ -164,7 +171,7 @@ impl<C: Curve> WitnessGenerator<C::BaseField> for CurveDblGate<C> {
 /// A gate which performs an iteration of an simultaneous doubling MSM loop, employing the
 /// endomorphism described in the Halo paper. `C` is the curve of the inner proof.
 pub(crate) struct CurveEndoGate<C: HaloEndomorphismCurve> {
-    index: usize,
+    pub index: usize,
     _phantom: PhantomData<C>,
 }
 
@@ -272,7 +279,7 @@ impl<C: HaloEndomorphismCurve> WitnessGenerator<C::BaseField> for CurveEndoGate<
     }
 }
 
-pub(crate) struct RescueGate { index: usize }
+pub(crate) struct RescueGate { pub index: usize }
 
 impl RescueGate {
     const WIRE_INPUT_0: usize = 0;
@@ -371,7 +378,7 @@ impl<F: Field> WitnessGenerator<F> for RescueGate {
     }
 }
 
-pub(crate) struct Base4SumGate { index: usize }
+pub(crate) struct Base4SumGate { pub index: usize }
 
 impl Base4SumGate {
     const WIRE_ACC: usize = 0;
@@ -403,7 +410,7 @@ impl<F: Field> WitnessGenerator<F> for Base4SumGate {
 
 /// A "multiply, add, and rescale" gate.
 pub(crate) struct MaddGate<F: Field> {
-    index: usize,
+    pub index: usize,
     scalar: F
 }
 

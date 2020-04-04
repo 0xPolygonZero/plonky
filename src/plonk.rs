@@ -1,7 +1,7 @@
 use crate::Field;
 use std::time::Instant;
 use std::collections::HashMap;
-use crate::plonk_gates::Gate;
+use crate::plonk_gates::{Gate, BufferGate};
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const GRID_WIDTH: usize = 65;
@@ -35,25 +35,29 @@ pub struct Circuit<F: Field> {
 }
 
 impl<F: Field> Circuit<F> {
-    fn generate_witness(&self) {
+    pub fn num_gates(&self) -> usize {
+        self.gate_ids.len()
+    }
+
+    pub fn generate_witness(&self) {
         let start = Instant::now();
         println!("Witness generation took {}s", start.elapsed().as_secs_f32());
         todo!()
     }
 }
 
-#[derive(Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct CircuitInput {
     pub index: usize,
 }
 
-#[derive(Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct GateInput {
     pub gate: usize,
     pub input: usize,
 }
 
-#[derive(Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum RoutingTarget {
     CircuitInput(CircuitInput),
     GateInput(GateInput),
@@ -84,11 +88,13 @@ impl<F: Field> CircuitBuilder<F> {
     }
 
     pub fn add_public_input(&mut self) -> GateInput {
-        todo!()
+        let index = self.gate_ids.len();
+        self.add_gate(BufferGate { index });
+        GateInput { gate: index, input: BufferGate::WIRE_BUFFER_PI }
     }
 
     pub fn add_public_inputs(&mut self, n: usize) -> Vec<GateInput> {
-        todo!()
+        (0..n).map(|i| self.add_public_input()).collect()
     }
 
     pub fn add_circuit_input(&mut self) -> CircuitInput {
@@ -112,14 +118,30 @@ impl<F: Field> CircuitBuilder<F> {
         self.copy_constraints.push((target_1, target_2));
     }
 
-    pub fn build(&self) -> Circuit<F> {
-        // TODO: Shift indices
-        // TODO: Add dummy gates through which public inputs can be routed to other gates.
-        todo!()
+    pub fn build(self) -> Circuit<F> {
+        let routing_target_partitions = self.get_routing_partitions();
+        let CircuitBuilder { circuit_input_index, gate_ids, copy_constraints, generators } = self;
+        Circuit { gate_ids, routing_target_partitions, generators }
     }
 
     fn get_routing_partitions(&self) -> RoutingTargetPartitions {
-        todo!()
+        let mut partitions = RoutingTargetPartitions::new();
+
+        for i in 0..self.circuit_input_index {
+            partitions.add_partition(RoutingTarget::CircuitInput(CircuitInput { index: i }));
+        }
+
+        for gate in 0..self.gate_ids.len() {
+            for input in 0..NUM_WIRES {
+                partitions.add_partition(RoutingTarget::GateInput(GateInput { gate, input }));
+            }
+        }
+
+        for &(a, b) in &self.copy_constraints {
+            partitions.merge(a, b);
+        }
+
+        partitions
     }
 }
 
@@ -129,6 +151,35 @@ struct RoutingTargetPartitions {
 }
 
 impl RoutingTargetPartitions {
+    fn new() -> Self {
+        Self { partitions: Vec::new(), indices: HashMap::new() }
+    }
+
+    /// Add a new partition with a single member.
+    fn add_partition(&mut self, target: RoutingTarget) {
+        let index = self.partitions.len();
+        self.partitions.push(vec![target]);
+        self.indices.insert(target, index);
+    }
+
+    /// Merge the two partitions containing the two given targets. Does nothing if the targets are
+    /// already members of the same partition.
+    fn merge(&mut self, a: RoutingTarget, b: RoutingTarget) {
+        let a_index = self.indices[&a];
+        let b_index = self.indices[&b];
+        if a_index != b_index {
+            // Merge a's partition into b's partition, leaving a's partition empty.
+            // We have to clone because Rust's borrow checker doesn't know that
+            // self.partitions[b_index] and self.partitions[b_index] are disjoint.
+            let mut a_partition = self.partitions[a_index].clone();
+            let b_partition = &mut self.partitions[b_index];
+            for a_sibling in &a_partition {
+                *self.indices.get_mut(a_sibling).unwrap() = b_index;
+            }
+            b_partition.append(&mut a_partition);
+        }
+    }
+
     fn to_gate_inputs(&self) -> GateInputPartitions {
         todo!()
     }

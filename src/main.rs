@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use plonky::{Curve, fft_precompute, fft_with_precomputation, FftPrecomputation, Field, msm_execute_parallel, msm_precompute, MsmPrecomputation, ProjectivePoint, Tweedledee, TWEEDLEDEE_GENERATOR_PROJECTIVE};
+use plonky::{Curve, fft_precompute, fft_with_precomputation, FftPrecomputation, Field, msm_execute_parallel, msm_precompute, MsmPrecomputation, ProjectivePoint, Tweedledee, TWEEDLEDEE_GENERATOR_PROJECTIVE, recursive_verification_circuit, Tweedledum};
 
 const DEGREE: usize = 1 << 12;
 const MSM_COUNT: usize = 10 + 1 + 7; // 10 wires, Z, and 7 components of t
@@ -12,14 +12,17 @@ fn main() {
     // Configure the main thread pool size.
     // rayon::ThreadPoolBuilder::new().num_threads(8).build_global().unwrap();
 
-    run_all_ffts();
+    let degree_pow = 13;
+    recursive_verification_circuit::<Tweedledum>(degree_pow);
 
-    let mut generators = Vec::with_capacity(DEGREE);
-    let mut scalars = Vec::with_capacity(DEGREE);
-    for _i in 0..DEGREE {
-        generators.push(TWEEDLEDEE_GENERATOR_PROJECTIVE);
-        scalars.push(SF::rand());
-    }
+    // run_all_ffts();
+    //
+    // let mut generators = Vec::with_capacity(DEGREE);
+    // let mut scalars = Vec::with_capacity(DEGREE);
+    // for _i in 0..DEGREE {
+    //     generators.push(TWEEDLEDEE_GENERATOR_PROJECTIVE);
+    //     scalars.push(SF::rand());
+    // }
 
     // Here's a quick Python snippet to calculate optimal window sizes:
     //     degree = 2**12
@@ -30,11 +33,11 @@ fn main() {
     // This is oversimplified though, as it doesn't account for the different summation methods we
     // use for different problem sizes. So some trial and error is needed to find the best config.
 
-    for w in 11..=11 {
-        println!();
-        println!("MSM WITH WINDOW SIZE {}", w);
-        run_msms(w, &generators, &scalars);
-    }
+    // for w in 11..=11 {
+    //     println!();
+    //     println!("MSM WITH WINDOW SIZE {}", w);
+    //     run_msms(w, &generators, &scalars);
+    // }
 }
 
 fn run_all_ffts() {

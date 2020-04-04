@@ -17,6 +17,7 @@ pub use curve_summations::*;
 pub use fft::*;
 pub use field::*;
 pub use plonk::*;
+pub use plonk_recursion::*;
 pub use poly_commit::*;
 pub use tweedledee_base::*;
 pub use tweedledee_curve::*;

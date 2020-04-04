@@ -1,6 +1,6 @@
-use crate::{Field, CircuitInput, Circuit, CircuitBuilder, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER};
+use crate::{Field, CircuitInput, Circuit, CircuitBuilder, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, HaloEndomorphismCurve};
 
-struct RecursiveCircuit<F: Field> {
+pub struct RecursiveCircuit<F: Field> {
     /// A commitment to each wire polynomial.
     c_wires: Vec<CircuitInput>,
     /// A commitment to Z in the context of the permutation argument.
@@ -16,10 +16,10 @@ struct RecursiveCircuit<F: Field> {
     circuit: Circuit<F>,
 }
 
-fn recursive_verification_circuit<F: Field>(degree_pow: usize) -> RecursiveCircuit<F> {
-    let mut builder = CircuitBuilder::new();
+pub fn recursive_verification_circuit<C: HaloEndomorphismCurve>(degree_pow: usize) -> RecursiveCircuit<C::BaseField> {
+    let mut builder = CircuitBuilder::<C::BaseField>::new();
 
-    let inner_c_is_noop = builder.add_public_input();
+    let inner_c_is_buffer = builder.add_public_input();
     let inner_c_is_curve_add = builder.add_public_input();
     let inner_c_is_curve_dbl = builder.add_public_input();
     let inner_c_is_curve_endo = builder.add_public_input();
@@ -28,7 +28,7 @@ fn recursive_verification_circuit<F: Field>(degree_pow: usize) -> RecursiveCircu
     let inner_c_is_madd = builder.add_public_input();
     let inner_c_const = builder.add_public_input();
 
-    let inner_o_is_noop = builder.add_public_input();
+    let inner_o_is_buffer = builder.add_public_input();
     let inner_o_is_curve_add = builder.add_public_input();
     let inner_o_is_curve_dbl = builder.add_public_input();
     let inner_o_is_curve_endo = builder.add_public_input();
@@ -36,7 +36,11 @@ fn recursive_verification_circuit<F: Field>(degree_pow: usize) -> RecursiveCircu
     let inner_o_is_base4sum = builder.add_public_input();
     let inner_o_is_madd = builder.add_public_input();
     let inner_o_const = builder.add_public_input();
+    let inner_o_wires = builder.add_public_inputs(NUM_WIRES);
+    let inner_o_z = builder.add_public_input();
     let inner_o_t = builder.add_public_inputs(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER);
+    let inner_u = builder.add_public_inputs(degree_pow);
+    let inner_pi_hash = builder.add_public_input();
 
     // A commitment to each wire polynomial.
     let mut c_wires = Vec::with_capacity(NUM_WIRES);
@@ -61,6 +65,7 @@ fn recursive_verification_circuit<F: Field>(degree_pow: usize) -> RecursiveCircu
     }
 
     let circuit = builder.build();
+    println!("Recursive circuit gate count: {}", circuit.num_gates());
     RecursiveCircuit {
         c_wires,
         c_z,

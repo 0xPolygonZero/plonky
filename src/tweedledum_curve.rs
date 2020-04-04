@@ -1,4 +1,4 @@
-use crate::{Curve, Field, TweedledeeBase, TweedledumBase, AffinePoint, ProjectivePoint};
+use crate::{Curve, Field, TweedledeeBase, TweedledumBase, AffinePoint, ProjectivePoint, HaloEndomorphismCurve};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Tweedledum;
@@ -22,4 +22,9 @@ impl Curve for Tweedledum {
 
     const A: TweedledumBase = TweedledumBase::ZERO;
     const B: TweedledumBase = TweedledumBase::ONE;
+}
+
+impl HaloEndomorphismCurve for Tweedledum {
+    // TODO: Configure zeta
+    const ZETA: Self::BaseField = TweedledumBase::ZERO;
 }
