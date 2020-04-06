@@ -181,7 +181,27 @@ impl RoutingTargetPartitions {
     }
 
     fn to_gate_inputs(&self) -> GateInputPartitions {
-        todo!()
+        // Here we just drop all CircuitInputs, leaving all GateInputs.
+        let mut partitions = Vec::new();
+        let mut indices = HashMap::new();
+
+        for old_partition in &self.partitions {
+            let mut new_partition = Vec::new();
+            for target in old_partition {
+                if let &RoutingTarget::GateInput(gi) = target {
+                    new_partition.push(gi);
+                }
+            }
+            partitions.push(new_partition);
+        }
+
+        for (&target, &index) in &self.indices {
+            if let RoutingTarget::GateInput(gi) = target {
+                indices.insert(gi, index);
+            }
+        }
+
+        GateInputPartitions { partitions, indices }
     }
 }
 

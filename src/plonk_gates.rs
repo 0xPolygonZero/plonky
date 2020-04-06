@@ -279,9 +279,13 @@ impl<C: HaloEndomorphismCurve> WitnessGenerator<C::BaseField> for CurveEndoGate<
     }
 }
 
-pub(crate) struct RescueGate { pub index: usize }
+pub(crate) struct RescueGate<F: Field> {
+    pub index: usize,
+    pub key_0: F,
+    pub key_1: F,
+}
 
-impl RescueGate {
+impl<F: Field> RescueGate<F> {
     const WIRE_INPUT_0: usize = 0;
     const WIRE_INPUT_1: usize = 1;
     const WIRE_INPUT_2: usize = 2;
@@ -293,7 +297,7 @@ impl RescueGate {
 
     const MDS: [[u64; 4]; 4] = [[2, 3, 1, 1], [1, 2, 3, 1], [1, 1, 2, 3], [3, 1, 1, 2]];
 
-    fn mds<F: Field>() -> [[F; 4]; 4] {
+    fn mds() -> [[F; 4]; 4] {
         let mut result = [[F::ZERO; 4]; 4];
         for r in 0..4 {
             for c in 0..4 {
@@ -304,11 +308,11 @@ impl RescueGate {
     }
 }
 
-impl<F: Field> Gate<F> for RescueGate {
+impl<F: Field> Gate<F> for RescueGate<F> {
     const ID: usize = 4;
 }
 
-impl<F: Field> WitnessGenerator<F> for RescueGate {
+impl<F: Field> WitnessGenerator<F> for RescueGate<F> {
     fn dependencies(&self) -> Vec<GateInput> {
         vec![
             GateInput { gate: self.index, input: Self::WIRE_INPUT_0 },
@@ -344,7 +348,7 @@ impl<F: Field> WitnessGenerator<F> for RescueGate {
         let in_2_cubed = in_2.cube();
         let in_3_cubed = in_3.cube();
 
-        let mds = Self::mds::<F>();
+        let mds = Self::mds();
         let step_0 = mds[0][0] * in_0_cubed + mds[0][1] * in_1_cubed + mds[0][2] * in_2_cubed + mds[0][3] * in_3_cubed;
         let step_1 = mds[1][0] * in_0_cubed + mds[1][1] * in_1_cubed + mds[1][2] * in_2_cubed + mds[1][3] * in_3_cubed;
         let step_2 = mds[2][0] * in_0_cubed + mds[2][1] * in_1_cubed + mds[2][2] * in_2_cubed + mds[2][3] * in_3_cubed;
