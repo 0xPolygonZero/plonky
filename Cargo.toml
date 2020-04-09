@@ -11,14 +11,14 @@ categories = ["cryptography"]
 edition = "2018"
 
 [dependencies]
-unroll = "0.1.4"
 getrandom = "0.1.14"
+num = "0.2.1"
 rand = "0.7.3"
 rayon = "1.3.0"
+unroll = "0.1.4"
 
 [dev-dependencies]
 criterion = "0.2"
-num = "0.2.1"
 
 [[bench]]
 name = "bigint_arithmetic"

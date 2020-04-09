@@ -208,11 +208,11 @@ impl Field for Bls12377Base {
 
     const MULTIPLICATIVE_SUBGROUP_GENERATOR: Self = Self::FIVE;
 
-    fn to_canonical_vec(&self) -> Vec<u64> {
+    fn to_canonical_u64_vec(&self) -> Vec<u64> {
         self.to_canonical().to_vec()
     }
 
-    fn from_canonical_vec(v: Vec<u64>) -> Self {
+    fn from_canonical_u64_vec(v: Vec<u64>) -> Self {
         Self::from_canonical(v[..].try_into().unwrap())
     }
 
@@ -344,5 +344,19 @@ mod tests {
         assert_eq!(Bls12377Base::from_canonical([0, 1, 0, 0, 0, 0]).num_bits(), 64 + 1);
         assert_eq!(Bls12377Base::from_canonical([0, 0, 0, 0, 0, 1]).num_bits(), 64 * 5 + 1);
         assert_eq!(Bls12377Base::from_canonical([0, 0, 0, 0, 0, 0b10101]).num_bits(), 64 * 5 + 5)
+    }
+
+    #[test]
+    fn exp_and_kth_roots() {
+        for k in 1..10 {
+            assert_eq!(Bls12377Base::ZERO.exp_u32(k), Bls12377Base::ZERO);
+            assert_eq!(Bls12377Base::ONE.exp_u32(k), Bls12377Base::ONE);
+            assert_eq!(Bls12377Base::ZERO.kth_root_u32(k), Bls12377Base::ZERO);
+            assert_eq!(Bls12377Base::ONE.kth_root_u32(k), Bls12377Base::ONE);
+        }
+
+        assert_eq!(Bls12377Base::FIVE.kth_root_u32(3).exp_u32(3), Bls12377Base::FIVE);
+        assert_eq!(Bls12377Base::FIVE.kth_root_u32(5).exp_u32(5), Bls12377Base::FIVE);
+        assert_eq!(Bls12377Base::FIVE.kth_root_u32(7).exp_u32(7), Bls12377Base::FIVE);
     }
 }

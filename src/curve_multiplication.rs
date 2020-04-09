@@ -74,7 +74,7 @@ fn to_digits<C: Curve>(x: &C::ScalarField) -> Vec<u64> {
                   "For simplicity, only power-of-two window sizes are handled for now");
     let digits_per_u64 = 64 / WINDOW_BITS;
     let mut digits = Vec::with_capacity(digits_per_scalar::<C>());
-    for limb in x.to_canonical_vec() {
+    for limb in x.to_canonical_u64_vec() {
         for j in 0..digits_per_u64 {
             digits.push((limb >> (j * WINDOW_BITS) as u64) % BASE as u64);
         }

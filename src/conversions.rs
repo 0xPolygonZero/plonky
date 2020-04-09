@@ -1,5 +1,19 @@
 use num::BigUint;
 
+use crate::Field;
+
+pub fn field_to_biguint<F: Field>(f: F) -> BigUint {
+    BigUint::from_slice(&f.to_canonical_u32_vec())
+}
+
+pub fn biguint_to_field<F: Field>(bu: BigUint) -> F {
+    let mut u32_limbs = bu.to_u32_digits();
+    while u32_limbs.len() * 32 < F::BITS {
+        u32_limbs.push(0);
+    }
+    F::from_canonical_u32_vec(u32_limbs)
+}
+
 pub fn u64_slice_to_biguint(n: &[u64]) -> BigUint {
     let mut bytes_le = Vec::new();
     for n_i in n {

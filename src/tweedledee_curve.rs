@@ -1,4 +1,4 @@
-use crate::{Curve, Field, TweedledeeBase, TweedledumBase, AffinePoint, ProjectivePoint, HaloEndomorphismCurve};
+use crate::{AffinePoint, Curve, Field, HaloEndomorphismCurve, ProjectivePoint, TweedledeeBase, TweedledumBase};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Tweedledee;

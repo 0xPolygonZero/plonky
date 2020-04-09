@@ -2,7 +2,7 @@ use criterion::{black_box, Criterion};
 use criterion::criterion_group;
 use criterion::criterion_main;
 
-use plonky::{TweedledeeBase, Field};
+use plonky::{Field, TweedledeeBase};
 
 fn criterion_benchmark(c: &mut Criterion) {
     let x = TweedledeeBase::from_canonical([11111111, 22222222, 33333333, 44444444]);

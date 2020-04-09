@@ -1,4 +1,4 @@
-use crate::{Field, CircuitInput, Circuit, CircuitBuilder, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, HaloEndomorphismCurve};
+use crate::{Circuit, CircuitBuilder, CircuitInput, Field, HaloEndomorphismCurve, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER};
 
 pub struct RecursiveCircuit<F: Field> {
     /// A commitment to each wire polynomial.

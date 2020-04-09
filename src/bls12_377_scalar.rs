@@ -162,11 +162,11 @@ impl Field for Bls12377Scalar {
 
     const MULTIPLICATIVE_SUBGROUP_GENERATOR: Self = Self { limbs: [1855201571499933546, 8511318076631809892, 6222514765367795509, 1122129207579058019] };
 
-    fn to_canonical_vec(&self) -> Vec<u64> {
+    fn to_canonical_u64_vec(&self) -> Vec<u64> {
         self.to_canonical().to_vec()
     }
 
-    fn from_canonical_vec(v: Vec<u64>) -> Self {
+    fn from_canonical_u64_vec(v: Vec<u64>) -> Self {
         Self::from_canonical(v[..].try_into().unwrap())
     }
 

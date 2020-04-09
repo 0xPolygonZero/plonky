@@ -1,7 +1,8 @@
-use crate::Field;
-use std::time::Instant;
 use std::collections::HashMap;
-use crate::plonk_gates::{Gate, BufferGate};
+use std::time::Instant;
+
+use crate::Field;
+use crate::plonk_gates::{BufferGate, Gate};
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const GRID_WIDTH: usize = 65;
@@ -101,6 +102,12 @@ impl<F: Field> CircuitBuilder<F> {
         let index = self.circuit_input_index;
         self.circuit_input_index += 1;
         CircuitInput { index }
+    }
+
+    pub fn add_rescue(&mut self) {
+        for r in 0..16 {
+            // TODO
+        }
     }
 
     pub fn add_msm_endo(&mut self, parts: &[MsmEndoPart]) {

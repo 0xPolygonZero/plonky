@@ -2,6 +2,10 @@ use std::collections::HashSet;
 use std::hash::Hash;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
+use num::{BigUint, FromPrimitive, Integer, One};
+
+use crate::{biguint_to_field, field_to_biguint};
+
 pub trait Field: 'static + Sized + Copy + Eq + Send + Sync
 + Neg<Output=Self>
 + Add<Self, Output=Self>
@@ -20,11 +24,28 @@ pub trait Field: 'static + Sized + Copy + Eq + Send + Sync
 
     const MULTIPLICATIVE_SUBGROUP_GENERATOR: Self;
 
-    fn to_canonical_vec(&self) -> Vec<u64>;
+    fn to_canonical_u64_vec(&self) -> Vec<u64>;
 
-    fn from_canonical_vec(v: Vec<u64>) -> Self;
+    fn to_canonical_u32_vec(&self) -> Vec<u32> {
+        let mut limbs = Vec::new();
+        for u64_limb in self.to_canonical_u64_vec() {
+            limbs.push(u64_limb as u32);
+            limbs.push((u64_limb >> 64) as u32);
+        }
+        limbs
+    }
+
+    fn from_canonical_u64_vec(v: Vec<u64>) -> Self;
+
+    fn from_canonical_u32_vec(v: Vec<u32>) -> Self {
+        todo!()
+    }
 
     fn from_canonical_u64(n: u64) -> Self;
+
+    fn from_canonical_u32(n: u32) -> Self {
+        Self::from_canonical_u64(n as u64)
+    }
 
     fn from_canonical_usize(n: usize) -> Self {
         Self::from_canonical_u64(n as u64)
@@ -171,7 +192,7 @@ pub trait Field: 'static + Sized + Copy + Eq + Send + Sync
         let mut current = *self;
         let mut product = Self::ONE;
 
-        for (i, limb) in power.to_canonical_vec().iter().enumerate() {
+        for (i, limb) in power.to_canonical_u64_vec().iter().enumerate() {
             for j in 0..64 {
                 // If we've gone through all the 1 bits already, no need to keep squaring.
                 let bit_index = i * 64 + j;
@@ -189,13 +210,46 @@ pub trait Field: 'static + Sized + Copy + Eq + Send + Sync
         product
     }
 
-    fn exp_usize(&self, power: usize) -> Self {
-        self.exp(Self::from_canonical_usize(power))
+    fn exp_u32(&self, power: u32) -> Self {
+        self.exp(Self::from_canonical_u32(power))
+    }
+
+    fn kth_root_u32(&self, k: u32) -> Self {
+        fn mod_u32<F: Field>(f: F, m: u32) -> u32 {
+            let m_u64 = m as u64;
+            let limb_multiplier = (1u64 << 32) % m_u64;
+            let limbs = f.to_canonical_u64_vec();
+            let mut acc = 0;
+            let mut weight = 1;
+            for limb in limbs {
+                acc += (weight * limb) % m_u64;
+                weight = (weight * limb_multiplier) % m_u64;
+            }
+            acc as u32
+        }
+
+        // By Fermat's little theorem, x^p = x and x^(p - 1) = 1, so x^(p + n(p - 1)) = x for any n.
+        // Our assumption that the k'th root operation is a permutation implies gcd(p - 1, k) = 1,
+        // so there exists some n such that p + n(p - 1) is a multiple of k. Once we find such an n,
+        // we can rewrite the above as
+        //    x^((p + n(p - 1))/k)^k = x,
+        // implying that x^((p + n(p - 1))/k) is a k'th root of x.
+        let p_minus_1_bu = field_to_biguint(Self::NEG_ONE);
+        let p_bu = &p_minus_1_bu + BigUint::one();
+        let k_bu = BigUint::from_u32(k).unwrap();
+        for n in 0..k {
+            let numerator_bu = &p_bu + BigUint::from_u32(n).unwrap() * &p_minus_1_bu;
+            if numerator_bu.is_multiple_of(&k_bu) {
+                let power_bu = numerator_bu.div_floor(&k_bu);
+                return self.exp(biguint_to_field(power_bu));
+            }
+        }
+        panic!("The k'th root operation is not a permutation in this field, or we have a bug!");
     }
 
     fn num_bits(&self) -> usize {
         let mut n = 0;
-        for (i, limb) in self.to_canonical_vec().iter().enumerate() {
+        for (i, limb) in self.to_canonical_u64_vec().iter().enumerate() {
             for j in 0..64 {
                 if (limb >> j & 1) != 0 {
                     n = i * 64 + j + 1;

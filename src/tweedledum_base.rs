@@ -156,11 +156,11 @@ impl Field for TweedledumBase {
 
     const MULTIPLICATIVE_SUBGROUP_GENERATOR: Self = Self::FIVE;
 
-    fn to_canonical_vec(&self) -> Vec<u64> {
+    fn to_canonical_u64_vec(&self) -> Vec<u64> {
         self.to_canonical().to_vec()
     }
 
-    fn from_canonical_vec(v: Vec<u64>) -> Self {
+    fn from_canonical_u64_vec(v: Vec<u64>) -> Self {
         Self::from_canonical(v[..].try_into().unwrap())
     }
 
@@ -188,7 +188,7 @@ impl TwoAdicField for TweedledumBase {
 
 #[cfg(test)]
 mod tests {
-    use crate::{TweedledumBase, Field, TwoAdicField};
+    use crate::{Field, TweedledumBase, TwoAdicField};
 
     #[test]
     fn primitive_root_order() {

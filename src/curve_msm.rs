@@ -137,7 +137,7 @@ pub(crate) fn to_digits<C: Curve>(x: &C::ScalarField, w: usize) -> Vec<usize> {
     let num_digits = (scalar_bits + w - 1) / w;
 
     // Convert x to a bool array.
-    let x_canonical = x.to_canonical_vec();
+    let x_canonical = x.to_canonical_u64_vec();
     let mut x_bits = Vec::with_capacity(scalar_bits);
     for i in 0..scalar_bits {
         x_bits.push((x_canonical[i / 64] >> (i as u64 % 64) & 1) != 0);
