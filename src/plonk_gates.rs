@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::{AffinePoint, Curve, Field, GateInput, GRID_WIDTH, HaloEndomorphismCurve, PartialWitness, WitnessGenerator};
+use crate::{AffinePoint, Curve, Field, GateInput, GRID_WIDTH, HaloEndomorphismCurve, PartialWitness, WitnessGenerator, Circuit};
 use crate::mds::mds;
 
 pub(crate) trait Gate<F: Field>: 'static + WitnessGenerator<F> {
@@ -32,7 +32,7 @@ impl<F: Field> WitnessGenerator<F> for BufferGate {
         Vec::new()
     }
 
-    fn generate(&self, _witness: &PartialWitness<F>) -> PartialWitness<F> {
+    fn generate(&self, circuit: Circuit<F>, _witness: &PartialWitness<F>) -> PartialWitness<F> {
         // This gate does not generate any witness values.
         PartialWitness::new()
     }
@@ -73,7 +73,7 @@ impl<C: Curve> WitnessGenerator<C::BaseField> for CurveAddGate<C> {
         ]
     }
 
-    fn generate(&self, witness: &PartialWitness<<C as Curve>::BaseField>) -> PartialWitness<<C as Curve>::BaseField> {
+    fn generate(&self, circuit: Circuit<C::BaseField>, witness: &PartialWitness<<C as Curve>::BaseField>) -> PartialWitness<<C as Curve>::BaseField> {
         let group_acc_old_x_target = GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_X };
         let group_acc_new_x_target = GateInput { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_X };
         let group_acc_old_y_target = GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
@@ -146,7 +146,7 @@ impl<C: Curve> WitnessGenerator<C::BaseField> for CurveDblGate<C> {
         ]
     }
 
-    fn generate(&self, witness: &PartialWitness<<C as Curve>::BaseField>) -> PartialWitness<<C as Curve>::BaseField> {
+    fn generate(&self, circuit: Circuit<C::BaseField>, witness: &PartialWitness<<C as Curve>::BaseField>) -> PartialWitness<<C as Curve>::BaseField> {
         let x_old_target = GateInput { gate: self.index, input: Self::WIRE_X_OLD };
         let y_old_target = GateInput { gate: self.index, input: Self::WIRE_Y_OLD };
         let x_new_target = GateInput { gate: self.index, input: Self::WIRE_X_NEW };
@@ -207,7 +207,7 @@ impl<C: HaloEndomorphismCurve> WitnessGenerator<C::BaseField> for CurveEndoGate<
         ]
     }
 
-    fn generate(&self, witness: &PartialWitness<C::BaseField>) -> PartialWitness<C::BaseField> {
+    fn generate(&self, circuit: Circuit<C::BaseField>, witness: &PartialWitness<C::BaseField>) -> PartialWitness<C::BaseField> {
         let group_acc_old_x_target = GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_X };
         let group_acc_new_x_target = GateInput { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_X };
         let group_acc_old_y_target = GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
@@ -283,17 +283,16 @@ impl<C: HaloEndomorphismCurve> WitnessGenerator<C::BaseField> for CurveEndoGate<
 
 pub(crate) struct RescueGate<F: Field> {
     pub index: usize,
-    pub key_0: F,
-    pub key_1: F,
+    pub _phantom: PhantomData<F>,
 }
 
 impl<F: Field> RescueGate<F> {
-    const WIRE_INPUT_0: usize = 0;
-    const WIRE_INPUT_1: usize = 1;
-    const WIRE_ROOT_0: usize = 2;
-    const WIRE_ROOT_1: usize = 3;
-    const WIRE_OUTPUT_0: usize = 4;
-    const WIRE_OUTPUT_1: usize = 5;
+    pub const WIRE_INPUT_0: usize = 0;
+    pub const WIRE_INPUT_1: usize = 1;
+    pub const WIRE_ROOT_0: usize = 2;
+    pub const WIRE_ROOT_1: usize = 3;
+    pub const WIRE_OUTPUT_0: usize = 4;
+    pub const WIRE_OUTPUT_1: usize = 5;
 }
 
 impl<F: Field> Gate<F> for RescueGate<F> {
@@ -308,7 +307,9 @@ impl<F: Field> WitnessGenerator<F> for RescueGate<F> {
         ]
     }
 
-    fn generate(&self, witness: &PartialWitness<F>) -> PartialWitness<F> {
+    fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
+        let constants = &circuit.constants[self.index];
+
         let in_0_target = GateInput { gate: self.index, input: Self::WIRE_INPUT_0 };
         let in_1_target = GateInput { gate: self.index, input: Self::WIRE_INPUT_1 };
 
@@ -324,15 +325,14 @@ impl<F: Field> WitnessGenerator<F> for RescueGate<F> {
         let root_0 = in_0.kth_root_u32(5);
         let root_1 = in_1.kth_root_u32(5);
 
-        // TODO: Add round constants.
-        let step_0 = mds::<F>(2, 0, 0) * root_0 + mds::<F>(2, 0, 1) * root_1;
-        let step_1 = mds::<F>(2, 1, 0) * root_0 + mds::<F>(2, 1, 1) * root_1;
+        let step_0 = mds::<F>(2, 0, 0) * root_0 + mds::<F>(2, 0, 1) * root_1 + constants[0];
+        let step_1 = mds::<F>(2, 1, 0) * root_0 + mds::<F>(2, 1, 1) * root_1 + constants[1];
 
         let step_0_cubed = step_0.exp_u32(5);
         let step_1_cubed = step_1.exp_u32(5);
 
-        let out_0 = mds::<F>(2, 0, 0) * step_0_cubed + mds::<F>(2, 0, 1) * step_1_cubed;
-        let out_1 = mds::<F>(2, 1, 0) * step_0_cubed + mds::<F>(2, 1, 1) * step_1_cubed;
+        let out_0 = mds::<F>(2, 0, 0) * step_0_cubed + mds::<F>(2, 0, 1) * step_1_cubed + constants[2];
+        let out_1 = mds::<F>(2, 1, 0) * step_0_cubed + mds::<F>(2, 1, 1) * step_1_cubed + constants[3];
 
         let mut result = PartialWitness::new();
         result.wire_values.insert(root_0_target, root_0);
@@ -366,7 +366,7 @@ impl<F: Field> WitnessGenerator<F> for Base4SumGate {
         Vec::new()
     }
 
-    fn generate(&self, _witness: &PartialWitness<F>) -> PartialWitness<F> {
+    fn generate(&self, circuit: Circuit<F>, _witness: &PartialWitness<F>) -> PartialWitness<F> {
         // For base 4 decompositions, we don't do any witness generation on a per-gate level.
         // Instead, we have a single generator which generates values for an entire decomposition.
         PartialWitness::new()
@@ -399,7 +399,7 @@ impl<F: Field> WitnessGenerator<F> for MaddGate<F> {
         ]
     }
 
-    fn generate(&self, witness: &PartialWitness<F>) -> PartialWitness<F> {
+    fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
         let multiplicand_0_target = GateInput { gate: self.index, input: Self::WIRE_MULTIPLICAND_0 };
         let multiplicand_1_target = GateInput { gate: self.index, input: Self::WIRE_MULTIPLICAND_1 };
         let addend_target = GateInput { gate: self.index, input: Self::WIRE_ADDEND };

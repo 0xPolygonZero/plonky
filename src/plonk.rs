@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
-use crate::Field;
-use crate::plonk_gates::{BufferGate, Gate};
+use crate::{Field, generate_rescue_constants};
+use crate::plonk_gates::{BufferGate, Gate, RescueGate};
+use std::marker::PhantomData;
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const GRID_WIDTH: usize = 65;
@@ -26,13 +27,14 @@ pub trait WitnessGenerator<F: Field> {
     fn dependencies(&self) -> Vec<GateInput>;
 
     /// Given a partial witness, return any newly generated values. The caller will merge them in.
-    fn generate(&self, witness: &PartialWitness<F>) -> PartialWitness<F>;
+    fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F>;
 }
 
 pub struct Circuit<F: Field> {
-    gate_ids: Vec<usize>,
-    routing_target_partitions: RoutingTargetPartitions,
-    generators: Vec<Box<dyn WitnessGenerator<F>>>,
+    pub gate_ids: Vec<usize>,
+    pub constants: Vec<Vec<F>>,
+    pub routing_target_partitions: RoutingTargetPartitions,
+    pub generators: Vec<Box<dyn WitnessGenerator<F>>>,
 }
 
 impl<F: Field> Circuit<F> {
@@ -67,6 +69,7 @@ pub enum RoutingTarget {
 pub struct CircuitBuilder<F: Field> {
     circuit_input_index: usize,
     gate_ids: Vec<usize>,
+    constants: Vec<Vec<F>>,
     copy_constraints: Vec<(RoutingTarget, RoutingTarget)>,
     generators: Vec<Box<dyn WitnessGenerator<F>>>,
 }
@@ -83,6 +86,7 @@ impl<F: Field> CircuitBuilder<F> {
         CircuitBuilder {
             circuit_input_index: 0,
             gate_ids: Vec::new(),
+            constants: Vec::new(),
             copy_constraints: Vec::new(),
             generators: Vec::new(),
         }
@@ -90,7 +94,7 @@ impl<F: Field> CircuitBuilder<F> {
 
     pub fn add_public_input(&mut self) -> GateInput {
         let index = self.gate_ids.len();
-        self.add_gate(BufferGate { index });
+        self.add_gate_no_constants(BufferGate { index });
         GateInput { gate: index, input: BufferGate::WIRE_BUFFER_PI }
     }
 
@@ -104,10 +108,32 @@ impl<F: Field> CircuitBuilder<F> {
         CircuitInput { index }
     }
 
-    pub fn add_rescue(&mut self) {
-        for r in 0..16 {
-            // TODO
+    pub fn add_rescue_hash_2_1(&mut self, inputs: [RoutingTarget; 2]) -> RoutingTarget {
+        self.add_rescue_permutation_2(inputs)[0]
+    }
+
+    pub fn add_rescue_permutation_2(&mut self, inputs: [RoutingTarget; 2]) -> [RoutingTarget; 2] {
+        let all_constants = generate_rescue_constants(2);
+
+        let first_gate_index = self.gate_ids.len();
+        for constants in all_constants.into_iter() {
+            let gate = RescueGate {
+                index: self.gate_ids.len(),
+                _phantom: PhantomData,
+            };
+            self.add_gate(gate, constants);
         }
+        let last_gate_index = self.gate_ids.len() - 1;
+
+        let in_0_target = RoutingTarget::GateInput(GateInput { gate: first_gate_index, input: RescueGate::<F>::WIRE_INPUT_0 });
+        let in_1_target = RoutingTarget::GateInput(GateInput { gate: first_gate_index, input: RescueGate::<F>::WIRE_INPUT_1 });
+        let out_0_target = RoutingTarget::GateInput(GateInput { gate: last_gate_index, input: RescueGate::<F>::WIRE_OUTPUT_0 });
+        let out_1_target = RoutingTarget::GateInput(GateInput { gate: last_gate_index, input: RescueGate::<F>::WIRE_OUTPUT_1 });
+
+        self.copy(inputs[0], in_0_target);
+        self.copy(inputs[1], in_1_target);
+
+        [out_0_target, out_1_target]
     }
 
     pub fn add_msm_endo(&mut self, parts: &[MsmEndoPart]) {
@@ -115,8 +141,14 @@ impl<F: Field> CircuitBuilder<F> {
     }
 
     /// Adds a gate to the circuit, without doing any routing.
-    fn add_gate<G: Gate<F>>(&mut self, gate: G) {
+    fn add_gate_no_constants<G: Gate<F>>(&mut self, gate: G) {
+        self.add_gate(gate, Vec::new());
+    }
+
+    /// Adds a gate to the circuit, without doing any routing.
+    fn add_gate<G: Gate<F>>(&mut self, gate: G, constants: Vec<F>) {
         self.gate_ids.push(G::ID);
+        self.constants.push(constants);
         self.generators.push(Box::new(gate));
     }
 
@@ -127,8 +159,8 @@ impl<F: Field> CircuitBuilder<F> {
 
     pub fn build(self) -> Circuit<F> {
         let routing_target_partitions = self.get_routing_partitions();
-        let CircuitBuilder { circuit_input_index, gate_ids, copy_constraints, generators } = self;
-        Circuit { gate_ids, routing_target_partitions, generators }
+        let CircuitBuilder { circuit_input_index, gate_ids, constants, copy_constraints, generators } = self;
+        Circuit { gate_ids, constants, routing_target_partitions, generators }
     }
 
     fn get_routing_partitions(&self) -> RoutingTargetPartitions {
@@ -152,7 +184,7 @@ impl<F: Field> CircuitBuilder<F> {
     }
 }
 
-struct RoutingTargetPartitions {
+pub struct RoutingTargetPartitions {
     partitions: Vec<Vec<RoutingTarget>>,
     indices: HashMap<RoutingTarget, usize>,
 }

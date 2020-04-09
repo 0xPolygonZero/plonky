@@ -1,6 +1,6 @@
 use crate::Field;
 
-pub(crate) fn get_constants<F: Field>(width: usize) -> Vec<Vec<F>> {
+pub(crate) fn generate_rescue_constants<F: Field>(width: usize) -> Vec<Vec<F>> {
     let mut constants = Vec::new();
     for _i in 0..recommended_rounds::<F>(width) {
         let mut round_constants = Vec::new();
