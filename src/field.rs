@@ -5,8 +5,9 @@ use std::ops::{Add, Div, Mul, Neg, Sub};
 use num::{BigUint, FromPrimitive, Integer, One};
 
 use crate::{biguint_to_field, field_to_biguint};
+use std::fmt::Debug;
 
-pub trait Field: 'static + Sized + Copy + Eq + Send + Sync
+pub trait Field: 'static + Sized + Copy + Eq + Send + Sync + Debug
 + Neg<Output=Self>
 + Add<Self, Output=Self>
 + Sub<Self, Output=Self>
@@ -30,15 +31,19 @@ pub trait Field: 'static + Sized + Copy + Eq + Send + Sync
         let mut limbs = Vec::new();
         for u64_limb in self.to_canonical_u64_vec() {
             limbs.push(u64_limb as u32);
-            limbs.push((u64_limb >> 64) as u32);
+            limbs.push(u64_limb.overflowing_shr(32).0 as u32);
         }
         limbs
     }
 
     fn from_canonical_u64_vec(v: Vec<u64>) -> Self;
 
-    fn from_canonical_u32_vec(v: Vec<u32>) -> Self {
-        todo!()
+    fn from_canonical_u32_vec(u32_limbs: Vec<u32>) -> Self {
+        let mut u64_chunks = Vec::new();
+        for u32_chunk in u32_limbs.chunks(2) {
+            u64_chunks.push((u32_chunk[1] as u64) << 32 | u32_chunk[0] as u64);
+        }
+        Self::from_canonical_u64_vec(u64_chunks)
     }
 
     fn from_canonical_u64(n: u64) -> Self;
@@ -214,20 +219,8 @@ pub trait Field: 'static + Sized + Copy + Eq + Send + Sync
         self.exp(Self::from_canonical_u32(power))
     }
 
+    /// Assumes x^k is a permutation in this field; undefined behavior otherwise.
     fn kth_root_u32(&self, k: u32) -> Self {
-        fn mod_u32<F: Field>(f: F, m: u32) -> u32 {
-            let m_u64 = m as u64;
-            let limb_multiplier = (1u64 << 32) % m_u64;
-            let limbs = f.to_canonical_u64_vec();
-            let mut acc = 0;
-            let mut weight = 1;
-            for limb in limbs {
-                acc += (weight * limb) % m_u64;
-                weight = (weight * limb_multiplier) % m_u64;
-            }
-            acc as u32
-        }
-
         // By Fermat's little theorem, x^p = x and x^(p - 1) = 1, so x^(p + n(p - 1)) = x for any n.
         // Our assumption that the k'th root operation is a permutation implies gcd(p - 1, k) = 1,
         // so there exists some n such that p + n(p - 1) is a multiple of k. Once we find such an n,
@@ -240,11 +233,11 @@ pub trait Field: 'static + Sized + Copy + Eq + Send + Sync
         for n in 0..k {
             let numerator_bu = &p_bu + BigUint::from_u32(n).unwrap() * &p_minus_1_bu;
             if numerator_bu.is_multiple_of(&k_bu) {
-                let power_bu = numerator_bu.div_floor(&k_bu);
+                let power_bu = numerator_bu.div_floor(&k_bu).mod_floor(&p_minus_1_bu);
                 return self.exp(biguint_to_field(power_bu));
             }
         }
-        panic!("The k'th root operation is not a permutation in this field, or we have a bug!");
+        panic!("x^{} and x^(1/{}) are not permutations in this field, or we have a bug!", k, k);
     }
 
     fn num_bits(&self) -> usize {

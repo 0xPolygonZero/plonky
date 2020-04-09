@@ -348,15 +348,15 @@ mod tests {
 
     #[test]
     fn exp_and_kth_roots() {
-        for k in 1..10 {
-            assert_eq!(Bls12377Base::ZERO.exp_u32(k), Bls12377Base::ZERO);
-            assert_eq!(Bls12377Base::ONE.exp_u32(k), Bls12377Base::ONE);
-            assert_eq!(Bls12377Base::ZERO.kth_root_u32(k), Bls12377Base::ZERO);
-            assert_eq!(Bls12377Base::ONE.kth_root_u32(k), Bls12377Base::ONE);
-        }
+        assert_eq!(Bls12377Base::ZERO.exp_u32(1), Bls12377Base::ZERO);
+        assert_eq!(Bls12377Base::ONE.exp_u32(1), Bls12377Base::ONE);
+        assert_eq!(Bls12377Base::FIVE.exp_u32(1), Bls12377Base::FIVE);
 
-        assert_eq!(Bls12377Base::FIVE.kth_root_u32(3).exp_u32(3), Bls12377Base::FIVE);
+        assert_eq!(Bls12377Base::ZERO.kth_root_u32(1), Bls12377Base::ZERO);
+        assert_eq!(Bls12377Base::ONE.kth_root_u32(1), Bls12377Base::ONE);
+        assert_eq!(Bls12377Base::FIVE.kth_root_u32(1), Bls12377Base::FIVE);
+
         assert_eq!(Bls12377Base::FIVE.kth_root_u32(5).exp_u32(5), Bls12377Base::FIVE);
-        assert_eq!(Bls12377Base::FIVE.kth_root_u32(7).exp_u32(7), Bls12377Base::FIVE);
+        assert_eq!(Bls12377Base::FIVE.kth_root_u32(11).exp_u32(11), Bls12377Base::FIVE);
     }
 }
