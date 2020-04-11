@@ -1,10 +1,28 @@
 use std::marker::PhantomData;
 
-use crate::{AffinePoint, Curve, Field, GateInput, GRID_WIDTH, HaloEndomorphismCurve, PartialWitness, WitnessGenerator, Circuit};
+use crate::{AffinePoint, Curve, Field, GateInput, GRID_WIDTH, HaloEndomorphismCurve, PartialWitness, WitnessGenerator, Circuit, CircuitBuilder, RoutingTarget};
 use crate::mds::mds;
 
 pub(crate) trait Gate<F: Field>: 'static + WitnessGenerator<F> {
     const ID: usize;
+
+    /// Evaluate the constraints implied by this gate at the given challenge point.
+    ///
+    /// For example, if the gate computes `c = a * b`, this should return `[c(x) - a(x) * b(x)]`,
+    /// where `x` is the challenge point.
+    fn evaluate(&self,
+                local_constant_values: Vec<F>,
+                local_wire_values: Vec<F>,
+                right_wire_values: Vec<F>,
+                below_wire_values: Vec<F>) -> Vec<F>;
+
+    /// Like the other `evaluate` method, but in the context of a recursive circuit.
+    fn evaluate_recursively(&self,
+                            builder: &mut CircuitBuilder<F>,
+                            local_constant_values: Vec<RoutingTarget>,
+                            local_wire_values: Vec<RoutingTarget>,
+                            right_wire_values: Vec<RoutingTarget>,
+                            below_wire_values: Vec<RoutingTarget>) -> Vec<RoutingTarget>;
 }
 
 /// A gate which doesn't perform any arithmetic, but just acts as a buffer for receiving data. This
@@ -25,6 +43,27 @@ impl BufferGate {
 
 impl<F: Field> Gate<F> for BufferGate {
     const ID: usize = 0;
+
+    fn evaluate(
+        &self,
+        local_constant_values: Vec<F>,
+        local_wire_values: Vec<F>,
+        right_wire_values: Vec<F>,
+        below_wire_values: Vec<F>,
+    ) -> Vec<F> {
+        unimplemented!()
+    }
+
+    fn evaluate_recursively(
+        &self,
+        builder: &mut CircuitBuilder<F>,
+        local_constant_values: Vec<RoutingTarget>,
+        local_wire_values: Vec<RoutingTarget>,
+        right_wire_values: Vec<RoutingTarget>,
+        below_wire_values: Vec<RoutingTarget>,
+    ) -> Vec<RoutingTarget> {
+        unimplemented!()
+    }
 }
 
 impl<F: Field> WitnessGenerator<F> for BufferGate {
@@ -39,8 +78,9 @@ impl<F: Field> WitnessGenerator<F> for BufferGate {
 }
 
 /// A gate which performs incomplete point addition, conditioned on an input bit. In order to
-/// facilitate MSMs which use this gate, it also adds the bit to an accumulator. `C` is the curve
-/// of the inner proof.
+/// facilitate MSMs which use this gate, it also adds the bit to an accumulator.
+///
+/// `C` is the curve whose points are being added.
 pub(crate) struct CurveAddGate<C: Curve> {
     pub index: usize,
     _phantom: PhantomData<C>,
@@ -59,6 +99,51 @@ impl<C: Curve> CurveAddGate<C> {
 
 impl<C: Curve> Gate<C::BaseField> for CurveAddGate<C> {
     const ID: usize = 1;
+
+    fn evaluate(
+        &self,
+        local_constant_values: Vec<C::BaseField>,
+        local_wire_values: Vec<C::BaseField>,
+        right_wire_values: Vec<C::BaseField>,
+        below_wire_values: Vec<C::BaseField>,
+    ) -> Vec<C::BaseField> {
+        let local_group_acc_x = local_wire_values[Self::WIRE_GROUP_ACC_X];
+        let local_group_acc_y = local_wire_values[Self::WIRE_GROUP_ACC_Y];
+        let right_group_acc_x = right_wire_values[Self::WIRE_GROUP_ACC_X];
+        let right_group_acc_y = right_wire_values[Self::WIRE_GROUP_ACC_Y];
+
+        let scalar_acc_old = local_wire_values[Self::WIRE_SCALAR_ACC_OLD];
+        let scalar_acc_new = local_wire_values[Self::WIRE_SCALAR_ACC_NEW];
+        let addend_x = local_wire_values[Self::WIRE_ADDEND_X];
+        let addend_y = local_wire_values[Self::WIRE_ADDEND_Y];
+        let scalar_bit = local_wire_values[Self::WIRE_SCALAR_BIT];
+        let inverse = local_wire_values[Self::WIRE_INVERSE];
+
+        let dx = local_group_acc_x - addend_x;
+        let dy = local_group_acc_y - addend_y;
+        let lambda = dy * inverse;
+        let sum_x = lambda.square() - local_group_acc_x - addend_x;
+        let sum_y = lambda * dx - local_group_acc_y;
+
+        vec![
+            sum_x - right_group_acc_x,
+            sum_y - right_group_acc_y,
+            scalar_acc_new - scalar_acc_old.double() + scalar_bit,
+            scalar_bit * (scalar_bit - C::BaseField::ONE),
+            inverse * dx - C::BaseField::ONE,
+        ]
+    }
+
+    fn evaluate_recursively(
+        &self,
+        builder: &mut CircuitBuilder<C::BaseField>,
+        local_constant_values: Vec<RoutingTarget>,
+        local_wire_values: Vec<RoutingTarget>,
+        right_wire_values: Vec<RoutingTarget>,
+        below_wire_values: Vec<RoutingTarget>,
+    ) -> Vec<RoutingTarget> {
+        unimplemented!()
+    }
 }
 
 impl<C: Curve> WitnessGenerator<C::BaseField> for CurveAddGate<C> {
@@ -73,7 +158,7 @@ impl<C: Curve> WitnessGenerator<C::BaseField> for CurveAddGate<C> {
         ]
     }
 
-    fn generate(&self, circuit: Circuit<C::BaseField>, witness: &PartialWitness<<C as Curve>::BaseField>) -> PartialWitness<<C as Curve>::BaseField> {
+    fn generate(&self, circuit: Circuit<C::BaseField>, witness: &PartialWitness<C::BaseField>) -> PartialWitness<C::BaseField> {
         let group_acc_old_x_target = GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_X };
         let group_acc_new_x_target = GateInput { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_X };
         let group_acc_old_y_target = GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
@@ -108,7 +193,6 @@ impl<C: Curve> WitnessGenerator<C::BaseField> for CurveAddGate<C> {
         // Here's where our abstraction leaks a bit. Although we already have the sum, we need to
         // redo part of the computation in order to populate the purported inverse wire.
         let dx = group_acc_old_x - addend_x;
-        let dy = group_acc_old_y - addend_y;
         let inverse = dx.multiplicative_inverse().expect("x_1 = x_2");
 
         let mut result = PartialWitness::new();
@@ -136,6 +220,27 @@ impl<C: Curve> CurveDblGate<C> {
 
 impl<C: Curve> Gate<C::BaseField> for CurveDblGate<C> {
     const ID: usize = 2;
+
+    fn evaluate(
+        &self,
+        local_constant_values: Vec<C::BaseField>,
+        local_wire_values: Vec<C::BaseField>,
+        right_wire_values: Vec<C::BaseField>,
+        below_wire_values: Vec<C::BaseField>,
+    ) -> Vec<C::BaseField> {
+        unimplemented!()
+    }
+
+    fn evaluate_recursively(
+        &self,
+        builder: &mut CircuitBuilder<C::BaseField>,
+        local_constant_values: Vec<RoutingTarget>,
+        local_wire_values: Vec<RoutingTarget>,
+        right_wire_values: Vec<RoutingTarget>,
+        below_wire_values: Vec<RoutingTarget>,
+    ) -> Vec<RoutingTarget> {
+        unimplemented!()
+    }
 }
 
 impl<C: Curve> WitnessGenerator<C::BaseField> for CurveDblGate<C> {
@@ -146,7 +251,7 @@ impl<C: Curve> WitnessGenerator<C::BaseField> for CurveDblGate<C> {
         ]
     }
 
-    fn generate(&self, circuit: Circuit<C::BaseField>, witness: &PartialWitness<<C as Curve>::BaseField>) -> PartialWitness<<C as Curve>::BaseField> {
+    fn generate(&self, circuit: Circuit<C::BaseField>, witness: &PartialWitness<C::BaseField>) -> PartialWitness<C::BaseField> {
         let x_old_target = GateInput { gate: self.index, input: Self::WIRE_X_OLD };
         let y_old_target = GateInput { gate: self.index, input: Self::WIRE_Y_OLD };
         let x_new_target = GateInput { gate: self.index, input: Self::WIRE_X_NEW };
@@ -191,6 +296,27 @@ impl<C: HaloEndomorphismCurve> CurveEndoGate<C> {
 
 impl<C: HaloEndomorphismCurve> Gate<C::BaseField> for CurveEndoGate<C> {
     const ID: usize = 3;
+
+    fn evaluate(
+        &self,
+        local_constant_values: Vec<C::BaseField>,
+        local_wire_values: Vec<C::BaseField>,
+        right_wire_values: Vec<C::BaseField>,
+        below_wire_values: Vec<C::BaseField>,
+    ) -> Vec<C::BaseField> {
+        unimplemented!()
+    }
+
+    fn evaluate_recursively(
+        &self,
+        builder: &mut CircuitBuilder<C::BaseField>,
+        local_constant_values: Vec<RoutingTarget>,
+        local_wire_values: Vec<RoutingTarget>,
+        right_wire_values: Vec<RoutingTarget>,
+        below_wire_values: Vec<RoutingTarget>,
+    ) -> Vec<RoutingTarget> {
+        unimplemented!()
+    }
 }
 
 impl<C: HaloEndomorphismCurve> WitnessGenerator<C::BaseField> for CurveEndoGate<C> {
@@ -297,6 +423,27 @@ impl<F: Field> RescueGate<F> {
 
 impl<F: Field> Gate<F> for RescueGate<F> {
     const ID: usize = 4;
+
+    fn evaluate(
+        &self,
+        local_constant_values: Vec<F>,
+        local_wire_values: Vec<F>,
+        right_wire_values: Vec<F>,
+        below_wire_values: Vec<F>,
+    ) -> Vec<F> {
+        unimplemented!()
+    }
+
+    fn evaluate_recursively(
+        &self,
+        builder: &mut CircuitBuilder<F>,
+        local_constant_values: Vec<RoutingTarget>,
+        local_wire_values: Vec<RoutingTarget>,
+        right_wire_values: Vec<RoutingTarget>,
+        below_wire_values: Vec<RoutingTarget>,
+    ) -> Vec<RoutingTarget> {
+        unimplemented!()
+    }
 }
 
 impl<F: Field> WitnessGenerator<F> for RescueGate<F> {
@@ -328,11 +475,11 @@ impl<F: Field> WitnessGenerator<F> for RescueGate<F> {
         let step_0 = mds::<F>(2, 0, 0) * root_0 + mds::<F>(2, 0, 1) * root_1 + constants[0];
         let step_1 = mds::<F>(2, 1, 0) * root_0 + mds::<F>(2, 1, 1) * root_1 + constants[1];
 
-        let step_0_cubed = step_0.exp_u32(5);
-        let step_1_cubed = step_1.exp_u32(5);
+        let step_0_alpha = step_0.exp_u32(5);
+        let step_1_alpha = step_1.exp_u32(5);
 
-        let out_0 = mds::<F>(2, 0, 0) * step_0_cubed + mds::<F>(2, 0, 1) * step_1_cubed + constants[2];
-        let out_1 = mds::<F>(2, 1, 0) * step_0_cubed + mds::<F>(2, 1, 1) * step_1_cubed + constants[3];
+        let out_0 = mds::<F>(2, 0, 0) * step_0_alpha + mds::<F>(2, 0, 1) * step_1_alpha + constants[2];
+        let out_1 = mds::<F>(2, 1, 0) * step_0_alpha + mds::<F>(2, 1, 1) * step_1_alpha + constants[3];
 
         let mut result = PartialWitness::new();
         result.wire_values.insert(root_0_target, root_0);
@@ -340,36 +487,6 @@ impl<F: Field> WitnessGenerator<F> for RescueGate<F> {
         result.wire_values.insert(out_0_target, out_0);
         result.wire_values.insert(out_1_target, out_1);
         result
-    }
-}
-
-pub(crate) struct Base4SumGate { pub index: usize }
-
-impl Base4SumGate {
-    const WIRE_ACC: usize = 0;
-    const WIRE_LIMB_0: usize = 1;
-    const WIRE_LIMB_1: usize = 2;
-    const WIRE_LIMB_2: usize = 3;
-    const WIRE_LIMB_3: usize = 4;
-    const WIRE_LIMB_4: usize = 5;
-    const WIRE_LIMB_5: usize = 6;
-    const WIRE_LIMB_6: usize = 7;
-    const WIRE_LIMB_7: usize = 8;
-}
-
-impl<F: Field> Gate<F> for Base4SumGate {
-    const ID: usize = 5;
-}
-
-impl<F: Field> WitnessGenerator<F> for Base4SumGate {
-    fn dependencies(&self) -> Vec<GateInput> {
-        Vec::new()
-    }
-
-    fn generate(&self, circuit: Circuit<F>, _witness: &PartialWitness<F>) -> PartialWitness<F> {
-        // For base 4 decompositions, we don't do any witness generation on a per-gate level.
-        // Instead, we have a single generator which generates values for an entire decomposition.
-        PartialWitness::new()
     }
 }
 
@@ -387,7 +504,28 @@ impl<F: Field> MaddGate<F> {
 }
 
 impl<F: Field> Gate<F> for MaddGate<F> {
-    const ID: usize = 6;
+    const ID: usize = 5;
+
+    fn evaluate(
+        &self,
+        local_constant_values: Vec<F>,
+        local_wire_values: Vec<F>,
+        right_wire_values: Vec<F>,
+        below_wire_values: Vec<F>,
+    ) -> Vec<F> {
+        unimplemented!()
+    }
+
+    fn evaluate_recursively(
+        &self,
+        builder: &mut CircuitBuilder<F>,
+        local_constant_values: Vec<RoutingTarget>,
+        local_wire_values: Vec<RoutingTarget>,
+        right_wire_values: Vec<RoutingTarget>,
+        below_wire_values: Vec<RoutingTarget>,
+    ) -> Vec<RoutingTarget> {
+        unimplemented!()
+    }
 }
 
 impl<F: Field> WitnessGenerator<F> for MaddGate<F> {

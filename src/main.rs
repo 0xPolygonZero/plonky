@@ -13,7 +13,16 @@ fn main() {
     // rayon::ThreadPoolBuilder::new().num_threads(8).build_global().unwrap();
 
     let degree_pow = 13;
-    recursive_verification_circuit::<Tweedledum>(degree_pow);
+
+    println!("Generating circuit...");
+    let start = Instant::now();
+    let recursive_circuit = recursive_verification_circuit::<Tweedledum>(degree_pow);
+    println!("Finished in {}s", start.elapsed().as_secs_f64());
+    println!("Gate count: {}", recursive_circuit.circuit.num_gates());
+
+    println!("Generating witness...");
+    let start = Instant::now();
+    todo!();
 
     // run_all_ffts();
     //

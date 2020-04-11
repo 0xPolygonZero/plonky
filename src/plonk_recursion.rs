@@ -13,7 +13,7 @@ pub struct RecursiveCircuit<F: Field> {
     /// R_i in the Halo reduction.
     r_i: Vec<CircuitInput>,
 
-    circuit: Circuit<F>,
+    pub circuit: Circuit<F>,
 }
 
 pub fn recursive_verification_circuit<C: HaloEndomorphismCurve>(degree_pow: usize) -> RecursiveCircuit<C::BaseField> {
@@ -65,7 +65,6 @@ pub fn recursive_verification_circuit<C: HaloEndomorphismCurve>(degree_pow: usiz
     }
 
     let circuit = builder.build();
-    println!("Recursive circuit gate count: {}", circuit.num_gates());
     RecursiveCircuit {
         c_wires,
         c_z,
