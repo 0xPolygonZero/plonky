@@ -109,6 +109,7 @@ impl<F: Field> CircuitBuilder<F> {
     }
 
     pub fn add_rescue_hash_2_1(&mut self, inputs: [RoutingTarget; 2]) -> RoutingTarget {
+        // TODO: This is insecure.
         self.add_rescue_permutation_2(inputs)[0]
     }
 

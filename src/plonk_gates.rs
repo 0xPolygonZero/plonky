@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::{AffinePoint, Curve, Field, GateInput, GRID_WIDTH, HaloEndomorphismCurve, PartialWitness, WitnessGenerator, Circuit, CircuitBuilder, RoutingTarget};
+use crate::{AffinePoint, Circuit, CircuitBuilder, Curve, Field, GateInput, GRID_WIDTH, HaloEndomorphismCurve, PartialWitness, RoutingTarget, WitnessGenerator};
 use crate::mds::mds;
 
 pub(crate) trait Gate<F: Field>: 'static + WitnessGenerator<F> {
@@ -490,6 +490,57 @@ impl<F: Field> WitnessGenerator<F> for RescueGate<F> {
     }
 }
 
+pub(crate) struct Base4SumGate { pub index: usize }
+
+impl Base4SumGate {
+    const WIRE_ACC: usize = 0;
+    const WIRE_LIMB_0: usize = 1;
+    const WIRE_LIMB_1: usize = 2;
+    const WIRE_LIMB_2: usize = 3;
+    const WIRE_LIMB_3: usize = 4;
+    const WIRE_LIMB_4: usize = 5;
+    const WIRE_LIMB_5: usize = 6;
+    const WIRE_LIMB_6: usize = 7;
+    const WIRE_LIMB_7: usize = 8;
+}
+
+impl<F: Field> Gate<F> for Base4SumGate {
+    const ID: usize = 5;
+
+    fn evaluate(
+        &self,
+        local_constant_values: Vec<F>,
+        local_wire_values: Vec<F>,
+        right_wire_values: Vec<F>,
+        below_wire_values: Vec<F>,
+    ) -> Vec<F> {
+        unimplemented!()
+    }
+
+    fn evaluate_recursively(
+        &self,
+        builder: &mut CircuitBuilder<F>,
+        local_constant_values: Vec<RoutingTarget>,
+        local_wire_values: Vec<RoutingTarget>,
+        right_wire_values: Vec<RoutingTarget>,
+        below_wire_values: Vec<RoutingTarget>,
+    ) -> Vec<RoutingTarget> {
+        unimplemented!()
+    }
+}
+
+impl<F: Field> WitnessGenerator<F> for Base4SumGate {
+    fn dependencies(&self) -> Vec<GateInput> {
+        Vec::new()
+    }
+
+    fn generate(&self, circuit: Circuit<F>, _witness: &PartialWitness<F>) -> PartialWitness<F> {
+        // For base 4 decompositions, we don't do any witness generation on a per-gate level.
+        // Instead, we have a single generator which generates values for an entire decomposition.
+        PartialWitness::new()
+    }
+}
+
 /// A "multiply, add, and rescale" gate.
 pub(crate) struct MaddGate<F: Field> {
     pub index: usize,
@@ -504,7 +555,7 @@ impl<F: Field> MaddGate<F> {
 }
 
 impl<F: Field> Gate<F> for MaddGate<F> {
-    const ID: usize = 5;
+    const ID: usize = 6;
 
     fn evaluate(
         &self,
