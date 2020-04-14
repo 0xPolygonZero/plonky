@@ -7,7 +7,7 @@ use num::{BigUint, FromPrimitive, Integer, One};
 use crate::{biguint_to_field, field_to_biguint};
 use std::fmt::Debug;
 
-pub trait Field: 'static + Sized + Copy + Eq + Send + Sync + Debug
+pub trait Field: 'static + Sized + Copy + Eq + Hash + Send + Sync + Debug
 + Neg<Output=Self>
 + Add<Self, Output=Self>
 + Sub<Self, Output=Self>
@@ -164,7 +164,7 @@ pub trait Field: 'static + Sized + Copy + Eq + Send + Sync + Debug
         x_inv
     }
 
-    fn cyclic_subgroup_unknown_order(generator: Self) -> Vec<Self> where Self: Hash {
+    fn cyclic_subgroup_unknown_order(generator: Self) -> Vec<Self> {
         let mut subgroup_vec = Vec::new();
         let mut subgroup_set = HashSet::new();
         let mut current = Self::ONE;

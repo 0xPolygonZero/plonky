@@ -1,4 +1,4 @@
-use crate::{Circuit, CircuitBuilder, CircuitInput, Field, HaloEndomorphismCurve, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER};
+use crate::{Circuit, CircuitBuilder, CircuitInput, Field, HaloEndomorphismCurve, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, NUM_CONSTANTS};
 
 pub struct RecursiveCircuit<F: Field> {
     /// A commitment to each wire polynomial.
@@ -19,23 +19,10 @@ pub struct RecursiveCircuit<F: Field> {
 pub fn recursive_verification_circuit<C: HaloEndomorphismCurve>(degree_pow: usize) -> RecursiveCircuit<C::BaseField> {
     let mut builder = CircuitBuilder::<C::BaseField>::new();
 
-    let inner_c_is_buffer = builder.add_public_input();
-    let inner_c_is_curve_add = builder.add_public_input();
-    let inner_c_is_curve_dbl = builder.add_public_input();
-    let inner_c_is_curve_endo = builder.add_public_input();
-    let inner_c_is_rescue = builder.add_public_input();
-    let inner_c_is_base4sum = builder.add_public_input();
-    let inner_c_is_madd = builder.add_public_input();
-    let inner_c_const = builder.add_public_input();
+    // TODO: Is this actually needed to avoid cyclic dependencies?
+    // let inner_c_constants = builder.add_public_inputs(NUM_CONSTANTS);
 
-    let inner_o_is_buffer = builder.add_public_input();
-    let inner_o_is_curve_add = builder.add_public_input();
-    let inner_o_is_curve_dbl = builder.add_public_input();
-    let inner_o_is_curve_endo = builder.add_public_input();
-    let inner_o_is_rescue = builder.add_public_input();
-    let inner_o_is_base4sum = builder.add_public_input();
-    let inner_o_is_madd = builder.add_public_input();
-    let inner_o_const = builder.add_public_input();
+    let inner_o_constants = builder.add_public_inputs(NUM_CONSTANTS);
     let inner_o_wires = builder.add_public_inputs(NUM_WIRES);
     let inner_o_z = builder.add_public_input();
     let inner_o_t = builder.add_public_inputs(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER);

@@ -2,10 +2,11 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use crate::{Field, generate_rescue_constants};
-use crate::plonk_gates::{BufferGate, Gate, RescueGate};
+use crate::plonk_gates::{BufferGate, Gate, RescueStepAGate};
 use std::marker::PhantomData;
 
 pub(crate) const NUM_WIRES: usize = 9;
+pub(crate) const NUM_CONSTANTS: usize = 5;
 pub(crate) const GRID_WIDTH: usize = 65;
 pub(crate) const QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER: usize = 7;
 
@@ -31,15 +32,14 @@ pub trait WitnessGenerator<F: Field> {
 }
 
 pub struct Circuit<F: Field> {
-    pub gate_ids: Vec<usize>,
-    pub constants: Vec<Vec<F>>,
+    pub gate_constants: Vec<Vec<F>>,
     pub routing_target_partitions: RoutingTargetPartitions,
     pub generators: Vec<Box<dyn WitnessGenerator<F>>>,
 }
 
 impl<F: Field> Circuit<F> {
     pub fn num_gates(&self) -> usize {
-        self.gate_ids.len()
+        self.gate_constants.len()
     }
 
     pub fn generate_witness(&self) {
@@ -68,10 +68,10 @@ pub enum RoutingTarget {
 
 pub struct CircuitBuilder<F: Field> {
     circuit_input_index: usize,
-    gate_ids: Vec<usize>,
-    constants: Vec<Vec<F>>,
+    gate_constants: Vec<Vec<F>>,
     copy_constraints: Vec<(RoutingTarget, RoutingTarget)>,
     generators: Vec<Box<dyn WitnessGenerator<F>>>,
+    constant_wires: HashMap<F, RoutingTarget>,
 }
 
 pub struct MsmEndoPart {
@@ -85,15 +85,15 @@ impl<F: Field> CircuitBuilder<F> {
     pub fn new() -> Self {
         CircuitBuilder {
             circuit_input_index: 0,
-            gate_ids: Vec::new(),
-            constants: Vec::new(),
+            gate_constants: Vec::new(),
             copy_constraints: Vec::new(),
             generators: Vec::new(),
+            constant_wires: HashMap::new(),
         }
     }
 
     pub fn add_public_input(&mut self) -> GateInput {
-        let index = self.gate_ids.len();
+        let index = self.num_gates();
         self.add_gate_no_constants(BufferGate { index });
         GateInput { gate: index, input: BufferGate::WIRE_BUFFER_PI }
     }
@@ -108,33 +108,71 @@ impl<F: Field> CircuitBuilder<F> {
         CircuitInput { index }
     }
 
-    pub fn add_rescue_hash_2_1(&mut self, inputs: [RoutingTarget; 2]) -> RoutingTarget {
-        // TODO: This is insecure.
-        self.add_rescue_permutation_2(inputs)[0]
+    pub fn zero_wire(&mut self) -> RoutingTarget {
+        self.constant_wire(F::ZERO)
     }
 
-    pub fn add_rescue_permutation_2(&mut self, inputs: [RoutingTarget; 2]) -> [RoutingTarget; 2] {
-        let all_constants = generate_rescue_constants(2);
+    pub fn one_wire(&mut self) -> RoutingTarget {
+        self.constant_wire(F::ONE)
+    }
 
-        let first_gate_index = self.gate_ids.len();
+    pub fn constant_wire(&mut self, c: F) -> RoutingTarget {
+        if self.constant_wires.contains_key(&c) {
+            self.constant_wires[&c]
+        } else {
+            let result = self.create_constant_wire(c);
+            self.constant_wires.insert(c, result);
+            result
+        }
+    }
+
+    pub fn constant_wire_u32(&mut self, c: u32) -> RoutingTarget {
+        self.constant_wire(F::from_canonical_u32(c))
+    }
+
+    fn create_constant_wire(&mut self, c: F) -> RoutingTarget {
+        let index = self.num_gates();
+        self.add_gate(BufferGate { index }, vec![c]);
+        RoutingTarget::GateInput(GateInput { gate: index, input: BufferGate::WIRE_BUFFER_CONST })
+    }
+
+    pub fn add_rescue_hash_2x1(&mut self, inputs: [RoutingTarget; 2]) -> RoutingTarget {
+        self.add_rescue_hash_2x2(inputs)[0]
+    }
+
+    pub fn add_rescue_hash_2x2(&mut self, inputs: [RoutingTarget; 2]) -> [RoutingTarget; 2] {
+        // This is a width-3 sponge function with a single absorption and a single squeeze.
+        let zero = self.zero_wire();
+        let outputs = self.add_rescue_permutation_3x3([inputs[0], inputs[1], zero]);
+        [outputs[0], outputs[1]]
+    }
+
+    pub fn add_rescue_permutation_3x3(&mut self, inputs: [RoutingTarget; 3]) -> [RoutingTarget; 3] {
+        let all_constants = generate_rescue_constants(3);
+
+        let first_gate_index = self.num_gates();
         for constants in all_constants.into_iter() {
-            let gate = RescueGate {
-                index: self.gate_ids.len(),
+            let gate = RescueStepAGate {
+                index: self.num_gates(),
                 _phantom: PhantomData,
             };
             self.add_gate(gate, constants);
         }
-        let last_gate_index = self.gate_ids.len() - 1;
+        let last_gate_index = self.num_gates() - 1;
 
-        let in_0_target = RoutingTarget::GateInput(GateInput { gate: first_gate_index, input: RescueGate::<F>::WIRE_INPUT_0 });
-        let in_1_target = RoutingTarget::GateInput(GateInput { gate: first_gate_index, input: RescueGate::<F>::WIRE_INPUT_1 });
-        let out_0_target = RoutingTarget::GateInput(GateInput { gate: last_gate_index, input: RescueGate::<F>::WIRE_OUTPUT_0 });
-        let out_1_target = RoutingTarget::GateInput(GateInput { gate: last_gate_index, input: RescueGate::<F>::WIRE_OUTPUT_1 });
+        let in_0_target = RoutingTarget::GateInput(GateInput { gate: first_gate_index, input: RescueStepAGate::<F>::WIRE_INPUT_0 });
+        let in_1_target = RoutingTarget::GateInput(GateInput { gate: first_gate_index, input: RescueStepAGate::<F>::WIRE_INPUT_1 });
+        let in_2_target = RoutingTarget::GateInput(GateInput { gate: first_gate_index, input: RescueStepAGate::<F>::WIRE_INPUT_1 });
+
+        let out_0_target = RoutingTarget::GateInput(GateInput { gate: last_gate_index, input: RescueStepAGate::<F>::WIRE_OUTPUT_0 });
+        let out_1_target = RoutingTarget::GateInput(GateInput { gate: last_gate_index, input: RescueStepAGate::<F>::WIRE_OUTPUT_1 });
+        let out_2_target = RoutingTarget::GateInput(GateInput { gate: last_gate_index, input: RescueStepAGate::<F>::WIRE_OUTPUT_1 });
 
         self.copy(inputs[0], in_0_target);
         self.copy(inputs[1], in_1_target);
+        self.copy(inputs[2], in_2_target);
 
-        [out_0_target, out_1_target]
+        [out_0_target, out_1_target, out_2_target]
     }
 
     pub fn add_msm_endo(&mut self, parts: &[MsmEndoPart]) {
@@ -147,10 +185,20 @@ impl<F: Field> CircuitBuilder<F> {
     }
 
     /// Adds a gate to the circuit, without doing any routing.
-    fn add_gate<G: Gate<F>>(&mut self, gate: G, constants: Vec<F>) {
-        self.gate_ids.push(G::ID);
-        self.constants.push(constants);
+    fn add_gate<G: Gate<F>>(&mut self, gate: G, gate_constants: Vec<F>) {
+        // Merge the gate type's prefix bits with the given gate config constants.
+        debug_assert!(G::PREFIX.len() + gate_constants.len() <= NUM_CONSTANTS);
+        let mut all_constants = Vec::new();
+        for &prefix_bit in G::PREFIX {
+            all_constants.push(if prefix_bit { F::ONE } else { F::ZERO });
+        }
+        all_constants.extend(gate_constants);
+        self.gate_constants.push(all_constants);
         self.generators.push(Box::new(gate));
+    }
+
+    fn num_gates(&self) -> usize {
+        self.gate_constants.len()
     }
 
     /// Add a copy constraint between two routing targets.
@@ -160,8 +208,8 @@ impl<F: Field> CircuitBuilder<F> {
 
     pub fn build(self) -> Circuit<F> {
         let routing_target_partitions = self.get_routing_partitions();
-        let CircuitBuilder { circuit_input_index, gate_ids, constants, copy_constraints, generators } = self;
-        Circuit { gate_ids, constants, routing_target_partitions, generators }
+        let CircuitBuilder { circuit_input_index, gate_constants, copy_constraints, generators, constant_wires } = self;
+        Circuit { gate_constants, routing_target_partitions, generators }
     }
 
     fn get_routing_partitions(&self) -> RoutingTargetPartitions {
@@ -171,7 +219,7 @@ impl<F: Field> CircuitBuilder<F> {
             partitions.add_partition(RoutingTarget::CircuitInput(CircuitInput { index: i }));
         }
 
-        for gate in 0..self.gate_ids.len() {
+        for gate in 0..self.num_gates() {
             for input in 0..NUM_WIRES {
                 partitions.add_partition(RoutingTarget::GateInput(GateInput { gate, input }));
             }

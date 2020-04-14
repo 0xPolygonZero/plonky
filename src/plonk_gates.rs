@@ -4,7 +4,9 @@ use crate::{AffinePoint, Circuit, CircuitBuilder, Curve, Field, GateInput, GRID_
 use crate::mds::mds;
 
 pub(crate) trait Gate<F: Field>: 'static + WitnessGenerator<F> {
-    const ID: usize;
+    /// In order to combine the constraints of various gate types into a unified constraint set, we
+    /// assign each gate type a binary prefix such that no two prefixes overlap.
+    const PREFIX: &'static [bool];
 
     /// Evaluate the constraints implied by this gate at the given challenge point.
     ///
@@ -31,6 +33,8 @@ pub(crate) trait Gate<F: Field>: 'static + WitnessGenerator<F> {
 /// * Some gates, such as the Rescue round gate, "output" their results using one of the next gate's
 ///   "input" wires. The last such gate has no next gate of the same type, so we add a buffer gate
 ///   for receiving the last gate's output.
+/// * The first constant value configured for this gate will be proxied to its `WIRE_BUFFER_CONST`
+///   wire; this allows us to create routable constant wires.
 pub(crate) struct BufferGate { pub index: usize }
 
 impl BufferGate {
@@ -39,10 +43,11 @@ impl BufferGate {
     pub const WIRE_BUFFER_2: usize = 2;
     pub const WIRE_BUFFER_3: usize = 3;
     pub const WIRE_BUFFER_PI: usize = 4;
+    pub const WIRE_BUFFER_CONST: usize = 5;
 }
 
 impl<F: Field> Gate<F> for BufferGate {
-    const ID: usize = 0;
+    const PREFIX: &'static [bool] = &[false, false, true, true];
 
     fn evaluate(
         &self,
@@ -72,8 +77,12 @@ impl<F: Field> WitnessGenerator<F> for BufferGate {
     }
 
     fn generate(&self, circuit: Circuit<F>, _witness: &PartialWitness<F>) -> PartialWitness<F> {
-        // This gate does not generate any witness values.
-        PartialWitness::new()
+        let buffer_const_target = GateInput { gate: self.index, input: Self::WIRE_BUFFER_CONST };
+
+        let mut witness = PartialWitness::new();
+        let const_value = circuit.gate_constants[self.index][<Self as Gate<F>>::PREFIX.len()];
+        witness.wire_values.insert(buffer_const_target, const_value);
+        witness
     }
 }
 
@@ -98,7 +107,7 @@ impl<C: Curve> CurveAddGate<C> {
 }
 
 impl<C: Curve> Gate<C::BaseField> for CurveAddGate<C> {
-    const ID: usize = 1;
+    const PREFIX: &'static [bool] = &[false, false, false, false, true];
 
     fn evaluate(
         &self,
@@ -219,7 +228,7 @@ impl<C: Curve> CurveDblGate<C> {
 }
 
 impl<C: Curve> Gate<C::BaseField> for CurveDblGate<C> {
-    const ID: usize = 2;
+    const PREFIX: &'static [bool] = &[false, false, false, true, false];
 
     fn evaluate(
         &self,
@@ -295,7 +304,7 @@ impl<C: HaloEndomorphismCurve> CurveEndoGate<C> {
 }
 
 impl<C: HaloEndomorphismCurve> Gate<C::BaseField> for CurveEndoGate<C> {
-    const ID: usize = 3;
+    const PREFIX: &'static [bool] = &[false, false, false, true, true];
 
     fn evaluate(
         &self,
@@ -407,22 +416,26 @@ impl<C: HaloEndomorphismCurve> WitnessGenerator<C::BaseField> for CurveEndoGate<
     }
 }
 
-pub(crate) struct RescueGate<F: Field> {
+/// The first step of Rescue, i.e. the one with the `x^(1/5)` layer.
+pub(crate) struct RescueStepAGate<F: Field> {
     pub index: usize,
     pub _phantom: PhantomData<F>,
 }
 
-impl<F: Field> RescueGate<F> {
+impl<F: Field> RescueStepAGate<F> {
     pub const WIRE_INPUT_0: usize = 0;
     pub const WIRE_INPUT_1: usize = 1;
-    pub const WIRE_ROOT_0: usize = 2;
-    pub const WIRE_ROOT_1: usize = 3;
-    pub const WIRE_OUTPUT_0: usize = 4;
-    pub const WIRE_OUTPUT_1: usize = 5;
+    pub const WIRE_INPUT_2: usize = 2;
+    pub const WIRE_OUTPUT_0: usize = 3;
+    pub const WIRE_OUTPUT_1: usize = 4;
+    pub const WIRE_OUTPUT_2: usize = 5;
+    pub const WIRE_ROOT_0: usize = 6;
+    pub const WIRE_ROOT_1: usize = 7;
+    pub const WIRE_ROOT_2: usize = 8;
 }
 
-impl<F: Field> Gate<F> for RescueGate<F> {
-    const ID: usize = 4;
+impl<F: Field> Gate<F> for RescueStepAGate<F> {
+    const PREFIX: &'static [bool] = &[true, false];
 
     fn evaluate(
         &self,
@@ -446,7 +459,7 @@ impl<F: Field> Gate<F> for RescueGate<F> {
     }
 }
 
-impl<F: Field> WitnessGenerator<F> for RescueGate<F> {
+impl<F: Field> WitnessGenerator<F> for RescueStepAGate<F> {
     fn dependencies(&self) -> Vec<GateInput> {
         vec![
             GateInput { gate: self.index, input: Self::WIRE_INPUT_0 },
@@ -455,37 +468,119 @@ impl<F: Field> WitnessGenerator<F> for RescueGate<F> {
     }
 
     fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
-        let constants = &circuit.constants[self.index];
+        let constants = &circuit.gate_constants[self.index];
 
         let in_0_target = GateInput { gate: self.index, input: Self::WIRE_INPUT_0 };
         let in_1_target = GateInput { gate: self.index, input: Self::WIRE_INPUT_1 };
+        let in_2_target = GateInput { gate: self.index, input: Self::WIRE_INPUT_2 };
 
         let root_0_target = GateInput { gate: self.index, input: Self::WIRE_ROOT_0 };
         let root_1_target = GateInput { gate: self.index, input: Self::WIRE_ROOT_1 };
+        let root_2_target = GateInput { gate: self.index, input: Self::WIRE_ROOT_2 };
 
         let out_0_target = GateInput { gate: self.index + 1, input: Self::WIRE_INPUT_0 };
         let out_1_target = GateInput { gate: self.index + 1, input: Self::WIRE_INPUT_1 };
+        let out_2_target = GateInput { gate: self.index + 1, input: Self::WIRE_INPUT_2 };
 
         let in_0 = witness.wire_values[&in_0_target];
         let in_1 = witness.wire_values[&in_1_target];
+        let in_2 = witness.wire_values[&in_2_target];
 
         let root_0 = in_0.kth_root_u32(5);
         let root_1 = in_1.kth_root_u32(5);
+        let root_2 = in_2.kth_root_u32(5);
 
-        let step_0 = mds::<F>(2, 0, 0) * root_0 + mds::<F>(2, 0, 1) * root_1 + constants[0];
-        let step_1 = mds::<F>(2, 1, 0) * root_0 + mds::<F>(2, 1, 1) * root_1 + constants[1];
-
-        let step_0_alpha = step_0.exp_u32(5);
-        let step_1_alpha = step_1.exp_u32(5);
-
-        let out_0 = mds::<F>(2, 0, 0) * step_0_alpha + mds::<F>(2, 0, 1) * step_1_alpha + constants[2];
-        let out_1 = mds::<F>(2, 1, 0) * step_0_alpha + mds::<F>(2, 1, 1) * step_1_alpha + constants[3];
+        let out_0 = mds::<F>(3, 0, 0) * root_0 + mds::<F>(3, 0, 1) * root_1 + mds::<F>(3, 0, 2) * root_2 + constants[Self::PREFIX.len() + 0];
+        let out_1 = mds::<F>(3, 1, 0) * root_0 + mds::<F>(3, 1, 1) * root_1 + mds::<F>(3, 1, 2) * root_2 + constants[Self::PREFIX.len() + 1];
+        let out_2 = mds::<F>(3, 2, 0) * root_0 + mds::<F>(3, 2, 1) * root_1 + mds::<F>(3, 2, 2) * root_2 + constants[Self::PREFIX.len() + 2];
 
         let mut result = PartialWitness::new();
         result.wire_values.insert(root_0_target, root_0);
         result.wire_values.insert(root_1_target, root_1);
+        result.wire_values.insert(root_2_target, root_2);
         result.wire_values.insert(out_0_target, out_0);
         result.wire_values.insert(out_1_target, out_1);
+        result.wire_values.insert(out_2_target, out_2);
+        result
+    }
+}
+
+/// The second step of Rescue, i.e. the one with the `x^5` layer.
+pub(crate) struct RescueStepBGate<F: Field> {
+    pub index: usize,
+    pub _phantom: PhantomData<F>,
+}
+
+impl<F: Field> RescueStepBGate<F> {
+    pub const WIRE_INPUT_0: usize = 0;
+    pub const WIRE_INPUT_1: usize = 1;
+    pub const WIRE_INPUT_2: usize = 2;
+    pub const WIRE_OUTPUT_0: usize = 3;
+    pub const WIRE_OUTPUT_1: usize = 4;
+    pub const WIRE_OUTPUT_2: usize = 5;
+}
+
+impl<F: Field> Gate<F> for RescueStepBGate<F> {
+    const PREFIX: &'static [bool] = &[true, true];
+
+    fn evaluate(
+        &self,
+        local_constant_values: Vec<F>,
+        local_wire_values: Vec<F>,
+        right_wire_values: Vec<F>,
+        below_wire_values: Vec<F>,
+    ) -> Vec<F> {
+        unimplemented!()
+    }
+
+    fn evaluate_recursively(
+        &self,
+        builder: &mut CircuitBuilder<F>,
+        local_constant_values: Vec<RoutingTarget>,
+        local_wire_values: Vec<RoutingTarget>,
+        right_wire_values: Vec<RoutingTarget>,
+        below_wire_values: Vec<RoutingTarget>,
+    ) -> Vec<RoutingTarget> {
+        unimplemented!()
+    }
+}
+
+impl<F: Field> WitnessGenerator<F> for RescueStepBGate<F> {
+    fn dependencies(&self) -> Vec<GateInput> {
+        vec![
+            GateInput { gate: self.index, input: Self::WIRE_INPUT_0 },
+            GateInput { gate: self.index, input: Self::WIRE_INPUT_1 },
+            GateInput { gate: self.index, input: Self::WIRE_INPUT_2 },
+        ]
+    }
+
+    fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
+        let constants = &circuit.gate_constants[self.index];
+
+        let in_0_target = GateInput { gate: self.index, input: Self::WIRE_INPUT_0 };
+        let in_1_target = GateInput { gate: self.index, input: Self::WIRE_INPUT_1 };
+        let in_2_target = GateInput { gate: self.index, input: Self::WIRE_INPUT_2 };
+
+        let out_0_target = GateInput { gate: self.index + 1, input: Self::WIRE_INPUT_0 };
+        let out_1_target = GateInput { gate: self.index + 1, input: Self::WIRE_INPUT_1 };
+        let out_2_target = GateInput { gate: self.index + 1, input: Self::WIRE_INPUT_2 };
+
+        let in_0 = witness.wire_values[&in_0_target];
+        let in_1 = witness.wire_values[&in_1_target];
+        let in_2 = witness.wire_values[&in_2_target];
+
+        let exp_0 = in_0.exp_u32(5);
+        let exp_1 = in_1.exp_u32(5);
+        let exp_2 = in_2.exp_u32(5);
+
+        let out_0 = mds::<F>(3, 0, 0) * exp_0 + mds::<F>(3, 0, 1) * exp_1 + mds::<F>(3, 0, 2) * exp_2 + constants[Self::PREFIX.len() + 0];
+        let out_1 = mds::<F>(3, 1, 0) * exp_0 + mds::<F>(3, 1, 1) * exp_1 + mds::<F>(3, 1, 2) * exp_2 + constants[Self::PREFIX.len() + 1];
+        let out_2 = mds::<F>(3, 2, 0) * exp_0 + mds::<F>(3, 2, 1) * exp_1 + mds::<F>(3, 2, 2) * exp_2 + constants[Self::PREFIX.len() + 2];
+
+        let mut result = PartialWitness::new();
+        result.wire_values.insert(out_0_target, out_0);
+        result.wire_values.insert(out_1_target, out_1);
+        result.wire_values.insert(out_2_target, out_2);
         result
     }
 }
@@ -505,7 +600,7 @@ impl Base4SumGate {
 }
 
 impl<F: Field> Gate<F> for Base4SumGate {
-    const ID: usize = 5;
+    const PREFIX: &'static [bool] = &[false, false, true, false, false];
 
     fn evaluate(
         &self,
@@ -555,7 +650,7 @@ impl<F: Field> MaddGate<F> {
 }
 
 impl<F: Field> Gate<F> for MaddGate<F> {
-    const ID: usize = 6;
+    const PREFIX: &'static [bool] = &[false, true];
 
     fn evaluate(
         &self,
