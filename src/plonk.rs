@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
-use crate::{Field, generate_rescue_constants};
-use crate::plonk_gates::{BufferGate, Gate, RescueStepAGate};
+use crate::{Field, generate_rescue_constants, Curve, HaloEndomorphismCurve};
+use crate::plonk_gates::{BufferGate, Gate, RescueStepAGate, CurveAddGate};
 use std::marker::PhantomData;
 
 pub(crate) const NUM_WIRES: usize = 9;
@@ -74,11 +74,23 @@ pub struct CircuitBuilder<F: Field> {
     constant_wires: HashMap<F, RoutingTarget>,
 }
 
-pub struct MsmEndoPart {
+/// A component of an MSM, or in other words, an individual scalar-group multiplication.
+pub struct MsmPart {
     scalar: RoutingTarget,
     x: RoutingTarget,
     y: RoutingTarget,
-    truncate_to_128: bool,
+}
+
+pub struct MsmResult {
+    x: RoutingTarget,
+    y: RoutingTarget,
+}
+
+pub struct MsmEndoResult {
+    msm_result: MsmResult,
+    /// While `msm` computes `[s] P`, `msm_end` computes `[n(s[0..128])] P`. Here we return
+    /// `n(s[0..128])`, i.e., the scalar by which the point was actually multiplied.
+    actual_scalar: RoutingTarget,
 }
 
 impl<F: Field> CircuitBuilder<F> {
@@ -94,7 +106,7 @@ impl<F: Field> CircuitBuilder<F> {
 
     pub fn add_public_input(&mut self) -> GateInput {
         let index = self.num_gates();
-        self.add_gate_no_constants(BufferGate { index });
+        self.add_gate_no_constants(BufferGate::new(index));
         GateInput { gate: index, input: BufferGate::WIRE_BUFFER_PI }
     }
 
@@ -132,7 +144,7 @@ impl<F: Field> CircuitBuilder<F> {
 
     fn create_constant_wire(&mut self, c: F) -> RoutingTarget {
         let index = self.num_gates();
-        self.add_gate(BufferGate { index }, vec![c]);
+        self.add_gate(BufferGate::new(index), vec![c]);
         RoutingTarget::GateInput(GateInput { gate: index, input: BufferGate::WIRE_BUFFER_CONST })
     }
 
@@ -140,6 +152,7 @@ impl<F: Field> CircuitBuilder<F> {
         self.add_rescue_hash_2x2(inputs)[0]
     }
 
+    /// TODO: Instead define a variable-output hash.
     pub fn add_rescue_hash_2x2(&mut self, inputs: [RoutingTarget; 2]) -> [RoutingTarget; 2] {
         // This is a width-3 sponge function with a single absorption and a single squeeze.
         let zero = self.zero_wire();
@@ -152,10 +165,7 @@ impl<F: Field> CircuitBuilder<F> {
 
         let first_gate_index = self.num_gates();
         for constants in all_constants.into_iter() {
-            let gate = RescueStepAGate {
-                index: self.num_gates(),
-                _phantom: PhantomData,
-            };
+            let gate = RescueStepAGate::new(self.num_gates());
             self.add_gate(gate, constants);
         }
         let last_gate_index = self.num_gates() - 1;
@@ -175,8 +185,14 @@ impl<F: Field> CircuitBuilder<F> {
         [out_0_target, out_1_target, out_2_target]
     }
 
-    pub fn add_msm_endo(&mut self, parts: &[MsmEndoPart]) {
-        todo!();
+    pub fn msm<C: Curve<BaseField = F>>(&mut self, parts: &[MsmPart]) -> MsmResult {
+        self.add_gate_no_constants(CurveAddGate::<C>::new(self.num_gates()));
+        todo!()
+    }
+
+    /// Like `add_msm`, but uses the endomorphism described in the Halo paper.
+    pub fn msm_endo<C: HaloEndomorphismCurve<BaseField = F>>(&mut self, parts: &[MsmPart]) -> MsmEndoResult {
+        todo!()
     }
 
     /// Adds a gate to the circuit, without doing any routing.

@@ -35,9 +35,17 @@ pub(crate) trait Gate<F: Field>: 'static + WitnessGenerator<F> {
 ///   for receiving the last gate's output.
 /// * The first constant value configured for this gate will be proxied to its `WIRE_BUFFER_CONST`
 ///   wire; this allows us to create routable constant wires.
-pub(crate) struct BufferGate { pub index: usize }
+pub(crate) struct BufferGate {
+    pub index: usize,
+    /// Make the constructor private.
+    _private: (),
+}
 
 impl BufferGate {
+    pub fn new(index: usize) -> Self {
+        BufferGate { index, _private: () }
+    }
+
     pub const WIRE_BUFFER_0: usize = 0;
     pub const WIRE_BUFFER_1: usize = 1;
     pub const WIRE_BUFFER_2: usize = 2;
@@ -96,14 +104,18 @@ pub(crate) struct CurveAddGate<C: Curve> {
 }
 
 impl<C: Curve> CurveAddGate<C> {
-    const WIRE_GROUP_ACC_X: usize = 0;
-    const WIRE_GROUP_ACC_Y: usize = 1;
-    const WIRE_SCALAR_ACC_OLD: usize = 2;
-    const WIRE_SCALAR_ACC_NEW: usize = 3;
-    const WIRE_ADDEND_X: usize = 4;
-    const WIRE_ADDEND_Y: usize = 5;
-    const WIRE_SCALAR_BIT: usize = 6;
-    const WIRE_INVERSE: usize = 7;
+    pub fn new(index: usize) -> Self {
+        CurveAddGate { index, _phantom: PhantomData }
+    }
+
+    pub const WIRE_GROUP_ACC_X: usize = 0;
+    pub const WIRE_GROUP_ACC_Y: usize = 1;
+    pub const WIRE_SCALAR_ACC_OLD: usize = 2;
+    pub const WIRE_SCALAR_ACC_NEW: usize = 3;
+    pub const WIRE_ADDEND_X: usize = 4;
+    pub const WIRE_ADDEND_Y: usize = 5;
+    pub const WIRE_SCALAR_BIT: usize = 6;
+    pub const WIRE_INVERSE: usize = 7;
 }
 
 impl<C: Curve> Gate<C::BaseField> for CurveAddGate<C> {
@@ -220,11 +232,15 @@ pub(crate) struct CurveDblGate<C: Curve> {
 }
 
 impl<C: Curve> CurveDblGate<C> {
-    const WIRE_X_OLD: usize = 0;
-    const WIRE_Y_OLD: usize = 1;
-    const WIRE_X_NEW: usize = 2;
-    const WIRE_Y_NEW: usize = 3;
-    const WIRE_INVERSE: usize = 4;
+    pub fn new(index: usize) -> Self {
+        CurveDblGate { index, _phantom: PhantomData }
+    }
+
+    pub const WIRE_X_OLD: usize = 0;
+    pub const WIRE_Y_OLD: usize = 1;
+    pub const WIRE_X_NEW: usize = 2;
+    pub const WIRE_Y_NEW: usize = 3;
+    pub const WIRE_INVERSE: usize = 4;
 }
 
 impl<C: Curve> Gate<C::BaseField> for CurveDblGate<C> {
@@ -292,15 +308,19 @@ pub(crate) struct CurveEndoGate<C: HaloEndomorphismCurve> {
 }
 
 impl<C: HaloEndomorphismCurve> CurveEndoGate<C> {
-    const WIRE_GROUP_ACC_X: usize = 0;
-    const WIRE_GROUP_ACC_Y: usize = 1;
-    const WIRE_SCALAR_ACC_UNSIGNED: usize = 2;
-    const WIRE_SCALAR_ACC_SIGNED: usize = 3;
-    const WIRE_ADDEND_X: usize = 4;
-    const WIRE_ADDEND_Y: usize = 5;
-    const WIRE_SCALAR_BIT_0: usize = 6;
-    const WIRE_SCALAR_BIT_1: usize = 7;
-    const WIRE_INVERSE: usize = 8;
+    pub fn new(index: usize) -> Self {
+        CurveEndoGate { index, _phantom: PhantomData }
+    }
+
+    pub const WIRE_GROUP_ACC_X: usize = 0;
+    pub const WIRE_GROUP_ACC_Y: usize = 1;
+    pub const WIRE_SCALAR_ACC_UNSIGNED: usize = 2;
+    pub const WIRE_SCALAR_ACC_SIGNED: usize = 3;
+    pub const WIRE_ADDEND_X: usize = 4;
+    pub const WIRE_ADDEND_Y: usize = 5;
+    pub const WIRE_SCALAR_BIT_0: usize = 6;
+    pub const WIRE_SCALAR_BIT_1: usize = 7;
+    pub const WIRE_INVERSE: usize = 8;
 }
 
 impl<C: HaloEndomorphismCurve> Gate<C::BaseField> for CurveEndoGate<C> {
@@ -419,10 +439,14 @@ impl<C: HaloEndomorphismCurve> WitnessGenerator<C::BaseField> for CurveEndoGate<
 /// The first step of Rescue, i.e. the one with the `x^(1/5)` layer.
 pub(crate) struct RescueStepAGate<F: Field> {
     pub index: usize,
-    pub _phantom: PhantomData<F>,
+    _phantom: PhantomData<F>,
 }
 
 impl<F: Field> RescueStepAGate<F> {
+    pub fn new(index: usize) -> Self {
+        RescueStepAGate { index, _phantom: PhantomData }
+    }
+
     pub const WIRE_INPUT_0: usize = 0;
     pub const WIRE_INPUT_1: usize = 1;
     pub const WIRE_INPUT_2: usize = 2;
@@ -508,10 +532,14 @@ impl<F: Field> WitnessGenerator<F> for RescueStepAGate<F> {
 /// The second step of Rescue, i.e. the one with the `x^5` layer.
 pub(crate) struct RescueStepBGate<F: Field> {
     pub index: usize,
-    pub _phantom: PhantomData<F>,
+    _phantom: PhantomData<F>,
 }
 
 impl<F: Field> RescueStepBGate<F> {
+    pub fn new(index: usize) -> Self {
+        RescueStepBGate { index, _phantom: PhantomData }
+    }
+
     pub const WIRE_INPUT_0: usize = 0;
     pub const WIRE_INPUT_1: usize = 1;
     pub const WIRE_INPUT_2: usize = 2;
@@ -585,18 +613,26 @@ impl<F: Field> WitnessGenerator<F> for RescueStepBGate<F> {
     }
 }
 
-pub(crate) struct Base4SumGate { pub index: usize }
+pub(crate) struct Base4SumGate {
+    pub index: usize,
+    /// Make the constructor private.
+    _private: (),
+}
 
 impl Base4SumGate {
-    const WIRE_ACC: usize = 0;
-    const WIRE_LIMB_0: usize = 1;
-    const WIRE_LIMB_1: usize = 2;
-    const WIRE_LIMB_2: usize = 3;
-    const WIRE_LIMB_3: usize = 4;
-    const WIRE_LIMB_4: usize = 5;
-    const WIRE_LIMB_5: usize = 6;
-    const WIRE_LIMB_6: usize = 7;
-    const WIRE_LIMB_7: usize = 8;
+    pub fn new(index: usize) -> Self {
+        Base4SumGate { index, _private: () }
+    }
+
+    pub const WIRE_ACC: usize = 0;
+    pub const WIRE_LIMB_0: usize = 1;
+    pub const WIRE_LIMB_1: usize = 2;
+    pub const WIRE_LIMB_2: usize = 3;
+    pub const WIRE_LIMB_3: usize = 4;
+    pub const WIRE_LIMB_4: usize = 5;
+    pub const WIRE_LIMB_5: usize = 6;
+    pub const WIRE_LIMB_6: usize = 7;
+    pub const WIRE_LIMB_7: usize = 8;
 }
 
 impl<F: Field> Gate<F> for Base4SumGate {
@@ -636,17 +672,24 @@ impl<F: Field> WitnessGenerator<F> for Base4SumGate {
     }
 }
 
-/// A "multiply, add, and rescale" gate.
+/// A "multiply and add" gate. In particular, it computes
+/// ```
+/// output = const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend + const_2
+/// ```
 pub(crate) struct MaddGate<F: Field> {
     pub index: usize,
-    scalar: F,
+    _phantom: PhantomData<F>,
 }
 
 impl<F: Field> MaddGate<F> {
-    const WIRE_MULTIPLICAND_0: usize = 0;
-    const WIRE_MULTIPLICAND_1: usize = 1;
-    const WIRE_ADDEND: usize = 2;
-    const WIRE_OUTPUT: usize = 3;
+    pub fn new(index: usize) -> Self {
+        MaddGate { index, _phantom: PhantomData }
+    }
+
+    pub const WIRE_MULTIPLICAND_0: usize = 0;
+    pub const WIRE_MULTIPLICAND_1: usize = 1;
+    pub const WIRE_ADDEND: usize = 2;
+    pub const WIRE_OUTPUT: usize = 3;
 }
 
 impl<F: Field> Gate<F> for MaddGate<F> {
@@ -689,12 +732,15 @@ impl<F: Field> WitnessGenerator<F> for MaddGate<F> {
         let addend_target = GateInput { gate: self.index, input: Self::WIRE_ADDEND };
         let output_target = GateInput { gate: self.index, input: Self::WIRE_OUTPUT };
 
+        let const_0 = circuit.gate_constants[self.index][Self::PREFIX.len() + 0];
+        let const_1 = circuit.gate_constants[self.index][Self::PREFIX.len() + 1];
+        let const_2 = circuit.gate_constants[self.index][Self::PREFIX.len() + 2];
+
         let multiplicand_0 = witness.wire_values[&multiplicand_0_target];
         let multiplicand_1 = witness.wire_values[&multiplicand_1_target];
         let addend = witness.wire_values[&addend_target];
 
-        let mad = multiplicand_0 * multiplicand_1 + addend;
-        let output = self.scalar * mad;
+        let output = const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend + const_2;
 
         let mut result = PartialWitness::new();
         result.wire_values.insert(output_target, output);
