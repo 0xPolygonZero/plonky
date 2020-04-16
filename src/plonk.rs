@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
-use crate::{Field, generate_rescue_constants, Curve, HaloEndomorphismCurve};
-use crate::plonk_gates::{BufferGate, Gate, RescueStepAGate, CurveAddGate, MaddGate};
+use crate::{Field, generate_rescue_constants, Curve, HaloEndomorphismCurve, AffinePoint};
+use crate::plonk_gates::{BufferGate, Gate, RescueStepAGate, CurveAddGate, MaddGate, CurveDblGate};
 use std::marker::PhantomData;
 
 pub(crate) const NUM_WIRES: usize = 9;
@@ -83,13 +83,11 @@ pub struct CircuitBuilder<F: Field> {
 /// A component of an MSM, or in other words, an individual scalar-group multiplication.
 pub struct MsmPart {
     pub scalar_bits: Vec<RoutingTarget>,
-    pub x: RoutingTarget,
-    pub y: RoutingTarget,
+    pub addend: AffinePointTarget,
 }
 
 pub struct MsmResult {
-    pub x: RoutingTarget,
-    pub y: RoutingTarget,
+    pub sum: AffinePointTarget,
     /// For each part, we return the weighted sum of the given scalar bits.
     pub scalars: Vec<RoutingTarget>,
 }
@@ -159,6 +157,14 @@ impl<F: Field> CircuitBuilder<F> {
         let index = self.num_gates();
         self.add_gate(BufferGate::new(index), vec![c]);
         RoutingTarget::GateInput(GateInput { gate: index, input: BufferGate::WIRE_BUFFER_CONST })
+    }
+
+    pub fn constant_affine_point<C: Curve<BaseField = F>>(&mut self, point: AffinePoint<C>) -> AffinePointTarget {
+        assert!(!point.zero);
+        AffinePointTarget {
+            x: self.constant_wire(point.x),
+            y: self.constant_wire(point.y),
+        }
     }
 
     pub fn add(&mut self, x: RoutingTarget, y: RoutingTarget) -> RoutingTarget {
@@ -248,6 +254,14 @@ impl<F: Field> CircuitBuilder<F> {
         AffinePointTarget { x: result_x, y: result_y }
     }
 
+
+    pub fn curve_double<C: Curve<BaseField = F>>(
+        &mut self,
+        p: AffinePointTarget
+    ) -> AffinePointTarget {
+        todo!()
+    }
+
     pub fn curve_sub<C: Curve<BaseField = F>>(
         &mut self,
         p_1: AffinePointTarget,
@@ -263,26 +277,58 @@ impl<F: Field> CircuitBuilder<F> {
         // probability provided that the scalars and points are random. (We don't worry about
         // non-random inputs from malicious provers, since our curve gates will be unsatisfiable in
         // exceptional cases.)
-        let mut acc_x = self.constant_wire(C::GENERATOR_AFFINE.x);
-        let mut acc_y = self.constant_wire(C::GENERATOR_AFFINE.y);
+        let mut filler = C::GENERATOR_AFFINE;
+        let mut acc = self.constant_affine_point(filler);
         let mut scalars = vec![self.zero_wire(); parts.len()];
 
         let max_bits = parts.iter().map(|p| p.scalar_bits.len()).max().expect("Empty MSM");
-        for i in 0..max_bits {
-            for part in parts {
-                if part.scalar_bits.len() > i {
-                    // TODO: Wiring.
-                    self.add_gate_no_constants(CurveAddGate::<C>::new(self.num_gates()));
+        for i in (0..max_bits).rev() {
+            // Route the accumulator to the first curve addition gate's inputs.
+            self.copy(acc.x, RoutingTarget::GateInput(
+                GateInput { gate: self.num_gates(), input: CurveAddGate::<C>::WIRE_GROUP_ACC_X }));
+            self.copy(acc.y, RoutingTarget::GateInput(
+                GateInput { gate: self.num_gates(), input: CurveAddGate::<C>::WIRE_GROUP_ACC_Y }));
+
+            for (j, part) in parts.iter().enumerate() {
+                if i < part.scalar_bits.len() {
+                    let bit = part.scalar_bits[i];
+                    let idx_add = self.num_gates();
+                    self.add_gate_no_constants(CurveAddGate::<C>::new(idx_add));
+                    self.copy(scalars[j], RoutingTarget::GateInput(
+                        GateInput { gate: idx_add, input: CurveAddGate::<C>::WIRE_SCALAR_ACC_OLD }));
+                    scalars[j] = RoutingTarget::GateInput(
+                        GateInput { gate: idx_add, input: CurveAddGate::<C>::WIRE_SCALAR_ACC_NEW });
+                    self.copy(part.addend.x, RoutingTarget::GateInput(
+                        GateInput { gate: idx_add, input: CurveAddGate::<C>::WIRE_ADDEND_X }));
+                    self.copy(part.addend.y, RoutingTarget::GateInput(
+                        GateInput { gate: idx_add, input: CurveAddGate::<C>::WIRE_ADDEND_Y }));
+                    self.copy(bit, RoutingTarget::GateInput(
+                        GateInput { gate: idx_add, input: CurveAddGate::<C>::WIRE_SCALAR_BIT }));
                 }
             }
+
+            // Double the accumulator.
+            let idx_dbl = self.num_gates();
+            self.add_gate_no_constants(CurveDblGate::<C>::new(idx_dbl));
+            // No need to route the double gate's inputs, because the last add gate would have
+            // constrained them. Just take its outputs as the new accumulator.
+            acc = AffinePointTarget {
+                x: RoutingTarget::GateInput(
+                    GateInput { gate: idx_dbl, input: CurveDblGate::<C>::WIRE_X_NEW }),
+                y: RoutingTarget::GateInput(
+                    GateInput { gate: idx_dbl, input: CurveDblGate::<C>::WIRE_Y_NEW }),
+            };
+
+            // Also double the filler, so we can subtract out the repeatedly doubled version later.
+            filler = filler.double();
         }
 
-        // Subtract the arbitrary nonzero value that we started with.
-        todo!();
+        // Subtract (a rescaled version of) the arbitrary nonzero value that we started with.
+        let filler_target = self.constant_affine_point(filler);
+        acc = self.curve_sub::<C>(acc, filler_target);
 
         MsmResult {
-            x: acc_x,
-            y: acc_y,
+            sum: acc,
             scalars,
         }
     }
@@ -310,13 +356,19 @@ impl<F: Field> CircuitBuilder<F> {
         self.generators.push(Box::new(gate));
     }
 
-    fn num_gates(&self) -> usize {
+    pub fn num_gates(&self) -> usize {
         self.gate_constants.len()
     }
 
     /// Add a copy constraint between two routing targets.
     pub fn copy(&mut self, target_1: RoutingTarget, target_2: RoutingTarget) {
         self.copy_constraints.push((target_1, target_2));
+    }
+
+    pub fn copy_gi_gi(&mut self, gi_1: GateInput, gi_2: GateInput) {
+        let target_1 = RoutingTarget::GateInput(gi_1);
+        let target_2 = RoutingTarget::GateInput(gi_2);
+        self.copy(target_1, target_2);
     }
 
     pub fn build(self) -> Circuit<F> {
