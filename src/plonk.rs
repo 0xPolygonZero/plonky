@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use crate::{Field, generate_rescue_constants, Curve, HaloEndomorphismCurve};
-use crate::plonk_gates::{BufferGate, Gate, RescueStepAGate, CurveAddGate};
+use crate::plonk_gates::{BufferGate, Gate, RescueStepAGate, CurveAddGate, MaddGate};
 use std::marker::PhantomData;
 
 pub(crate) const NUM_WIRES: usize = 9;
@@ -66,6 +66,12 @@ pub enum RoutingTarget {
     GateInput(GateInput),
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct AffinePointTarget {
+    x: RoutingTarget,
+    y: RoutingTarget,
+}
+
 pub struct CircuitBuilder<F: Field> {
     circuit_input_index: usize,
     gate_constants: Vec<Vec<F>>,
@@ -76,21 +82,24 @@ pub struct CircuitBuilder<F: Field> {
 
 /// A component of an MSM, or in other words, an individual scalar-group multiplication.
 pub struct MsmPart {
-    scalar: RoutingTarget,
-    x: RoutingTarget,
-    y: RoutingTarget,
+    pub scalar_bits: Vec<RoutingTarget>,
+    pub x: RoutingTarget,
+    pub y: RoutingTarget,
 }
 
 pub struct MsmResult {
-    x: RoutingTarget,
-    y: RoutingTarget,
+    pub x: RoutingTarget,
+    pub y: RoutingTarget,
+    /// For each part, we return the weighted sum of the given scalar bits.
+    pub scalars: Vec<RoutingTarget>,
 }
 
 pub struct MsmEndoResult {
-    msm_result: MsmResult,
-    /// While `msm` computes `[s] P`, `msm_end` computes `[n(s[0..128])] P`. Here we return
-    /// `n(s[0..128])`, i.e., the scalar by which the point was actually multiplied.
-    actual_scalar: RoutingTarget,
+    pub msm_result: MsmResult,
+    /// While `msm` computes a sum of `[s] P` terms, `msm_end` computes a sum of `[n(s)] P` terms
+    /// for some injective `n`. Here we return each `n(s)`, i.e., the scalar by which the point was
+    /// actually multiplied.
+    pub actual_scalars: Vec<RoutingTarget>,
 }
 
 impl<F: Field> CircuitBuilder<F> {
@@ -128,6 +137,10 @@ impl<F: Field> CircuitBuilder<F> {
         self.constant_wire(F::ONE)
     }
 
+    pub fn neg_one_wire(&mut self) -> RoutingTarget {
+        self.constant_wire(F::NEG_ONE)
+    }
+
     pub fn constant_wire(&mut self, c: F) -> RoutingTarget {
         if self.constant_wires.contains_key(&c) {
             self.constant_wires[&c]
@@ -148,19 +161,44 @@ impl<F: Field> CircuitBuilder<F> {
         RoutingTarget::GateInput(GateInput { gate: index, input: BufferGate::WIRE_BUFFER_CONST })
     }
 
-    pub fn add_rescue_hash_2x1(&mut self, inputs: [RoutingTarget; 2]) -> RoutingTarget {
-        self.add_rescue_hash_2x2(inputs)[0]
+    pub fn add(&mut self, x: RoutingTarget, y: RoutingTarget) -> RoutingTarget {
+        let one = self.one_wire();
+        let index = self.num_gates();
+        self.add_gate(MaddGate::new(index), vec![F::ONE, F::ONE, F::ZERO]);
+        self.copy(x, RoutingTarget::GateInput(GateInput { gate: index, input: MaddGate::<F>::WIRE_MULTIPLICAND_0 }));
+        self.copy(one, RoutingTarget::GateInput(GateInput { gate: index, input: MaddGate::<F>::WIRE_MULTIPLICAND_1 }));
+        self.copy(y, RoutingTarget::GateInput(GateInput { gate: index, input: MaddGate::<F>::WIRE_ADDEND }));
+        RoutingTarget::GateInput(GateInput { gate: index, input: MaddGate::<F>::WIRE_OUTPUT })
+    }
+
+    pub fn mul(&mut self, x: RoutingTarget, y: RoutingTarget) -> RoutingTarget {
+        let zero = self.zero_wire();
+        let index = self.num_gates();
+        self.add_gate(MaddGate::new(index), vec![F::ONE, F::ZERO, F::ZERO]);
+        self.copy(x, RoutingTarget::GateInput(GateInput { gate: index, input: MaddGate::<F>::WIRE_MULTIPLICAND_0 }));
+        self.copy(y, RoutingTarget::GateInput(GateInput { gate: index, input: MaddGate::<F>::WIRE_MULTIPLICAND_1 }));
+        self.copy(zero, RoutingTarget::GateInput(GateInput { gate: index, input: MaddGate::<F>::WIRE_ADDEND }));
+        RoutingTarget::GateInput(GateInput { gate: index, input: MaddGate::<F>::WIRE_OUTPUT })
+    }
+
+    pub fn neg(&mut self, x: RoutingTarget) -> RoutingTarget {
+        let neg_one = self.neg_one_wire();
+        self.mul(x, neg_one)
+    }
+
+    pub fn rescue_hash_2x1(&mut self, inputs: [RoutingTarget; 2]) -> RoutingTarget {
+        self.rescue_hash_2x2(inputs)[0]
     }
 
     /// TODO: Instead define a variable-output hash.
-    pub fn add_rescue_hash_2x2(&mut self, inputs: [RoutingTarget; 2]) -> [RoutingTarget; 2] {
+    pub fn rescue_hash_2x2(&mut self, inputs: [RoutingTarget; 2]) -> [RoutingTarget; 2] {
         // This is a width-3 sponge function with a single absorption and a single squeeze.
         let zero = self.zero_wire();
-        let outputs = self.add_rescue_permutation_3x3([inputs[0], inputs[1], zero]);
+        let outputs = self.rescue_permutation_3x3([inputs[0], inputs[1], zero]);
         [outputs[0], outputs[1]]
     }
 
-    pub fn add_rescue_permutation_3x3(&mut self, inputs: [RoutingTarget; 3]) -> [RoutingTarget; 3] {
+    pub fn rescue_permutation_3x3(&mut self, inputs: [RoutingTarget; 3]) -> [RoutingTarget; 3] {
         let all_constants = generate_rescue_constants(3);
 
         let first_gate_index = self.num_gates();
@@ -185,13 +223,72 @@ impl<F: Field> CircuitBuilder<F> {
         [out_0_target, out_1_target, out_2_target]
     }
 
-    pub fn msm<C: Curve<BaseField = F>>(&mut self, parts: &[MsmPart]) -> MsmResult {
-        self.add_gate_no_constants(CurveAddGate::<C>::new(self.num_gates()));
-        todo!()
+    pub fn curve_neg<C: Curve<BaseField = F>>(
+        &mut self,
+        p: AffinePointTarget,
+    ) -> AffinePointTarget {
+        let neg_y = self.neg(p.y);
+        AffinePointTarget { x: p.x, y: neg_y }
+    }
+
+    pub fn curve_add<C: Curve<BaseField = F>>(
+        &mut self,
+        p_1: AffinePointTarget,
+        p_2: AffinePointTarget,
+    ) -> AffinePointTarget {
+        let add_index = self.num_gates();
+        self.add_gate_no_constants(CurveAddGate::<C>::new(add_index));
+        let buffer_index = self.num_gates();
+        self.add_gate_no_constants(BufferGate::new(buffer_index));
+
+        // TODO: Wiring.
+
+        let result_x = RoutingTarget::GateInput(GateInput { gate: buffer_index, input: CurveAddGate::<C>::WIRE_GROUP_ACC_X });
+        let result_y = RoutingTarget::GateInput(GateInput { gate: buffer_index, input: CurveAddGate::<C>::WIRE_GROUP_ACC_Y });
+        AffinePointTarget { x: result_x, y: result_y }
+    }
+
+    pub fn curve_sub<C: Curve<BaseField = F>>(
+        &mut self,
+        p_1: AffinePointTarget,
+        p_2: AffinePointTarget,
+    ) -> AffinePointTarget {
+        let neg_p_2 = self.curve_neg::<C>(p_2);
+        self.curve_add::<C>(p_1, neg_p_2)
+    }
+
+    pub fn curve_msm<C: Curve<BaseField = F>>(&mut self, parts: &[MsmPart]) -> MsmResult {
+        // Normally we would start with zero, but to avoid exceptional cases, we start with some
+        // arbitrary nonzero point and subtract it later. This avoids exception with high
+        // probability provided that the scalars and points are random. (We don't worry about
+        // non-random inputs from malicious provers, since our curve gates will be unsatisfiable in
+        // exceptional cases.)
+        let mut acc_x = self.constant_wire(C::GENERATOR_AFFINE.x);
+        let mut acc_y = self.constant_wire(C::GENERATOR_AFFINE.y);
+        let mut scalars = vec![self.zero_wire(); parts.len()];
+
+        let max_bits = parts.iter().map(|p| p.scalar_bits.len()).max().expect("Empty MSM");
+        for i in 0..max_bits {
+            for part in parts {
+                if part.scalar_bits.len() > i {
+                    // TODO: Wiring.
+                    self.add_gate_no_constants(CurveAddGate::<C>::new(self.num_gates()));
+                }
+            }
+        }
+
+        // Subtract the arbitrary nonzero value that we started with.
+        todo!();
+
+        MsmResult {
+            x: acc_x,
+            y: acc_y,
+            scalars,
+        }
     }
 
     /// Like `add_msm`, but uses the endomorphism described in the Halo paper.
-    pub fn msm_endo<C: HaloEndomorphismCurve<BaseField = F>>(&mut self, parts: &[MsmPart]) -> MsmEndoResult {
+    pub fn curve_msm_endo<C: HaloEndomorphismCurve<BaseField = F>>(&mut self, parts: &[MsmPart]) -> MsmEndoResult {
         todo!()
     }
 

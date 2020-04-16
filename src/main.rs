@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use plonky::{Curve, fft_precompute, fft_with_precomputation, FftPrecomputation, Field, msm_execute_parallel, msm_precompute, MsmPrecomputation, ProjectivePoint, recursive_verification_circuit, Tweedledee, TWEEDLEDEE_GENERATOR_PROJECTIVE, Tweedledum};
+use plonky::{Curve, fft_precompute, fft_with_precomputation, FftPrecomputation, Field, msm_execute_parallel, msm_precompute, MsmPrecomputation, ProjectivePoint, recursive_verification_circuit, Tweedledee, Tweedledum};
 
 const DEGREE: usize = 1 << 12;
 const MSM_COUNT: usize = 10 + 1 + 7; // 10 wires, Z, and 7 components of t

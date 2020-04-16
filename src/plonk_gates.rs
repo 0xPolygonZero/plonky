@@ -673,8 +673,9 @@ impl<F: Field> WitnessGenerator<F> for Base4SumGate {
 }
 
 /// A "multiply and add" gate. In particular, it computes
-/// ```
-/// output = const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend + const_2
+///
+/// ```text
+/// output := const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend + const_2
 /// ```
 pub(crate) struct MaddGate<F: Field> {
     pub index: usize,

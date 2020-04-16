@@ -3,25 +3,18 @@ use crate::{AffinePoint, Curve, Field, HaloEndomorphismCurve, ProjectivePoint, T
 #[derive(Debug, Copy, Clone)]
 pub struct Tweedledum;
 
-pub const TWEEDLEDUM_GENERATOR_AFFINE: AffinePoint<Tweedledum> = AffinePoint {
-    x: TweedledumBase::NEG_ONE,
-    y: TweedledumBase::TWO,
-    zero: false,
-};
-
-pub const TWEEDLEDUM_GENERATOR_PROJECTIVE: ProjectivePoint<Tweedledum> = ProjectivePoint {
-    x: TweedledumBase::NEG_ONE,
-    y: TweedledumBase::TWO,
-    z: TweedledumBase::ONE,
-    zero: false,
-};
-
 impl Curve for Tweedledum {
     type BaseField = TweedledumBase;
     type ScalarField = TweedledeeBase;
 
     const A: TweedledumBase = TweedledumBase::ZERO;
     const B: TweedledumBase = TweedledumBase::ONE;
+
+    const GENERATOR_AFFINE: AffinePoint<Self> = AffinePoint {
+        x: TweedledumBase::NEG_ONE,
+        y: TweedledumBase::TWO,
+        zero: false,
+    };
 }
 
 impl HaloEndomorphismCurve for Tweedledum {

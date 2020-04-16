@@ -13,6 +13,11 @@ impl Curve for Bls12377 {
 
     const A: Bls12377Base = Bls12377Base::ZERO;
     const B: Bls12377Base = Bls12377Base::ONE;
+    const GENERATOR_AFFINE: AffinePoint<Self> = AffinePoint {
+        x: BLS12_377_GENERATOR_X,
+        y: BLS12_377_GENERATOR_Y,
+        zero: false,
+    };
 }
 
 /// 81937999373150964239938255573465948239988671502647976594219695644855304257327692006745978603320413799295628339695
@@ -27,26 +32,13 @@ const BLS12_377_GENERATOR_Y: Bls12377Base = Bls12377Base {
         3369780711397861396, 35370409237953649]
 };
 
-pub const BLS12_377_GENERATOR_AFFINE: AffinePoint<Bls12377> = AffinePoint {
-    x: BLS12_377_GENERATOR_X,
-    y: BLS12_377_GENERATOR_Y,
-    zero: false,
-};
-
-pub const BLS12_377_GENERATOR_PROJECTIVE: ProjectivePoint<Bls12377> = ProjectivePoint {
-    x: BLS12_377_GENERATOR_X,
-    y: BLS12_377_GENERATOR_Y,
-    z: Bls12377Base::ONE,
-    zero: false,
-};
-
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12377, Bls12377Scalar, BLS12_377_GENERATOR_PROJECTIVE, Field, ProjectivePoint};
+    use crate::{Bls12377, Bls12377Scalar, Field, ProjectivePoint, Curve};
 
     #[test]
     fn test_naive_multiplication() {
-        let g = BLS12_377_GENERATOR_PROJECTIVE;
+        let g = Bls12377::GENERATOR_PROJECTIVE;
         let ten = Bls12377Scalar::from_canonical_u64(10);
         let product = mul_naive(ten, g);
         let sum = g + g + g + g + g + g + g + g + g + g;
@@ -56,7 +48,7 @@ mod tests {
     #[test]
     fn test_g1_multiplication() {
         let lhs = Bls12377Scalar::from_canonical([11111111, 22222222, 33333333, 44444444]);
-        assert_eq!(lhs * BLS12_377_GENERATOR_PROJECTIVE, mul_naive(lhs, BLS12_377_GENERATOR_PROJECTIVE));
+        assert_eq!(lhs * Bls12377::GENERATOR_PROJECTIVE, mul_naive(lhs, Bls12377::GENERATOR_PROJECTIVE));
     }
 
     /// A simple, somewhat inefficient implementation of multiplication which is used as a reference

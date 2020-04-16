@@ -9,6 +9,15 @@ pub trait Curve: 'static + Sized + Copy {
 
     const A: Self::BaseField;
     const B: Self::BaseField;
+
+    const GENERATOR_AFFINE: AffinePoint<Self>;
+
+    const GENERATOR_PROJECTIVE: ProjectivePoint<Self> = ProjectivePoint {
+        x: Self::GENERATOR_AFFINE.x,
+        y: Self::GENERATOR_AFFINE.y,
+        z: Self::BaseField::ONE,
+        zero: false,
+    };
 }
 
 /// A curve with the endomorphism described in the Halo paper, i.e. `phi((x, y)) = (zeta_p x, y)`,

@@ -2,14 +2,14 @@ use criterion::{black_box, Criterion};
 use criterion::criterion_group;
 use criterion::criterion_main;
 
-use plonky::{affine_summation_batch_inversion, affine_summation_pairwise, BLS12_377_GENERATOR_PROJECTIVE, ProjectivePoint};
+use plonky::{affine_summation_batch_inversion, affine_summation_pairwise, ProjectivePoint, Bls12377, Curve};
 
 fn criterion_benchmark(c: &mut Criterion) {
     let n = 150;
 
     // We want a scalar with a Hamming weight of 0.5, to simulate the "average case".
     let mut summands = Vec::new();
-    let mut current = BLS12_377_GENERATOR_PROJECTIVE;
+    let mut current = Bls12377::GENERATOR_PROJECTIVE;
     for _i in 0..n {
         summands.push(current);
         current = current.double();
