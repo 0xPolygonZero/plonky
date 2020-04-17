@@ -1,19 +1,19 @@
-use crate::{Circuit, CircuitBuilder, VirtualTarget, Field, HaloEndomorphismCurve, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, NUM_CONSTANTS};
+use crate::{Circuit, CircuitBuilder, Field, HaloEndomorphismCurve, NUM_CONSTANTS, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, Target};
 
 pub struct RecursiveCircuit<F: Field> {
     /// A commitment to each wire polynomial.
-    c_wires: Vec<VirtualTarget>,
+    c_wires: Vec<Target>,
     /// A commitment to Z in the context of the permutation argument.
-    c_z: VirtualTarget,
+    c_z: Target,
     /// A commitment to the quotient polynomial.
-    c_t: Vec<VirtualTarget>,
+    c_t: Vec<Target>,
     /// A commitment to the aggregate polynomial.
-    c_agg: VirtualTarget,
+    c_agg: Target,
 
     /// L_i in the Halo reduction.
-    l_i: Vec<VirtualTarget>,
+    l_i: Vec<Target>,
     /// R_i in the Halo reduction.
-    r_i: Vec<VirtualTarget>,
+    r_i: Vec<Target>,
 
     pub circuit: Circuit<F>,
 }

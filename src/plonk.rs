@@ -11,12 +11,28 @@ pub(crate) const GRID_WIDTH: usize = 65;
 pub(crate) const QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER: usize = 7;
 
 pub struct PartialWitness<F: Field> {
-    pub wire_values: HashMap<Wire, F>,
+    wire_values: HashMap<Target, F>,
 }
 
 impl<F: Field> PartialWitness<F> {
     pub fn new() -> Self {
         PartialWitness { wire_values: HashMap::new() }
+    }
+
+    pub fn get_target(&self, target: Target) -> F {
+        self.wire_values[&target]
+    }
+
+    pub fn set_target(&mut self, target: Target, value: F) {
+        self.wire_values.insert(target, value);
+    }
+
+    pub fn set_wire(&mut self, wire: Wire, value: F) {
+        self.set_target(Target::Wire(wire), value);
+    }
+
+    pub fn get_wire(&self, wire: Wire) -> F {
+        self.get_target(Target::Wire(wire))
     }
 }
 
@@ -24,8 +40,8 @@ pub struct Witness<F: Field> {
     wire_values: Vec<Vec<F>>,
 }
 
-pub trait WitnessGenerator<F: Field> {
-    fn dependencies(&self) -> Vec<Wire>;
+pub trait WitnessGenerator<F: Field>: 'static {
+    fn dependencies(&self) -> Vec<Target>;
 
     /// Given a partial witness, return any newly generated values. The caller will merge them in.
     fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F>;
@@ -49,9 +65,9 @@ impl<F: Field> Circuit<F> {
     }
 }
 
-/// A routing proxy. It is not an actual wire, but it can be copied to wires. Useful in situations
-/// where it is convenient to "allocate" a witness element before determining its position(s) in the
-/// circuit.
+/// A sort of proxy wire, in the context of routing and witness generation. It is not an actual
+/// witness element (i.e. wire) itself, but it can be copy-constrained to wires, listed as a
+/// dependency in generators, etc.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct VirtualTarget {
     pub index: usize,
@@ -128,10 +144,14 @@ impl<F: Field> CircuitBuilder<F> {
         (0..n).map(|i| self.add_public_input()).collect()
     }
 
-    pub fn add_virtual_target(&mut self) -> VirtualTarget {
+    pub fn add_virtual_target(&mut self) -> Target {
         let index = self.circuit_input_index;
         self.circuit_input_index += 1;
-        VirtualTarget { index }
+        Target::VirtualTarget(VirtualTarget { index })
+    }
+
+    pub fn add_virtual_targets(&mut self, n: usize) -> Vec<Target> {
+        (0..n).map(|i| self.add_virtual_target()).collect()
     }
 
     pub fn zero_wire(&mut self) -> Target {
@@ -213,6 +233,34 @@ impl<F: Field> CircuitBuilder<F> {
     pub fn neg(&mut self, x: Target) -> Target {
         let neg_one = self.neg_one_wire();
         self.mul(x, neg_one)
+    }
+
+    pub fn split_binary(&mut self, x: Target, bits: usize) -> Vec<Target> {
+        struct SplitGenerator {
+            x: Target,
+            bits: Vec<Target>,
+        }
+
+        impl<F: Field> WitnessGenerator<F> for SplitGenerator {
+            fn dependencies(&self) -> Vec<Target> {
+                vec![self.x]
+            }
+
+            fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
+                let x = witness.wire_values[&self.x];
+                let x_bits = x.to_canonical_bool_vec();
+                let mut result = PartialWitness::new();
+                for i in 0..self.bits.len() {
+                    result.set_target(self.bits[i], F::from_canonical_bool(x_bits[i]));
+                }
+                result
+            }
+        }
+
+        let bits = self.add_virtual_targets(bits);
+        let generator = SplitGenerator { x, bits: bits.clone() };
+        self.add_generator(generator);
+        bits
     }
 
     pub fn rescue_hash_n_to_1(&mut self, inputs: Vec<Target>) -> Target {
@@ -403,15 +451,19 @@ impl<F: Field> CircuitBuilder<F> {
     }
 
     /// Adds a gate to the circuit, without doing any routing.
-    fn add_gate<G: Gate<F>>(&mut self, gate: G, gate_constants: Vec<F>) {
+    pub fn add_gate<G: Gate<F>>(&mut self, gate: G, gate_constants: Vec<F>) {
         // Merge the gate type's prefix bits with the given gate config constants.
         debug_assert!(G::PREFIX.len() + gate_constants.len() <= NUM_CONSTANTS);
         let mut all_constants = Vec::new();
         for &prefix_bit in G::PREFIX {
-            all_constants.push(if prefix_bit { F::ONE } else { F::ZERO });
+            all_constants.push(F::from_canonical_bool(prefix_bit));
         }
         all_constants.extend(gate_constants);
         self.gate_constants.push(all_constants);
+        self.add_generator(gate);
+    }
+
+    pub fn add_generator<G: WitnessGenerator<F>>(&mut self, gate: G) {
         self.generators.push(Box::new(gate));
     }
 

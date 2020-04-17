@@ -36,6 +36,16 @@ pub trait Field: 'static + Sized + Copy + Eq + Hash + Send + Sync + Debug
         limbs
     }
 
+    fn to_canonical_bool_vec(&self) -> Vec<bool> {
+        let mut limbs = Vec::new();
+        for u64_limb in self.to_canonical_u64_vec() {
+            for i in 0..64 {
+                limbs.push((u64_limb.overflowing_shr(i).0 & 1) != 0);
+            }
+        }
+        limbs
+    }
+
     fn from_canonical_u64_vec(v: Vec<u64>) -> Self;
 
     fn from_canonical_u32_vec(u32_limbs: Vec<u32>) -> Self {
@@ -54,6 +64,10 @@ pub trait Field: 'static + Sized + Copy + Eq + Hash + Send + Sync + Debug
 
     fn from_canonical_usize(n: usize) -> Self {
         Self::from_canonical_u64(n as u64)
+    }
+
+    fn from_canonical_bool(b: bool) -> Self {
+        Self::from_canonical_u64(if b { 1 } else { 0 })
     }
 
     #[inline(always)]

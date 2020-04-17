@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use crate::{AffinePoint, Circuit, CircuitBuilder, Curve, Field, Wire, GRID_WIDTH, HaloEndomorphismCurve, PartialWitness, Target, WitnessGenerator};
 use crate::mds::mds;
 
-pub(crate) trait Gate<F: Field>: 'static + WitnessGenerator<F> {
+pub trait Gate<F: Field>: WitnessGenerator<F> {
     /// In order to combine the constraints of various gate types into a unified constraint set, we
     /// assign each gate type a binary prefix such that no two prefixes overlap.
     const PREFIX: &'static [bool];
@@ -80,7 +80,7 @@ impl<F: Field> Gate<F> for BufferGate {
 }
 
 impl<F: Field> WitnessGenerator<F> for BufferGate {
-    fn dependencies(&self) -> Vec<Wire> {
+    fn dependencies(&self) -> Vec<Target> {
         Vec::new()
     }
 
@@ -89,7 +89,7 @@ impl<F: Field> WitnessGenerator<F> for BufferGate {
 
         let mut witness = PartialWitness::new();
         let const_value = circuit.gate_constants[self.index][<Self as Gate<F>>::PREFIX.len()];
-        witness.wire_values.insert(buffer_const_target, const_value);
+        witness.set_wire(buffer_const_target, const_value);
         witness
     }
 }
@@ -168,14 +168,14 @@ impl<C: Curve> Gate<C::BaseField> for CurveAddGate<C> {
 }
 
 impl<C: Curve> WitnessGenerator<C::BaseField> for CurveAddGate<C> {
-    fn dependencies(&self) -> Vec<Wire> {
+    fn dependencies(&self) -> Vec<Target> {
         vec![
-            Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_X },
-            Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_Y },
-            Wire { gate: self.index, input: Self::WIRE_SCALAR_ACC_OLD },
-            Wire { gate: self.index, input: Self::WIRE_ADDEND_X },
-            Wire { gate: self.index, input: Self::WIRE_ADDEND_Y },
-            Wire { gate: self.index, input: Self::WIRE_SCALAR_BIT },
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_X }),
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_Y }),
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_SCALAR_ACC_OLD }),
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_ADDEND_X }),
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_ADDEND_Y }),
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_SCALAR_BIT }),
         ]
     }
 
@@ -191,17 +191,17 @@ impl<C: Curve> WitnessGenerator<C::BaseField> for CurveAddGate<C> {
         let scalar_bit_target = Wire { gate: self.index, input: Self::WIRE_SCALAR_BIT };
         let inverse_target = Wire { gate: self.index, input: Self::WIRE_INVERSE };
 
-        let group_acc_old_x = witness.wire_values[&group_acc_old_x_target];
-        let group_acc_old_y = witness.wire_values[&group_acc_old_y_target];
+        let group_acc_old_x = witness.get_wire(group_acc_old_x_target);
+        let group_acc_old_y = witness.get_wire(group_acc_old_y_target);
         let group_acc_old = AffinePoint::<C>::nonzero(group_acc_old_x, group_acc_old_y);
 
-        let scalar_acc_old = witness.wire_values[&scalar_acc_old_target];
+        let scalar_acc_old = witness.get_wire(scalar_acc_old_target);
 
-        let addend_x = witness.wire_values[&addend_x_target];
-        let addend_y = witness.wire_values[&addend_y_target];
+        let addend_x = witness.get_wire(addend_x_target);
+        let addend_y = witness.get_wire(addend_y_target);
         let addend = AffinePoint::<C>::nonzero(addend_x, addend_y);
 
-        let scalar_bit = witness.wire_values[&scalar_bit_target];
+        let scalar_bit = witness.get_wire(scalar_bit_target);
         debug_assert!(scalar_bit.is_zero() || scalar_bit.is_one());
 
         let mut group_acc_new = group_acc_old;
@@ -217,10 +217,10 @@ impl<C: Curve> WitnessGenerator<C::BaseField> for CurveAddGate<C> {
         let inverse = dx.multiplicative_inverse().expect("x_1 = x_2");
 
         let mut result = PartialWitness::new();
-        result.wire_values.insert(group_acc_new_x_target, group_acc_new.x);
-        result.wire_values.insert(group_acc_new_y_target, group_acc_new.y);
-        result.wire_values.insert(scalar_acc_new_target, scalar_acc_new);
-        result.wire_values.insert(inverse_target, inverse);
+        result.set_wire(group_acc_new_x_target, group_acc_new.x);
+        result.set_wire(group_acc_new_y_target, group_acc_new.y);
+        result.set_wire(scalar_acc_new_target, scalar_acc_new);
+        result.set_wire(inverse_target, inverse);
         result
     }
 }
@@ -269,10 +269,10 @@ impl<C: Curve> Gate<C::BaseField> for CurveDblGate<C> {
 }
 
 impl<C: Curve> WitnessGenerator<C::BaseField> for CurveDblGate<C> {
-    fn dependencies(&self) -> Vec<Wire> {
+    fn dependencies(&self) -> Vec<Target> {
         vec![
-            Wire { gate: self.index, input: Self::WIRE_X_OLD },
-            Wire { gate: self.index, input: Self::WIRE_Y_OLD },
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_X_OLD }),
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_Y_OLD }),
         ]
     }
 
@@ -283,8 +283,8 @@ impl<C: Curve> WitnessGenerator<C::BaseField> for CurveDblGate<C> {
         let y_new_target = Wire { gate: self.index, input: Self::WIRE_Y_NEW };
         let inverse_target = Wire { gate: self.index, input: Self::WIRE_INVERSE };
 
-        let x_old = witness.wire_values[&x_old_target];
-        let y_old = witness.wire_values[&y_old_target];
+        let x_old = witness.get_wire(x_old_target);
+        let y_old = witness.get_wire(y_old_target);
         let old = AffinePoint::<C>::nonzero(x_old, y_old);
         let new = old.double();
 
@@ -293,9 +293,9 @@ impl<C: Curve> WitnessGenerator<C::BaseField> for CurveDblGate<C> {
         let inverse = y_old.double().multiplicative_inverse().expect("y = 0");
 
         let mut result = PartialWitness::new();
-        result.wire_values.insert(inverse_target, inverse);
-        result.wire_values.insert(x_new_target, new.x);
-        result.wire_values.insert(y_new_target, new.y);
+        result.set_wire(inverse_target, inverse);
+        result.set_wire(x_new_target, new.x);
+        result.set_wire(y_new_target, new.y);
         result
     }
 }
@@ -349,16 +349,16 @@ impl<C: HaloEndomorphismCurve> Gate<C::BaseField> for CurveEndoGate<C> {
 }
 
 impl<C: HaloEndomorphismCurve> WitnessGenerator<C::BaseField> for CurveEndoGate<C> {
-    fn dependencies(&self) -> Vec<Wire> {
+    fn dependencies(&self) -> Vec<Target> {
         vec![
-            Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_X },
-            Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_Y },
-            Wire { gate: self.index, input: Self::WIRE_SCALAR_ACC_UNSIGNED },
-            Wire { gate: self.index, input: Self::WIRE_SCALAR_ACC_SIGNED },
-            Wire { gate: self.index, input: Self::WIRE_ADDEND_X },
-            Wire { gate: self.index, input: Self::WIRE_ADDEND_Y },
-            Wire { gate: self.index, input: Self::WIRE_SCALAR_BIT_0 },
-            Wire { gate: self.index, input: Self::WIRE_SCALAR_BIT_1 },
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_X }),
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_Y }),
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_SCALAR_ACC_UNSIGNED }),
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_SCALAR_ACC_SIGNED }),
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_ADDEND_X }),
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_ADDEND_Y }),
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_SCALAR_BIT_0 }),
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_SCALAR_BIT_1 }),
         ]
     }
 
@@ -379,20 +379,20 @@ impl<C: HaloEndomorphismCurve> WitnessGenerator<C::BaseField> for CurveEndoGate<
         let scalar_bit_1_target = Wire { gate: self.index, input: Self::WIRE_SCALAR_BIT_1 };
         let inverse_target = Wire { gate: self.index, input: Self::WIRE_INVERSE };
 
-        let group_acc_old_x = witness.wire_values[&group_acc_old_x_target];
-        let group_acc_old_y = witness.wire_values[&group_acc_old_y_target];
+        let group_acc_old_x = witness.get_wire(group_acc_old_x_target);
+        let group_acc_old_y = witness.get_wire(group_acc_old_y_target);
         let group_acc_old = AffinePoint::<C>::nonzero(group_acc_old_x, group_acc_old_y);
 
-        let scalar_acc_unsigned_old = witness.wire_values[&scalar_acc_unsigned_old_target];
-        let scalar_acc_signed_old = witness.wire_values[&scalar_acc_signed_old_target];
+        let scalar_acc_unsigned_old = witness.get_wire(scalar_acc_unsigned_old_target);
+        let scalar_acc_signed_old = witness.get_wire(scalar_acc_signed_old_target);
 
-        let scalar_bit_0 = witness.wire_values[&scalar_bit_0_target];
-        let scalar_bit_1 = witness.wire_values[&scalar_bit_1_target];
+        let scalar_bit_0 = witness.get_wire(scalar_bit_0_target);
+        let scalar_bit_1 = witness.get_wire(scalar_bit_1_target);
         debug_assert!(scalar_bit_0.is_zero() || scalar_bit_0.is_one());
         debug_assert!(scalar_bit_1.is_zero() || scalar_bit_1.is_one());
 
-        let p_x = witness.wire_values[&addend_x_target];
-        let p_y = witness.wire_values[&addend_y_target];
+        let p_x = witness.get_wire(addend_x_target);
+        let p_y = witness.get_wire(addend_y_target);
 
         let mut s_i_x = p_x;
         if scalar_bit_0 == C::BaseField::ONE {
@@ -426,11 +426,11 @@ impl<C: HaloEndomorphismCurve> WitnessGenerator<C::BaseField> for CurveEndoGate<
         let inverse = dx.multiplicative_inverse().expect("x_1 = x_2");
 
         let mut result = PartialWitness::new();
-        result.wire_values.insert(group_acc_new_x_target, group_acc_new.x);
-        result.wire_values.insert(group_acc_new_y_target, group_acc_new.y);
-        result.wire_values.insert(scalar_acc_unsigned_new_target, scalar_acc_unsigned_new);
-        result.wire_values.insert(scalar_acc_signed_new_target, scalar_acc_signed_new);
-        result.wire_values.insert(inverse_target, inverse);
+        result.set_wire(group_acc_new_x_target, group_acc_new.x);
+        result.set_wire(group_acc_new_y_target, group_acc_new.y);
+        result.set_wire(scalar_acc_unsigned_new_target, scalar_acc_unsigned_new);
+        result.set_wire(scalar_acc_signed_new_target, scalar_acc_signed_new);
+        result.set_wire(inverse_target, inverse);
 
         result
     }
@@ -484,10 +484,10 @@ impl<F: Field> Gate<F> for RescueStepAGate<F> {
 }
 
 impl<F: Field> WitnessGenerator<F> for RescueStepAGate<F> {
-    fn dependencies(&self) -> Vec<Wire> {
+    fn dependencies(&self) -> Vec<Target> {
         vec![
-            Wire { gate: self.index, input: Self::WIRE_INPUT_0 },
-            Wire { gate: self.index, input: Self::WIRE_INPUT_1 },
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_INPUT_0 }),
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_INPUT_1 }),
         ]
     }
 
@@ -506,9 +506,9 @@ impl<F: Field> WitnessGenerator<F> for RescueStepAGate<F> {
         let out_1_target = Wire { gate: self.index + 1, input: Self::WIRE_INPUT_1 };
         let out_2_target = Wire { gate: self.index + 1, input: Self::WIRE_INPUT_2 };
 
-        let in_0 = witness.wire_values[&in_0_target];
-        let in_1 = witness.wire_values[&in_1_target];
-        let in_2 = witness.wire_values[&in_2_target];
+        let in_0 = witness.get_wire(in_0_target);
+        let in_1 = witness.get_wire(in_1_target);
+        let in_2 = witness.get_wire(in_2_target);
 
         let root_0 = in_0.kth_root_u32(5);
         let root_1 = in_1.kth_root_u32(5);
@@ -519,12 +519,12 @@ impl<F: Field> WitnessGenerator<F> for RescueStepAGate<F> {
         let out_2 = mds::<F>(3, 2, 0) * root_0 + mds::<F>(3, 2, 1) * root_1 + mds::<F>(3, 2, 2) * root_2 + constants[Self::PREFIX.len() + 2];
 
         let mut result = PartialWitness::new();
-        result.wire_values.insert(root_0_target, root_0);
-        result.wire_values.insert(root_1_target, root_1);
-        result.wire_values.insert(root_2_target, root_2);
-        result.wire_values.insert(out_0_target, out_0);
-        result.wire_values.insert(out_1_target, out_1);
-        result.wire_values.insert(out_2_target, out_2);
+        result.set_wire(root_0_target, root_0);
+        result.set_wire(root_1_target, root_1);
+        result.set_wire(root_2_target, root_2);
+        result.set_wire(out_0_target, out_0);
+        result.set_wire(out_1_target, out_1);
+        result.set_wire(out_2_target, out_2);
         result
     }
 }
@@ -574,11 +574,11 @@ impl<F: Field> Gate<F> for RescueStepBGate<F> {
 }
 
 impl<F: Field> WitnessGenerator<F> for RescueStepBGate<F> {
-    fn dependencies(&self) -> Vec<Wire> {
+    fn dependencies(&self) -> Vec<Target> {
         vec![
-            Wire { gate: self.index, input: Self::WIRE_INPUT_0 },
-            Wire { gate: self.index, input: Self::WIRE_INPUT_1 },
-            Wire { gate: self.index, input: Self::WIRE_INPUT_2 },
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_INPUT_0 }),
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_INPUT_1 }),
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_INPUT_2 }),
         ]
     }
 
@@ -593,9 +593,9 @@ impl<F: Field> WitnessGenerator<F> for RescueStepBGate<F> {
         let out_1_target = Wire { gate: self.index + 1, input: Self::WIRE_INPUT_1 };
         let out_2_target = Wire { gate: self.index + 1, input: Self::WIRE_INPUT_2 };
 
-        let in_0 = witness.wire_values[&in_0_target];
-        let in_1 = witness.wire_values[&in_1_target];
-        let in_2 = witness.wire_values[&in_2_target];
+        let in_0 = witness.get_wire(in_0_target);
+        let in_1 = witness.get_wire(in_1_target);
+        let in_2 = witness.get_wire(in_2_target);
 
         let exp_0 = in_0.exp_u32(5);
         let exp_1 = in_1.exp_u32(5);
@@ -606,9 +606,9 @@ impl<F: Field> WitnessGenerator<F> for RescueStepBGate<F> {
         let out_2 = mds::<F>(3, 2, 0) * exp_0 + mds::<F>(3, 2, 1) * exp_1 + mds::<F>(3, 2, 2) * exp_2 + constants[Self::PREFIX.len() + 2];
 
         let mut result = PartialWitness::new();
-        result.wire_values.insert(out_0_target, out_0);
-        result.wire_values.insert(out_1_target, out_1);
-        result.wire_values.insert(out_2_target, out_2);
+        result.set_wire(out_0_target, out_0);
+        result.set_wire(out_1_target, out_1);
+        result.set_wire(out_2_target, out_2);
         result
     }
 }
@@ -661,7 +661,7 @@ impl<F: Field> Gate<F> for Base4SumGate {
 }
 
 impl<F: Field> WitnessGenerator<F> for Base4SumGate {
-    fn dependencies(&self) -> Vec<Wire> {
+    fn dependencies(&self) -> Vec<Target> {
         Vec::new()
     }
 
@@ -719,11 +719,11 @@ impl<F: Field> Gate<F> for MaddGate<F> {
 }
 
 impl<F: Field> WitnessGenerator<F> for MaddGate<F> {
-    fn dependencies(&self) -> Vec<Wire> {
+    fn dependencies(&self) -> Vec<Target> {
         vec![
-            Wire { gate: self.index, input: Self::WIRE_MULTIPLICAND_0 },
-            Wire { gate: self.index, input: Self::WIRE_MULTIPLICAND_1 },
-            Wire { gate: self.index, input: Self::WIRE_ADDEND },
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_MULTIPLICAND_0 }),
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_MULTIPLICAND_1 }),
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_ADDEND }),
         ]
     }
 
@@ -737,14 +737,14 @@ impl<F: Field> WitnessGenerator<F> for MaddGate<F> {
         let const_1 = circuit.gate_constants[self.index][Self::PREFIX.len() + 1];
         let const_2 = circuit.gate_constants[self.index][Self::PREFIX.len() + 2];
 
-        let multiplicand_0 = witness.wire_values[&multiplicand_0_target];
-        let multiplicand_1 = witness.wire_values[&multiplicand_1_target];
-        let addend = witness.wire_values[&addend_target];
+        let multiplicand_0 = witness.get_wire(multiplicand_0_target);
+        let multiplicand_1 = witness.get_wire(multiplicand_1_target);
+        let addend = witness.get_wire(addend_target);
 
         let output = const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend + const_2;
 
         let mut result = PartialWitness::new();
-        result.wire_values.insert(output_target, output);
+        result.set_wire(output_target, output);
         result
     }
 }
