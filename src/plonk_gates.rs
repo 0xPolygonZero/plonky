@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::{AffinePoint, Circuit, CircuitBuilder, Curve, Field, GateInput, GRID_WIDTH, HaloEndomorphismCurve, PartialWitness, RoutingTarget, WitnessGenerator};
+use crate::{AffinePoint, Circuit, CircuitBuilder, Curve, Field, Wire, GRID_WIDTH, HaloEndomorphismCurve, PartialWitness, Target, WitnessGenerator};
 use crate::mds::mds;
 
 pub(crate) trait Gate<F: Field>: 'static + WitnessGenerator<F> {
@@ -21,10 +21,10 @@ pub(crate) trait Gate<F: Field>: 'static + WitnessGenerator<F> {
     /// Like the other `evaluate` method, but in the context of a recursive circuit.
     fn evaluate_recursively(&self,
                             builder: &mut CircuitBuilder<F>,
-                            local_constant_values: Vec<RoutingTarget>,
-                            local_wire_values: Vec<RoutingTarget>,
-                            right_wire_values: Vec<RoutingTarget>,
-                            below_wire_values: Vec<RoutingTarget>) -> Vec<RoutingTarget>;
+                            local_constant_values: Vec<Target>,
+                            local_wire_values: Vec<Target>,
+                            right_wire_values: Vec<Target>,
+                            below_wire_values: Vec<Target>) -> Vec<Target>;
 }
 
 /// A gate which doesn't perform any arithmetic, but just acts as a buffer for receiving data. This
@@ -70,22 +70,22 @@ impl<F: Field> Gate<F> for BufferGate {
     fn evaluate_recursively(
         &self,
         builder: &mut CircuitBuilder<F>,
-        local_constant_values: Vec<RoutingTarget>,
-        local_wire_values: Vec<RoutingTarget>,
-        right_wire_values: Vec<RoutingTarget>,
-        below_wire_values: Vec<RoutingTarget>,
-    ) -> Vec<RoutingTarget> {
+        local_constant_values: Vec<Target>,
+        local_wire_values: Vec<Target>,
+        right_wire_values: Vec<Target>,
+        below_wire_values: Vec<Target>,
+    ) -> Vec<Target> {
         unimplemented!()
     }
 }
 
 impl<F: Field> WitnessGenerator<F> for BufferGate {
-    fn dependencies(&self) -> Vec<GateInput> {
+    fn dependencies(&self) -> Vec<Wire> {
         Vec::new()
     }
 
     fn generate(&self, circuit: Circuit<F>, _witness: &PartialWitness<F>) -> PartialWitness<F> {
-        let buffer_const_target = GateInput { gate: self.index, input: Self::WIRE_BUFFER_CONST };
+        let buffer_const_target = Wire { gate: self.index, input: Self::WIRE_BUFFER_CONST };
 
         let mut witness = PartialWitness::new();
         let const_value = circuit.gate_constants[self.index][<Self as Gate<F>>::PREFIX.len()];
@@ -158,38 +158,38 @@ impl<C: Curve> Gate<C::BaseField> for CurveAddGate<C> {
     fn evaluate_recursively(
         &self,
         builder: &mut CircuitBuilder<C::BaseField>,
-        local_constant_values: Vec<RoutingTarget>,
-        local_wire_values: Vec<RoutingTarget>,
-        right_wire_values: Vec<RoutingTarget>,
-        below_wire_values: Vec<RoutingTarget>,
-    ) -> Vec<RoutingTarget> {
+        local_constant_values: Vec<Target>,
+        local_wire_values: Vec<Target>,
+        right_wire_values: Vec<Target>,
+        below_wire_values: Vec<Target>,
+    ) -> Vec<Target> {
         unimplemented!()
     }
 }
 
 impl<C: Curve> WitnessGenerator<C::BaseField> for CurveAddGate<C> {
-    fn dependencies(&self) -> Vec<GateInput> {
+    fn dependencies(&self) -> Vec<Wire> {
         vec![
-            GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_X },
-            GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_Y },
-            GateInput { gate: self.index, input: Self::WIRE_SCALAR_ACC_OLD },
-            GateInput { gate: self.index, input: Self::WIRE_ADDEND_X },
-            GateInput { gate: self.index, input: Self::WIRE_ADDEND_Y },
-            GateInput { gate: self.index, input: Self::WIRE_SCALAR_BIT },
+            Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_X },
+            Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_Y },
+            Wire { gate: self.index, input: Self::WIRE_SCALAR_ACC_OLD },
+            Wire { gate: self.index, input: Self::WIRE_ADDEND_X },
+            Wire { gate: self.index, input: Self::WIRE_ADDEND_Y },
+            Wire { gate: self.index, input: Self::WIRE_SCALAR_BIT },
         ]
     }
 
     fn generate(&self, circuit: Circuit<C::BaseField>, witness: &PartialWitness<C::BaseField>) -> PartialWitness<C::BaseField> {
-        let group_acc_old_x_target = GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_X };
-        let group_acc_new_x_target = GateInput { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_X };
-        let group_acc_old_y_target = GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
-        let group_acc_new_y_target = GateInput { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_Y };
-        let scalar_acc_old_target = GateInput { gate: self.index, input: Self::WIRE_SCALAR_ACC_OLD };
-        let scalar_acc_new_target = GateInput { gate: self.index, input: Self::WIRE_SCALAR_ACC_NEW };
-        let addend_x_target = GateInput { gate: self.index, input: Self::WIRE_ADDEND_X };
-        let addend_y_target = GateInput { gate: self.index, input: Self::WIRE_ADDEND_Y };
-        let scalar_bit_target = GateInput { gate: self.index, input: Self::WIRE_SCALAR_BIT };
-        let inverse_target = GateInput { gate: self.index, input: Self::WIRE_INVERSE };
+        let group_acc_old_x_target = Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_X };
+        let group_acc_new_x_target = Wire { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_X };
+        let group_acc_old_y_target = Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
+        let group_acc_new_y_target = Wire { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_Y };
+        let scalar_acc_old_target = Wire { gate: self.index, input: Self::WIRE_SCALAR_ACC_OLD };
+        let scalar_acc_new_target = Wire { gate: self.index, input: Self::WIRE_SCALAR_ACC_NEW };
+        let addend_x_target = Wire { gate: self.index, input: Self::WIRE_ADDEND_X };
+        let addend_y_target = Wire { gate: self.index, input: Self::WIRE_ADDEND_Y };
+        let scalar_bit_target = Wire { gate: self.index, input: Self::WIRE_SCALAR_BIT };
+        let inverse_target = Wire { gate: self.index, input: Self::WIRE_INVERSE };
 
         let group_acc_old_x = witness.wire_values[&group_acc_old_x_target];
         let group_acc_old_y = witness.wire_values[&group_acc_old_y_target];
@@ -259,29 +259,29 @@ impl<C: Curve> Gate<C::BaseField> for CurveDblGate<C> {
     fn evaluate_recursively(
         &self,
         builder: &mut CircuitBuilder<C::BaseField>,
-        local_constant_values: Vec<RoutingTarget>,
-        local_wire_values: Vec<RoutingTarget>,
-        right_wire_values: Vec<RoutingTarget>,
-        below_wire_values: Vec<RoutingTarget>,
-    ) -> Vec<RoutingTarget> {
+        local_constant_values: Vec<Target>,
+        local_wire_values: Vec<Target>,
+        right_wire_values: Vec<Target>,
+        below_wire_values: Vec<Target>,
+    ) -> Vec<Target> {
         unimplemented!()
     }
 }
 
 impl<C: Curve> WitnessGenerator<C::BaseField> for CurveDblGate<C> {
-    fn dependencies(&self) -> Vec<GateInput> {
+    fn dependencies(&self) -> Vec<Wire> {
         vec![
-            GateInput { gate: self.index, input: Self::WIRE_X_OLD },
-            GateInput { gate: self.index, input: Self::WIRE_Y_OLD },
+            Wire { gate: self.index, input: Self::WIRE_X_OLD },
+            Wire { gate: self.index, input: Self::WIRE_Y_OLD },
         ]
     }
 
     fn generate(&self, circuit: Circuit<C::BaseField>, witness: &PartialWitness<C::BaseField>) -> PartialWitness<C::BaseField> {
-        let x_old_target = GateInput { gate: self.index, input: Self::WIRE_X_OLD };
-        let y_old_target = GateInput { gate: self.index, input: Self::WIRE_Y_OLD };
-        let x_new_target = GateInput { gate: self.index, input: Self::WIRE_X_NEW };
-        let y_new_target = GateInput { gate: self.index, input: Self::WIRE_Y_NEW };
-        let inverse_target = GateInput { gate: self.index, input: Self::WIRE_INVERSE };
+        let x_old_target = Wire { gate: self.index, input: Self::WIRE_X_OLD };
+        let y_old_target = Wire { gate: self.index, input: Self::WIRE_Y_OLD };
+        let x_new_target = Wire { gate: self.index, input: Self::WIRE_X_NEW };
+        let y_new_target = Wire { gate: self.index, input: Self::WIRE_Y_NEW };
+        let inverse_target = Wire { gate: self.index, input: Self::WIRE_INVERSE };
 
         let x_old = witness.wire_values[&x_old_target];
         let y_old = witness.wire_values[&y_old_target];
@@ -339,45 +339,45 @@ impl<C: HaloEndomorphismCurve> Gate<C::BaseField> for CurveEndoGate<C> {
     fn evaluate_recursively(
         &self,
         builder: &mut CircuitBuilder<C::BaseField>,
-        local_constant_values: Vec<RoutingTarget>,
-        local_wire_values: Vec<RoutingTarget>,
-        right_wire_values: Vec<RoutingTarget>,
-        below_wire_values: Vec<RoutingTarget>,
-    ) -> Vec<RoutingTarget> {
+        local_constant_values: Vec<Target>,
+        local_wire_values: Vec<Target>,
+        right_wire_values: Vec<Target>,
+        below_wire_values: Vec<Target>,
+    ) -> Vec<Target> {
         unimplemented!()
     }
 }
 
 impl<C: HaloEndomorphismCurve> WitnessGenerator<C::BaseField> for CurveEndoGate<C> {
-    fn dependencies(&self) -> Vec<GateInput> {
+    fn dependencies(&self) -> Vec<Wire> {
         vec![
-            GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_X },
-            GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_Y },
-            GateInput { gate: self.index, input: Self::WIRE_SCALAR_ACC_UNSIGNED },
-            GateInput { gate: self.index, input: Self::WIRE_SCALAR_ACC_SIGNED },
-            GateInput { gate: self.index, input: Self::WIRE_ADDEND_X },
-            GateInput { gate: self.index, input: Self::WIRE_ADDEND_Y },
-            GateInput { gate: self.index, input: Self::WIRE_SCALAR_BIT_0 },
-            GateInput { gate: self.index, input: Self::WIRE_SCALAR_BIT_1 },
+            Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_X },
+            Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_Y },
+            Wire { gate: self.index, input: Self::WIRE_SCALAR_ACC_UNSIGNED },
+            Wire { gate: self.index, input: Self::WIRE_SCALAR_ACC_SIGNED },
+            Wire { gate: self.index, input: Self::WIRE_ADDEND_X },
+            Wire { gate: self.index, input: Self::WIRE_ADDEND_Y },
+            Wire { gate: self.index, input: Self::WIRE_SCALAR_BIT_0 },
+            Wire { gate: self.index, input: Self::WIRE_SCALAR_BIT_1 },
         ]
     }
 
     fn generate(&self, circuit: Circuit<C::BaseField>, witness: &PartialWitness<C::BaseField>) -> PartialWitness<C::BaseField> {
-        let group_acc_old_x_target = GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_X };
-        let group_acc_new_x_target = GateInput { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_X };
-        let group_acc_old_y_target = GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
-        let group_acc_new_y_target = GateInput { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_Y };
+        let group_acc_old_x_target = Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_X };
+        let group_acc_new_x_target = Wire { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_X };
+        let group_acc_old_y_target = Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
+        let group_acc_new_y_target = Wire { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_Y };
 
-        let scalar_acc_unsigned_old_target = GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
-        let scalar_acc_unsigned_new_target = GateInput { gate: self.index + GRID_WIDTH, input: Self::WIRE_GROUP_ACC_Y };
-        let scalar_acc_signed_old_target = GateInput { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
-        let scalar_acc_signed_new_target = GateInput { gate: self.index + GRID_WIDTH, input: Self::WIRE_GROUP_ACC_Y };
+        let scalar_acc_unsigned_old_target = Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
+        let scalar_acc_unsigned_new_target = Wire { gate: self.index + GRID_WIDTH, input: Self::WIRE_GROUP_ACC_Y };
+        let scalar_acc_signed_old_target = Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
+        let scalar_acc_signed_new_target = Wire { gate: self.index + GRID_WIDTH, input: Self::WIRE_GROUP_ACC_Y };
 
-        let addend_x_target = GateInput { gate: self.index, input: Self::WIRE_ADDEND_X };
-        let addend_y_target = GateInput { gate: self.index, input: Self::WIRE_ADDEND_Y };
-        let scalar_bit_0_target = GateInput { gate: self.index, input: Self::WIRE_SCALAR_BIT_0 };
-        let scalar_bit_1_target = GateInput { gate: self.index, input: Self::WIRE_SCALAR_BIT_1 };
-        let inverse_target = GateInput { gate: self.index, input: Self::WIRE_INVERSE };
+        let addend_x_target = Wire { gate: self.index, input: Self::WIRE_ADDEND_X };
+        let addend_y_target = Wire { gate: self.index, input: Self::WIRE_ADDEND_Y };
+        let scalar_bit_0_target = Wire { gate: self.index, input: Self::WIRE_SCALAR_BIT_0 };
+        let scalar_bit_1_target = Wire { gate: self.index, input: Self::WIRE_SCALAR_BIT_1 };
+        let inverse_target = Wire { gate: self.index, input: Self::WIRE_INVERSE };
 
         let group_acc_old_x = witness.wire_values[&group_acc_old_x_target];
         let group_acc_old_y = witness.wire_values[&group_acc_old_y_target];
@@ -474,37 +474,37 @@ impl<F: Field> Gate<F> for RescueStepAGate<F> {
     fn evaluate_recursively(
         &self,
         builder: &mut CircuitBuilder<F>,
-        local_constant_values: Vec<RoutingTarget>,
-        local_wire_values: Vec<RoutingTarget>,
-        right_wire_values: Vec<RoutingTarget>,
-        below_wire_values: Vec<RoutingTarget>,
-    ) -> Vec<RoutingTarget> {
+        local_constant_values: Vec<Target>,
+        local_wire_values: Vec<Target>,
+        right_wire_values: Vec<Target>,
+        below_wire_values: Vec<Target>,
+    ) -> Vec<Target> {
         unimplemented!()
     }
 }
 
 impl<F: Field> WitnessGenerator<F> for RescueStepAGate<F> {
-    fn dependencies(&self) -> Vec<GateInput> {
+    fn dependencies(&self) -> Vec<Wire> {
         vec![
-            GateInput { gate: self.index, input: Self::WIRE_INPUT_0 },
-            GateInput { gate: self.index, input: Self::WIRE_INPUT_1 },
+            Wire { gate: self.index, input: Self::WIRE_INPUT_0 },
+            Wire { gate: self.index, input: Self::WIRE_INPUT_1 },
         ]
     }
 
     fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
         let constants = &circuit.gate_constants[self.index];
 
-        let in_0_target = GateInput { gate: self.index, input: Self::WIRE_INPUT_0 };
-        let in_1_target = GateInput { gate: self.index, input: Self::WIRE_INPUT_1 };
-        let in_2_target = GateInput { gate: self.index, input: Self::WIRE_INPUT_2 };
+        let in_0_target = Wire { gate: self.index, input: Self::WIRE_INPUT_0 };
+        let in_1_target = Wire { gate: self.index, input: Self::WIRE_INPUT_1 };
+        let in_2_target = Wire { gate: self.index, input: Self::WIRE_INPUT_2 };
 
-        let root_0_target = GateInput { gate: self.index, input: Self::WIRE_ROOT_0 };
-        let root_1_target = GateInput { gate: self.index, input: Self::WIRE_ROOT_1 };
-        let root_2_target = GateInput { gate: self.index, input: Self::WIRE_ROOT_2 };
+        let root_0_target = Wire { gate: self.index, input: Self::WIRE_ROOT_0 };
+        let root_1_target = Wire { gate: self.index, input: Self::WIRE_ROOT_1 };
+        let root_2_target = Wire { gate: self.index, input: Self::WIRE_ROOT_2 };
 
-        let out_0_target = GateInput { gate: self.index + 1, input: Self::WIRE_INPUT_0 };
-        let out_1_target = GateInput { gate: self.index + 1, input: Self::WIRE_INPUT_1 };
-        let out_2_target = GateInput { gate: self.index + 1, input: Self::WIRE_INPUT_2 };
+        let out_0_target = Wire { gate: self.index + 1, input: Self::WIRE_INPUT_0 };
+        let out_1_target = Wire { gate: self.index + 1, input: Self::WIRE_INPUT_1 };
+        let out_2_target = Wire { gate: self.index + 1, input: Self::WIRE_INPUT_2 };
 
         let in_0 = witness.wire_values[&in_0_target];
         let in_1 = witness.wire_values[&in_1_target];
@@ -564,34 +564,34 @@ impl<F: Field> Gate<F> for RescueStepBGate<F> {
     fn evaluate_recursively(
         &self,
         builder: &mut CircuitBuilder<F>,
-        local_constant_values: Vec<RoutingTarget>,
-        local_wire_values: Vec<RoutingTarget>,
-        right_wire_values: Vec<RoutingTarget>,
-        below_wire_values: Vec<RoutingTarget>,
-    ) -> Vec<RoutingTarget> {
+        local_constant_values: Vec<Target>,
+        local_wire_values: Vec<Target>,
+        right_wire_values: Vec<Target>,
+        below_wire_values: Vec<Target>,
+    ) -> Vec<Target> {
         unimplemented!()
     }
 }
 
 impl<F: Field> WitnessGenerator<F> for RescueStepBGate<F> {
-    fn dependencies(&self) -> Vec<GateInput> {
+    fn dependencies(&self) -> Vec<Wire> {
         vec![
-            GateInput { gate: self.index, input: Self::WIRE_INPUT_0 },
-            GateInput { gate: self.index, input: Self::WIRE_INPUT_1 },
-            GateInput { gate: self.index, input: Self::WIRE_INPUT_2 },
+            Wire { gate: self.index, input: Self::WIRE_INPUT_0 },
+            Wire { gate: self.index, input: Self::WIRE_INPUT_1 },
+            Wire { gate: self.index, input: Self::WIRE_INPUT_2 },
         ]
     }
 
     fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
         let constants = &circuit.gate_constants[self.index];
 
-        let in_0_target = GateInput { gate: self.index, input: Self::WIRE_INPUT_0 };
-        let in_1_target = GateInput { gate: self.index, input: Self::WIRE_INPUT_1 };
-        let in_2_target = GateInput { gate: self.index, input: Self::WIRE_INPUT_2 };
+        let in_0_target = Wire { gate: self.index, input: Self::WIRE_INPUT_0 };
+        let in_1_target = Wire { gate: self.index, input: Self::WIRE_INPUT_1 };
+        let in_2_target = Wire { gate: self.index, input: Self::WIRE_INPUT_2 };
 
-        let out_0_target = GateInput { gate: self.index + 1, input: Self::WIRE_INPUT_0 };
-        let out_1_target = GateInput { gate: self.index + 1, input: Self::WIRE_INPUT_1 };
-        let out_2_target = GateInput { gate: self.index + 1, input: Self::WIRE_INPUT_2 };
+        let out_0_target = Wire { gate: self.index + 1, input: Self::WIRE_INPUT_0 };
+        let out_1_target = Wire { gate: self.index + 1, input: Self::WIRE_INPUT_1 };
+        let out_2_target = Wire { gate: self.index + 1, input: Self::WIRE_INPUT_2 };
 
         let in_0 = witness.wire_values[&in_0_target];
         let in_1 = witness.wire_values[&in_1_target];
@@ -651,17 +651,17 @@ impl<F: Field> Gate<F> for Base4SumGate {
     fn evaluate_recursively(
         &self,
         builder: &mut CircuitBuilder<F>,
-        local_constant_values: Vec<RoutingTarget>,
-        local_wire_values: Vec<RoutingTarget>,
-        right_wire_values: Vec<RoutingTarget>,
-        below_wire_values: Vec<RoutingTarget>,
-    ) -> Vec<RoutingTarget> {
+        local_constant_values: Vec<Target>,
+        local_wire_values: Vec<Target>,
+        right_wire_values: Vec<Target>,
+        below_wire_values: Vec<Target>,
+    ) -> Vec<Target> {
         unimplemented!()
     }
 }
 
 impl<F: Field> WitnessGenerator<F> for Base4SumGate {
-    fn dependencies(&self) -> Vec<GateInput> {
+    fn dependencies(&self) -> Vec<Wire> {
         Vec::new()
     }
 
@@ -709,29 +709,29 @@ impl<F: Field> Gate<F> for MaddGate<F> {
     fn evaluate_recursively(
         &self,
         builder: &mut CircuitBuilder<F>,
-        local_constant_values: Vec<RoutingTarget>,
-        local_wire_values: Vec<RoutingTarget>,
-        right_wire_values: Vec<RoutingTarget>,
-        below_wire_values: Vec<RoutingTarget>,
-    ) -> Vec<RoutingTarget> {
+        local_constant_values: Vec<Target>,
+        local_wire_values: Vec<Target>,
+        right_wire_values: Vec<Target>,
+        below_wire_values: Vec<Target>,
+    ) -> Vec<Target> {
         unimplemented!()
     }
 }
 
 impl<F: Field> WitnessGenerator<F> for MaddGate<F> {
-    fn dependencies(&self) -> Vec<GateInput> {
+    fn dependencies(&self) -> Vec<Wire> {
         vec![
-            GateInput { gate: self.index, input: Self::WIRE_MULTIPLICAND_0 },
-            GateInput { gate: self.index, input: Self::WIRE_MULTIPLICAND_1 },
-            GateInput { gate: self.index, input: Self::WIRE_ADDEND },
+            Wire { gate: self.index, input: Self::WIRE_MULTIPLICAND_0 },
+            Wire { gate: self.index, input: Self::WIRE_MULTIPLICAND_1 },
+            Wire { gate: self.index, input: Self::WIRE_ADDEND },
         ]
     }
 
     fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
-        let multiplicand_0_target = GateInput { gate: self.index, input: Self::WIRE_MULTIPLICAND_0 };
-        let multiplicand_1_target = GateInput { gate: self.index, input: Self::WIRE_MULTIPLICAND_1 };
-        let addend_target = GateInput { gate: self.index, input: Self::WIRE_ADDEND };
-        let output_target = GateInput { gate: self.index, input: Self::WIRE_OUTPUT };
+        let multiplicand_0_target = Wire { gate: self.index, input: Self::WIRE_MULTIPLICAND_0 };
+        let multiplicand_1_target = Wire { gate: self.index, input: Self::WIRE_MULTIPLICAND_1 };
+        let addend_target = Wire { gate: self.index, input: Self::WIRE_ADDEND };
+        let output_target = Wire { gate: self.index, input: Self::WIRE_OUTPUT };
 
         let const_0 = circuit.gate_constants[self.index][Self::PREFIX.len() + 0];
         let const_1 = circuit.gate_constants[self.index][Self::PREFIX.len() + 1];

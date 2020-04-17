@@ -11,7 +11,7 @@ pub(crate) const GRID_WIDTH: usize = 65;
 pub(crate) const QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER: usize = 7;
 
 pub struct PartialWitness<F: Field> {
-    pub wire_values: HashMap<GateInput, F>,
+    pub wire_values: HashMap<Wire, F>,
 }
 
 impl<F: Field> PartialWitness<F> {
@@ -25,7 +25,7 @@ pub struct Witness<F: Field> {
 }
 
 pub trait WitnessGenerator<F: Field> {
-    fn dependencies(&self) -> Vec<GateInput>;
+    fn dependencies(&self) -> Vec<Wire>;
 
     /// Given a partial witness, return any newly generated values. The caller will merge them in.
     fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F>;
@@ -49,47 +49,54 @@ impl<F: Field> Circuit<F> {
     }
 }
 
+/// A routing proxy. It is not an actual wire, but it can be copied to wires. Useful in situations
+/// where it is convenient to "allocate" a witness element before determining its position(s) in the
+/// circuit.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
-pub struct CircuitInput {
+pub struct VirtualTarget {
     pub index: usize,
 }
 
+/// Represents a wire in the circuit.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
-pub struct GateInput {
+pub struct Wire {
+    /// The index of the associated gate.
     pub gate: usize,
+    /// The index of the gate input wherein this wire is inserted.
     pub input: usize,
 }
 
+/// A routing target.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
-pub enum RoutingTarget {
-    CircuitInput(CircuitInput),
-    GateInput(GateInput),
+pub enum Target {
+    VirtualTarget(VirtualTarget),
+    Wire(Wire),
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct AffinePointTarget {
-    x: RoutingTarget,
-    y: RoutingTarget,
+    x: Target,
+    y: Target,
 }
 
 pub struct CircuitBuilder<F: Field> {
     circuit_input_index: usize,
     gate_constants: Vec<Vec<F>>,
-    copy_constraints: Vec<(RoutingTarget, RoutingTarget)>,
+    copy_constraints: Vec<(Target, Target)>,
     generators: Vec<Box<dyn WitnessGenerator<F>>>,
-    constant_wires: HashMap<F, RoutingTarget>,
+    constant_wires: HashMap<F, Target>,
 }
 
 /// A component of an MSM, or in other words, an individual scalar-group multiplication.
 pub struct MsmPart {
-    pub scalar_bits: Vec<RoutingTarget>,
+    pub scalar_bits: Vec<Target>,
     pub addend: AffinePointTarget,
 }
 
 pub struct MsmResult {
     pub sum: AffinePointTarget,
     /// For each part, we return the weighted sum of the given scalar bits.
-    pub scalars: Vec<RoutingTarget>,
+    pub scalars: Vec<Target>,
 }
 
 pub struct MsmEndoResult {
@@ -97,7 +104,7 @@ pub struct MsmEndoResult {
     /// While `msm` computes a sum of `[s] P` terms, `msm_end` computes a sum of `[n(s)] P` terms
     /// for some injective `n`. Here we return each `n(s)`, i.e., the scalar by which the point was
     /// actually multiplied.
-    pub actual_scalars: Vec<RoutingTarget>,
+    pub actual_scalars: Vec<Target>,
 }
 
 impl<F: Field> CircuitBuilder<F> {
@@ -111,35 +118,35 @@ impl<F: Field> CircuitBuilder<F> {
         }
     }
 
-    pub fn add_public_input(&mut self) -> GateInput {
+    pub fn add_public_input(&mut self) -> Wire {
         let index = self.num_gates();
         self.add_gate_no_constants(BufferGate::new(index));
-        GateInput { gate: index, input: BufferGate::WIRE_BUFFER_PI }
+        Wire { gate: index, input: BufferGate::WIRE_BUFFER_PI }
     }
 
-    pub fn add_public_inputs(&mut self, n: usize) -> Vec<GateInput> {
+    pub fn add_public_inputs(&mut self, n: usize) -> Vec<Wire> {
         (0..n).map(|i| self.add_public_input()).collect()
     }
 
-    pub fn add_circuit_input(&mut self) -> CircuitInput {
+    pub fn add_virtual_target(&mut self) -> VirtualTarget {
         let index = self.circuit_input_index;
         self.circuit_input_index += 1;
-        CircuitInput { index }
+        VirtualTarget { index }
     }
 
-    pub fn zero_wire(&mut self) -> RoutingTarget {
+    pub fn zero_wire(&mut self) -> Target {
         self.constant_wire(F::ZERO)
     }
 
-    pub fn one_wire(&mut self) -> RoutingTarget {
+    pub fn one_wire(&mut self) -> Target {
         self.constant_wire(F::ONE)
     }
 
-    pub fn neg_one_wire(&mut self) -> RoutingTarget {
+    pub fn neg_one_wire(&mut self) -> Target {
         self.constant_wire(F::NEG_ONE)
     }
 
-    pub fn constant_wire(&mut self, c: F) -> RoutingTarget {
+    pub fn constant_wire(&mut self, c: F) -> Target {
         if self.constant_wires.contains_key(&c) {
             self.constant_wires[&c]
         } else {
@@ -149,14 +156,14 @@ impl<F: Field> CircuitBuilder<F> {
         }
     }
 
-    pub fn constant_wire_u32(&mut self, c: u32) -> RoutingTarget {
+    pub fn constant_wire_u32(&mut self, c: u32) -> Target {
         self.constant_wire(F::from_canonical_u32(c))
     }
 
-    fn create_constant_wire(&mut self, c: F) -> RoutingTarget {
+    fn create_constant_wire(&mut self, c: F) -> Target {
         let index = self.num_gates();
         self.add_gate(BufferGate::new(index), vec![c]);
-        RoutingTarget::GateInput(GateInput { gate: index, input: BufferGate::WIRE_BUFFER_CONST })
+        Target::Wire(Wire { gate: index, input: BufferGate::WIRE_BUFFER_CONST })
     }
 
     pub fn constant_affine_point<C: Curve<BaseField = F>>(&mut self, point: AffinePoint<C>) -> AffinePointTarget {
@@ -167,44 +174,84 @@ impl<F: Field> CircuitBuilder<F> {
         }
     }
 
-    pub fn add(&mut self, x: RoutingTarget, y: RoutingTarget) -> RoutingTarget {
+    pub fn add(&mut self, x: Target, y: Target) -> Target {
+        let zero = self.zero_wire();
+        if x == zero {
+            return y;
+        }
+        if y == zero {
+            return x;
+        }
+
         let one = self.one_wire();
         let index = self.num_gates();
         self.add_gate(MaddGate::new(index), vec![F::ONE, F::ONE, F::ZERO]);
-        self.copy(x, RoutingTarget::GateInput(GateInput { gate: index, input: MaddGate::<F>::WIRE_MULTIPLICAND_0 }));
-        self.copy(one, RoutingTarget::GateInput(GateInput { gate: index, input: MaddGate::<F>::WIRE_MULTIPLICAND_1 }));
-        self.copy(y, RoutingTarget::GateInput(GateInput { gate: index, input: MaddGate::<F>::WIRE_ADDEND }));
-        RoutingTarget::GateInput(GateInput { gate: index, input: MaddGate::<F>::WIRE_OUTPUT })
+        self.copy(x, Target::Wire(Wire { gate: index, input: MaddGate::<F>::WIRE_MULTIPLICAND_0 }));
+        self.copy(one, Target::Wire(Wire { gate: index, input: MaddGate::<F>::WIRE_MULTIPLICAND_1 }));
+        self.copy(y, Target::Wire(Wire { gate: index, input: MaddGate::<F>::WIRE_ADDEND }));
+        Target::Wire(Wire { gate: index, input: MaddGate::<F>::WIRE_OUTPUT })
     }
 
-    pub fn mul(&mut self, x: RoutingTarget, y: RoutingTarget) -> RoutingTarget {
+    pub fn mul(&mut self, x: Target, y: Target) -> Target {
+        let one = self.one_wire();
+        if x == one {
+            return y;
+        }
+        if y == one {
+            return x;
+        }
+
         let zero = self.zero_wire();
         let index = self.num_gates();
         self.add_gate(MaddGate::new(index), vec![F::ONE, F::ZERO, F::ZERO]);
-        self.copy(x, RoutingTarget::GateInput(GateInput { gate: index, input: MaddGate::<F>::WIRE_MULTIPLICAND_0 }));
-        self.copy(y, RoutingTarget::GateInput(GateInput { gate: index, input: MaddGate::<F>::WIRE_MULTIPLICAND_1 }));
-        self.copy(zero, RoutingTarget::GateInput(GateInput { gate: index, input: MaddGate::<F>::WIRE_ADDEND }));
-        RoutingTarget::GateInput(GateInput { gate: index, input: MaddGate::<F>::WIRE_OUTPUT })
+        self.copy(x, Target::Wire(Wire { gate: index, input: MaddGate::<F>::WIRE_MULTIPLICAND_0 }));
+        self.copy(y, Target::Wire(Wire { gate: index, input: MaddGate::<F>::WIRE_MULTIPLICAND_1 }));
+        self.copy(zero, Target::Wire(Wire { gate: index, input: MaddGate::<F>::WIRE_ADDEND }));
+        Target::Wire(Wire { gate: index, input: MaddGate::<F>::WIRE_OUTPUT })
     }
 
-    pub fn neg(&mut self, x: RoutingTarget) -> RoutingTarget {
+    pub fn neg(&mut self, x: Target) -> Target {
         let neg_one = self.neg_one_wire();
         self.mul(x, neg_one)
     }
 
-    pub fn rescue_hash_2x1(&mut self, inputs: [RoutingTarget; 2]) -> RoutingTarget {
-        self.rescue_hash_2x2(inputs)[0]
+    pub fn rescue_hash_n_to_1(&mut self, inputs: Vec<Target>) -> Target {
+        self.rescue_sponge(inputs, 1)[0]
     }
 
-    /// TODO: Instead define a variable-output hash.
-    pub fn rescue_hash_2x2(&mut self, inputs: [RoutingTarget; 2]) -> [RoutingTarget; 2] {
-        // This is a width-3 sponge function with a single absorption and a single squeeze.
+    pub fn rescue_sponge(
+        &mut self,
+        inputs: Vec<Target>,
+        num_outputs: usize,
+    ) -> Vec<Target> {
+        // This is a r=2, c=1 sponge function with a single absorption and a single squeeze.
         let zero = self.zero_wire();
-        let outputs = self.rescue_permutation_3x3([inputs[0], inputs[1], zero]);
-        [outputs[0], outputs[1]]
+        let mut state = [zero, zero, zero];
+
+        // Absorb all input chunks.
+        for input_chunk in inputs.chunks(2) {
+            for i in 0..input_chunk.len() {
+                state[i] = self.add(state[i], input_chunk[i]);
+            }
+            state = self.rescue_permutation_3x3(state);
+        }
+
+        // Squeeze until we have the desired number of outputs.
+        let mut outputs = Vec::new();
+        while outputs.len() < num_outputs {
+            outputs.push(state[0]);
+            if outputs.len() < num_outputs {
+                outputs.push(state[1]);
+            }
+            if outputs.len() < num_outputs {
+                state = self.rescue_permutation_3x3(state);
+            }
+        }
+
+        outputs
     }
 
-    pub fn rescue_permutation_3x3(&mut self, inputs: [RoutingTarget; 3]) -> [RoutingTarget; 3] {
+    pub fn rescue_permutation_3x3(&mut self, inputs: [Target; 3]) -> [Target; 3] {
         let all_constants = generate_rescue_constants(3);
 
         let first_gate_index = self.num_gates();
@@ -214,13 +261,13 @@ impl<F: Field> CircuitBuilder<F> {
         }
         let last_gate_index = self.num_gates() - 1;
 
-        let in_0_target = RoutingTarget::GateInput(GateInput { gate: first_gate_index, input: RescueStepAGate::<F>::WIRE_INPUT_0 });
-        let in_1_target = RoutingTarget::GateInput(GateInput { gate: first_gate_index, input: RescueStepAGate::<F>::WIRE_INPUT_1 });
-        let in_2_target = RoutingTarget::GateInput(GateInput { gate: first_gate_index, input: RescueStepAGate::<F>::WIRE_INPUT_1 });
+        let in_0_target = Target::Wire(Wire { gate: first_gate_index, input: RescueStepAGate::<F>::WIRE_INPUT_0 });
+        let in_1_target = Target::Wire(Wire { gate: first_gate_index, input: RescueStepAGate::<F>::WIRE_INPUT_1 });
+        let in_2_target = Target::Wire(Wire { gate: first_gate_index, input: RescueStepAGate::<F>::WIRE_INPUT_1 });
 
-        let out_0_target = RoutingTarget::GateInput(GateInput { gate: last_gate_index, input: RescueStepAGate::<F>::WIRE_OUTPUT_0 });
-        let out_1_target = RoutingTarget::GateInput(GateInput { gate: last_gate_index, input: RescueStepAGate::<F>::WIRE_OUTPUT_1 });
-        let out_2_target = RoutingTarget::GateInput(GateInput { gate: last_gate_index, input: RescueStepAGate::<F>::WIRE_OUTPUT_1 });
+        let out_0_target = Target::Wire(Wire { gate: last_gate_index, input: RescueStepAGate::<F>::WIRE_OUTPUT_0 });
+        let out_1_target = Target::Wire(Wire { gate: last_gate_index, input: RescueStepAGate::<F>::WIRE_OUTPUT_1 });
+        let out_2_target = Target::Wire(Wire { gate: last_gate_index, input: RescueStepAGate::<F>::WIRE_OUTPUT_1 });
 
         self.copy(inputs[0], in_0_target);
         self.copy(inputs[1], in_1_target);
@@ -249,8 +296,8 @@ impl<F: Field> CircuitBuilder<F> {
 
         // TODO: Wiring.
 
-        let result_x = RoutingTarget::GateInput(GateInput { gate: buffer_index, input: CurveAddGate::<C>::WIRE_GROUP_ACC_X });
-        let result_y = RoutingTarget::GateInput(GateInput { gate: buffer_index, input: CurveAddGate::<C>::WIRE_GROUP_ACC_Y });
+        let result_x = Target::Wire(Wire { gate: buffer_index, input: CurveAddGate::<C>::WIRE_GROUP_ACC_X });
+        let result_y = Target::Wire(Wire { gate: buffer_index, input: CurveAddGate::<C>::WIRE_GROUP_ACC_Y });
         AffinePointTarget { x: result_x, y: result_y }
     }
 
@@ -259,7 +306,14 @@ impl<F: Field> CircuitBuilder<F> {
         &mut self,
         p: AffinePointTarget
     ) -> AffinePointTarget {
-        todo!()
+        let idx_dbl = self.num_gates();
+        self.add_gate_no_constants(CurveDblGate::<C>::new(idx_dbl));
+        self.copy(p.x, Target::Wire(Wire { gate: idx_dbl, input: CurveDblGate::<C>::WIRE_X_OLD }));
+        self.copy(p.y, Target::Wire(Wire { gate: idx_dbl, input: CurveDblGate::<C>::WIRE_Y_OLD }));
+        AffinePointTarget {
+            x: Target::Wire(Wire { gate: idx_dbl, input: CurveDblGate::<C>::WIRE_X_NEW }),
+            y: Target::Wire(Wire { gate: idx_dbl, input: CurveDblGate::<C>::WIRE_Y_NEW }),
+        }
     }
 
     pub fn curve_sub<C: Curve<BaseField = F>>(
@@ -284,26 +338,26 @@ impl<F: Field> CircuitBuilder<F> {
         let max_bits = parts.iter().map(|p| p.scalar_bits.len()).max().expect("Empty MSM");
         for i in (0..max_bits).rev() {
             // Route the accumulator to the first curve addition gate's inputs.
-            self.copy(acc.x, RoutingTarget::GateInput(
-                GateInput { gate: self.num_gates(), input: CurveAddGate::<C>::WIRE_GROUP_ACC_X }));
-            self.copy(acc.y, RoutingTarget::GateInput(
-                GateInput { gate: self.num_gates(), input: CurveAddGate::<C>::WIRE_GROUP_ACC_Y }));
+            self.copy(acc.x, Target::Wire(
+                Wire { gate: self.num_gates(), input: CurveAddGate::<C>::WIRE_GROUP_ACC_X }));
+            self.copy(acc.y, Target::Wire(
+                Wire { gate: self.num_gates(), input: CurveAddGate::<C>::WIRE_GROUP_ACC_Y }));
 
             for (j, part) in parts.iter().enumerate() {
                 if i < part.scalar_bits.len() {
                     let bit = part.scalar_bits[i];
                     let idx_add = self.num_gates();
                     self.add_gate_no_constants(CurveAddGate::<C>::new(idx_add));
-                    self.copy(scalars[j], RoutingTarget::GateInput(
-                        GateInput { gate: idx_add, input: CurveAddGate::<C>::WIRE_SCALAR_ACC_OLD }));
-                    scalars[j] = RoutingTarget::GateInput(
-                        GateInput { gate: idx_add, input: CurveAddGate::<C>::WIRE_SCALAR_ACC_NEW });
-                    self.copy(part.addend.x, RoutingTarget::GateInput(
-                        GateInput { gate: idx_add, input: CurveAddGate::<C>::WIRE_ADDEND_X }));
-                    self.copy(part.addend.y, RoutingTarget::GateInput(
-                        GateInput { gate: idx_add, input: CurveAddGate::<C>::WIRE_ADDEND_Y }));
-                    self.copy(bit, RoutingTarget::GateInput(
-                        GateInput { gate: idx_add, input: CurveAddGate::<C>::WIRE_SCALAR_BIT }));
+                    self.copy(scalars[j], Target::Wire(
+                        Wire { gate: idx_add, input: CurveAddGate::<C>::WIRE_SCALAR_ACC_OLD }));
+                    scalars[j] = Target::Wire(
+                        Wire { gate: idx_add, input: CurveAddGate::<C>::WIRE_SCALAR_ACC_NEW });
+                    self.copy(part.addend.x, Target::Wire(
+                        Wire { gate: idx_add, input: CurveAddGate::<C>::WIRE_ADDEND_X }));
+                    self.copy(part.addend.y, Target::Wire(
+                        Wire { gate: idx_add, input: CurveAddGate::<C>::WIRE_ADDEND_Y }));
+                    self.copy(bit, Target::Wire(
+                        Wire { gate: idx_add, input: CurveAddGate::<C>::WIRE_SCALAR_BIT }));
                 }
             }
 
@@ -313,10 +367,10 @@ impl<F: Field> CircuitBuilder<F> {
             // No need to route the double gate's inputs, because the last add gate would have
             // constrained them. Just take its outputs as the new accumulator.
             acc = AffinePointTarget {
-                x: RoutingTarget::GateInput(
-                    GateInput { gate: idx_dbl, input: CurveDblGate::<C>::WIRE_X_NEW }),
-                y: RoutingTarget::GateInput(
-                    GateInput { gate: idx_dbl, input: CurveDblGate::<C>::WIRE_Y_NEW }),
+                x: Target::Wire(
+                    Wire { gate: idx_dbl, input: CurveDblGate::<C>::WIRE_X_NEW }),
+                y: Target::Wire(
+                    Wire { gate: idx_dbl, input: CurveDblGate::<C>::WIRE_Y_NEW }),
             };
 
             // Also double the filler, so we can subtract out the repeatedly doubled version later.
@@ -335,6 +389,11 @@ impl<F: Field> CircuitBuilder<F> {
 
     /// Like `add_msm`, but uses the endomorphism described in the Halo paper.
     pub fn curve_msm_endo<C: HaloEndomorphismCurve<BaseField = F>>(&mut self, parts: &[MsmPart]) -> MsmEndoResult {
+        // Our implementation assumes 128-bit scalars.
+        for part in parts {
+            debug_assert_eq!(part.scalar_bits.len(), 128);
+        }
+
         todo!()
     }
 
@@ -361,14 +420,8 @@ impl<F: Field> CircuitBuilder<F> {
     }
 
     /// Add a copy constraint between two routing targets.
-    pub fn copy(&mut self, target_1: RoutingTarget, target_2: RoutingTarget) {
+    pub fn copy(&mut self, target_1: Target, target_2: Target) {
         self.copy_constraints.push((target_1, target_2));
-    }
-
-    pub fn copy_gi_gi(&mut self, gi_1: GateInput, gi_2: GateInput) {
-        let target_1 = RoutingTarget::GateInput(gi_1);
-        let target_2 = RoutingTarget::GateInput(gi_2);
-        self.copy(target_1, target_2);
     }
 
     pub fn build(self) -> Circuit<F> {
@@ -381,12 +434,12 @@ impl<F: Field> CircuitBuilder<F> {
         let mut partitions = RoutingTargetPartitions::new();
 
         for i in 0..self.circuit_input_index {
-            partitions.add_partition(RoutingTarget::CircuitInput(CircuitInput { index: i }));
+            partitions.add_partition(Target::VirtualTarget(VirtualTarget { index: i }));
         }
 
         for gate in 0..self.num_gates() {
             for input in 0..NUM_WIRES {
-                partitions.add_partition(RoutingTarget::GateInput(GateInput { gate, input }));
+                partitions.add_partition(Target::Wire(Wire { gate, input }));
             }
         }
 
@@ -399,8 +452,8 @@ impl<F: Field> CircuitBuilder<F> {
 }
 
 pub struct RoutingTargetPartitions {
-    partitions: Vec<Vec<RoutingTarget>>,
-    indices: HashMap<RoutingTarget, usize>,
+    partitions: Vec<Vec<Target>>,
+    indices: HashMap<Target, usize>,
 }
 
 impl RoutingTargetPartitions {
@@ -409,7 +462,7 @@ impl RoutingTargetPartitions {
     }
 
     /// Add a new partition with a single member.
-    fn add_partition(&mut self, target: RoutingTarget) {
+    fn add_partition(&mut self, target: Target) {
         let index = self.partitions.len();
         self.partitions.push(vec![target]);
         self.indices.insert(target, index);
@@ -417,7 +470,7 @@ impl RoutingTargetPartitions {
 
     /// Merge the two partitions containing the two given targets. Does nothing if the targets are
     /// already members of the same partition.
-    fn merge(&mut self, a: RoutingTarget, b: RoutingTarget) {
+    fn merge(&mut self, a: Target, b: Target) {
         let a_index = self.indices[&a];
         let b_index = self.indices[&b];
         if a_index != b_index {
@@ -441,7 +494,7 @@ impl RoutingTargetPartitions {
         for old_partition in &self.partitions {
             let mut new_partition = Vec::new();
             for target in old_partition {
-                if let &RoutingTarget::GateInput(gi) = target {
+                if let &Target::Wire(gi) = target {
                     new_partition.push(gi);
                 }
             }
@@ -449,7 +502,7 @@ impl RoutingTargetPartitions {
         }
 
         for (&target, &index) in &self.indices {
-            if let RoutingTarget::GateInput(gi) = target {
+            if let Target::Wire(gi) = target {
                 indices.insert(gi, index);
             }
         }
@@ -459,6 +512,6 @@ impl RoutingTargetPartitions {
 }
 
 struct GateInputPartitions {
-    partitions: Vec<Vec<GateInput>>,
-    indices: HashMap<GateInput, usize>,
+    partitions: Vec<Vec<Wire>>,
+    indices: HashMap<Wire, usize>,
 }

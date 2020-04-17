@@ -1,17 +1,19 @@
-use crate::{Circuit, CircuitBuilder, CircuitInput, Field, HaloEndomorphismCurve, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, NUM_CONSTANTS};
+use crate::{Circuit, CircuitBuilder, VirtualTarget, Field, HaloEndomorphismCurve, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, NUM_CONSTANTS};
 
 pub struct RecursiveCircuit<F: Field> {
     /// A commitment to each wire polynomial.
-    c_wires: Vec<CircuitInput>,
+    c_wires: Vec<VirtualTarget>,
     /// A commitment to Z in the context of the permutation argument.
-    c_z: CircuitInput,
+    c_z: VirtualTarget,
     /// A commitment to the quotient polynomial.
-    c_t: Vec<CircuitInput>,
+    c_t: Vec<VirtualTarget>,
+    /// A commitment to the aggregate polynomial.
+    c_agg: VirtualTarget,
 
     /// L_i in the Halo reduction.
-    l_i: Vec<CircuitInput>,
+    l_i: Vec<VirtualTarget>,
     /// R_i in the Halo reduction.
-    r_i: Vec<CircuitInput>,
+    r_i: Vec<VirtualTarget>,
 
     pub circuit: Circuit<F>,
 }
@@ -32,23 +34,26 @@ pub fn recursive_verification_circuit<C: HaloEndomorphismCurve>(degree_pow: usiz
     // A commitment to each wire polynomial.
     let mut c_wires = Vec::with_capacity(NUM_WIRES);
     for _i in 0..NUM_WIRES {
-        c_wires.push(builder.add_circuit_input());
+        c_wires.push(builder.add_virtual_target());
     }
 
     // A commitment to Z, the polynomial used in the permutation argument.
-    let c_z = builder.add_circuit_input();
+    let c_z = builder.add_virtual_target();
 
     // A commitment to t, the quotient polynomial, split into several degree-n polynomials.
     let mut c_t = Vec::with_capacity(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER);
     for _i in 0..QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER {
-        c_t.push(builder.add_circuit_input());
+        c_t.push(builder.add_virtual_target());
     }
+
+    // A commitment to F, a random linear combination of the other polynomials.
+    let c_agg = builder.add_virtual_target();
 
     let mut l_i = Vec::with_capacity(degree_pow);
     let mut r_i = Vec::with_capacity(degree_pow);
     for _i in 0..degree_pow {
-        l_i.push(builder.add_circuit_input());
-        r_i.push(builder.add_circuit_input());
+        l_i.push(builder.add_virtual_target());
+        r_i.push(builder.add_virtual_target());
     }
 
     let circuit = builder.build();
@@ -56,6 +61,7 @@ pub fn recursive_verification_circuit<C: HaloEndomorphismCurve>(degree_pow: usiz
         c_wires,
         c_z,
         c_t,
+        c_agg,
         l_i,
         r_i,
         circuit,
