@@ -263,13 +263,18 @@ impl<F: Field> CircuitBuilder<F> {
         bits
     }
 
-    pub fn rescue_hash_n_to_1(&mut self, inputs: Vec<Target>) -> Target {
+    pub fn rescue_hash_n_to_1(&mut self, inputs: &[Target]) -> Target {
         self.rescue_sponge(inputs, 1)[0]
+    }
+
+    pub fn rescue_hash_n_to_2(&mut self, inputs: &[Target]) -> (Target, Target) {
+        let outputs = self.rescue_sponge(inputs, 2);
+        (outputs[0], outputs[1])
     }
 
     pub fn rescue_sponge(
         &mut self,
-        inputs: Vec<Target>,
+        inputs: &[Target],
         num_outputs: usize,
     ) -> Vec<Target> {
         // This is a r=2, c=1 sponge function with a single absorption and a single squeeze.
@@ -322,6 +327,11 @@ impl<F: Field> CircuitBuilder<F> {
         self.copy(inputs[2], in_2_target);
 
         [out_0_target, out_1_target, out_2_target]
+    }
+
+    /// Assert that a given coordinate pair is on the curve `C`.
+    pub fn curve_assert_valid<C: Curve<BaseField = F>>(&mut self, p: AffinePointTarget) {
+        // TODO
     }
 
     pub fn curve_neg<C: Curve<BaseField = F>>(
