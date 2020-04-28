@@ -51,3 +51,4 @@ mod tweedledee_base;
 mod tweedledee_curve;
 mod tweedledum_base;
 mod tweedledum_curve;
+mod util;

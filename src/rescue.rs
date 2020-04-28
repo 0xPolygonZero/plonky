@@ -1,4 +1,5 @@
 use crate::Field;
+use crate::util::ceil_div_usize;
 
 pub(crate) fn generate_rescue_constants<F: Field>(width: usize) -> Vec<Vec<F>> {
     let mut constants = Vec::new();
@@ -23,9 +24,5 @@ fn recommended_rounds_for_security_bits<F: Field>(
     width: usize,
     security_bits: usize,
 ) -> usize {
-    ceil_div(security_bits, 2 * width).max(10)
-}
-
-fn ceil_div(a: usize, b: usize) -> usize {
-    (a + b - 1) / b
+    ceil_div_usize(security_bits, 2 * width).max(10)
 }

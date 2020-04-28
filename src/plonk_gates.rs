@@ -1,6 +1,23 @@
+//! For reference, here is our gate prefix tree:
+//!
+//! ```text
+//! 00000 <unused>
+//! 00001 CurveAddGate
+//! 00010 CurveDblGate
+//! 00011 CurveEndoGate
+//! 00100 Base4SumGate
+//! 00101 PublicInputGate
+//! 0011* BufferGate
+//! 01*** ArithmeticGate
+//! 10*** RescueStepAGate
+//! 11*** RescueStepBGate
+//! ```
+
+// TODO: Add a gate for "loading" several constants at once
+
 use std::marker::PhantomData;
 
-use crate::{AffinePoint, Circuit, CircuitBuilder, Curve, Field, Wire, GRID_WIDTH, HaloEndomorphismCurve, PartialWitness, Target, WitnessGenerator};
+use crate::{AffinePoint, Circuit, CircuitBuilder, Curve, Field, Wire, GRID_WIDTH, HaloEndomorphismCurve, PartialWitness, Target, WitnessGenerator, NUM_WIRES, NUM_ROUTED_WIRES, NUM_ADVICE_WIRES};
 use crate::mds::mds;
 
 pub trait Gate<F: Field>: WitnessGenerator<F> {
@@ -27,9 +44,73 @@ pub trait Gate<F: Field>: WitnessGenerator<F> {
                             below_wire_values: Vec<Target>) -> Vec<Target>;
 }
 
+/// A gate for receiving public inputs. These gates will be placed at static indices and the wire
+/// polynomials will always be opened at those indices.
+///
+/// Because our gate arity is 11 but only 6 of the wires are routed, it may seem as though each gate
+/// can only receive 6 public inputs. To work around this, we place a BufferGate immediately after
+/// each PublicInputGate, and have the PublicInputGate copy its 5 non-routed wires to routed wires
+/// of the BufferGate.
+pub(crate) struct PublicInputGate {
+    pub index: usize,
+    /// Make the constructor private.
+    _private: (),
+}
+
+impl PublicInputGate {
+    pub fn new(index: usize) -> Self {
+        PublicInputGate { index, _private: () }
+    }
+}
+
+impl<F: Field> Gate<F> for PublicInputGate {
+    const PREFIX: &'static [bool] = &[false, false, true, false, true];
+
+    fn evaluate(
+        &self,
+        local_constant_values: Vec<F>,
+        local_wire_values: Vec<F>,
+        right_wire_values: Vec<F>,
+        below_wire_values: Vec<F>,
+    ) -> Vec<F> {
+        unimplemented!()
+    }
+
+    fn evaluate_recursively(
+        &self,
+        builder: &mut CircuitBuilder<F>,
+        local_constant_values: Vec<Target>,
+        local_wire_values: Vec<Target>,
+        right_wire_values: Vec<Target>,
+        below_wire_values: Vec<Target>,
+    ) -> Vec<Target> {
+        unimplemented!()
+    }
+}
+
+impl<F: Field> WitnessGenerator<F> for PublicInputGate {
+    fn dependencies(&self) -> Vec<Target> {
+        (0..NUM_WIRES)
+            .map(|i| Target::Wire(Wire { gate: self.index, input: i }))
+            .collect()
+    }
+
+    fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
+        let self_as_generator: &dyn WitnessGenerator<F> = self;
+        let targets: Vec<Target> = self_as_generator.dependencies();
+
+        let mut result = PartialWitness::new();
+        for i_advice in 0..NUM_ADVICE_WIRES {
+            let i_wire = NUM_ROUTED_WIRES + i_advice;
+            let value = witness.get_target(targets[i_wire]);
+            result.set_wire(Wire { gate: self.index + 1, input: i_advice }, value);
+        }
+        result
+    }
+}
+
 /// A gate which doesn't perform any arithmetic, but just acts as a buffer for receiving data. This
 /// is used in a couple ways:
-/// * Public inputs can be "received" via `WIRE_BUFFER_PI`.
 /// * Some gates, such as the Rescue round gate, "output" their results using one of the next gate's
 ///   "input" wires. The last such gate has no next gate of the same type, so we add a buffer gate
 ///   for receiving the last gate's output.
@@ -50,7 +131,7 @@ impl BufferGate {
     pub const WIRE_BUFFER_1: usize = 1;
     pub const WIRE_BUFFER_2: usize = 2;
     pub const WIRE_BUFFER_3: usize = 3;
-    pub const WIRE_BUFFER_PI: usize = 4;
+    pub const WIRE_BUFFER_4: usize = 4;
     pub const WIRE_BUFFER_CONST: usize = 5;
 }
 
@@ -672,19 +753,19 @@ impl<F: Field> WitnessGenerator<F> for Base4SumGate {
     }
 }
 
-/// A "multiply and add" gate. In particular, it computes
+/// A gate which can be configured to perform various arithmetic. In particular, it computes
 ///
 /// ```text
 /// output := const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend + const_2
 /// ```
-pub(crate) struct MaddGate<F: Field> {
+pub(crate) struct ArithmeticGate<F: Field> {
     pub index: usize,
     _phantom: PhantomData<F>,
 }
 
-impl<F: Field> MaddGate<F> {
+impl<F: Field> ArithmeticGate<F> {
     pub fn new(index: usize) -> Self {
-        MaddGate { index, _phantom: PhantomData }
+        ArithmeticGate { index, _phantom: PhantomData }
     }
 
     pub const WIRE_MULTIPLICAND_0: usize = 0;
@@ -693,7 +774,7 @@ impl<F: Field> MaddGate<F> {
     pub const WIRE_OUTPUT: usize = 3;
 }
 
-impl<F: Field> Gate<F> for MaddGate<F> {
+impl<F: Field> Gate<F> for ArithmeticGate<F> {
     const PREFIX: &'static [bool] = &[false, true];
 
     fn evaluate(
@@ -718,7 +799,7 @@ impl<F: Field> Gate<F> for MaddGate<F> {
     }
 }
 
-impl<F: Field> WitnessGenerator<F> for MaddGate<F> {
+impl<F: Field> WitnessGenerator<F> for ArithmeticGate<F> {
     fn dependencies(&self) -> Vec<Target> {
         vec![
             Target::Wire(Wire { gate: self.index, input: Self::WIRE_MULTIPLICAND_0 }),

@@ -2,10 +2,13 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use crate::{Field, generate_rescue_constants, Curve, HaloEndomorphismCurve, AffinePoint};
-use crate::plonk_gates::{BufferGate, Gate, RescueStepAGate, CurveAddGate, MaddGate, CurveDblGate};
+use crate::plonk_gates::{BufferGate, Gate, RescueStepAGate, CurveAddGate, ArithmeticGate, CurveDblGate, PublicInputGate};
 use std::marker::PhantomData;
+use crate::util::ceil_div_usize;
 
-pub(crate) const NUM_WIRES: usize = 9;
+pub(crate) const NUM_WIRES: usize = 11;
+pub(crate) const NUM_ROUTED_WIRES: usize = 6;
+pub(crate) const NUM_ADVICE_WIRES: usize = NUM_WIRES - NUM_ROUTED_WIRES;
 pub(crate) const NUM_CONSTANTS: usize = 5;
 pub(crate) const GRID_WIDTH: usize = 65;
 pub(crate) const QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER: usize = 7;
@@ -24,7 +27,8 @@ impl<F: Field> PartialWitness<F> {
     }
 
     pub fn set_target(&mut self, target: Target, value: F) {
-        self.wire_values.insert(target, value);
+        let old_value = self.wire_values.insert(target, value);
+        debug_assert!(old_value.is_none(), "Target was set twice");
     }
 
     pub fn set_wire(&mut self, wire: Wire, value: F) {
@@ -89,6 +93,28 @@ pub enum Target {
     Wire(Wire),
 }
 
+pub struct PublicInput {
+    pub index: usize,
+}
+
+/// See `PublicInputGate` for an explanation of how we make public inputs routable.
+impl PublicInput {
+    fn original_wire(&self) -> Wire {
+        let gate = self.index / NUM_WIRES * 2;
+        let input = self.index % NUM_WIRES;
+        Wire { gate, input }
+    }
+
+    pub fn routable_target(&self) -> Target {
+        let Wire { mut gate, mut input } = self.original_wire();
+        if input > NUM_ROUTED_WIRES {
+            gate += 1;
+            input -= NUM_ROUTED_WIRES;
+        }
+        Target::Wire(Wire { gate, input })
+    }
+}
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct AffinePointTarget {
     x: Target,
@@ -96,7 +122,8 @@ pub struct AffinePointTarget {
 }
 
 pub struct CircuitBuilder<F: Field> {
-    circuit_input_index: usize,
+    public_input_index: usize,
+    virtual_target_index: usize,
     gate_constants: Vec<Vec<F>>,
     copy_constraints: Vec<(Target, Target)>,
     generators: Vec<Box<dyn WitnessGenerator<F>>>,
@@ -107,6 +134,12 @@ pub struct CircuitBuilder<F: Field> {
 pub struct MsmPart {
     pub scalar_bits: Vec<Target>,
     pub addend: AffinePointTarget,
+}
+
+/// Like `MsmPart`, but with a constant base point.
+pub struct FixedBaseMsmPart<C: Curve> {
+    pub scalar_bits: Vec<Target>,
+    pub addend: AffinePoint<C>,
 }
 
 pub struct MsmResult {
@@ -126,7 +159,8 @@ pub struct MsmEndoResult {
 impl<F: Field> CircuitBuilder<F> {
     pub fn new() -> Self {
         CircuitBuilder {
-            circuit_input_index: 0,
+            public_input_index: 0,
+            virtual_target_index: 0,
             gate_constants: Vec::new(),
             copy_constraints: Vec::new(),
             generators: Vec::new(),
@@ -134,19 +168,28 @@ impl<F: Field> CircuitBuilder<F> {
         }
     }
 
-    pub fn add_public_input(&mut self) -> Wire {
-        let index = self.num_gates();
-        self.add_gate_no_constants(BufferGate::new(index));
-        Wire { gate: index, input: BufferGate::WIRE_BUFFER_PI }
+    pub fn stage_public_input(&mut self) -> PublicInput {
+        let index = self.public_input_index;
+        self.public_input_index += 1;
+        PublicInput { index }
     }
 
-    pub fn add_public_inputs(&mut self, n: usize) -> Vec<Wire> {
-        (0..n).map(|i| self.add_public_input()).collect()
+    pub fn stage_public_inputs(&mut self, n: usize) -> Vec<PublicInput> {
+        (0..n).map(|i| self.stage_public_input()).collect()
+    }
+
+    pub fn add_public_inputs(&mut self) {
+        debug_assert_eq!(self.num_gates(), 0, "Must be called before any gates are added");
+        let num_pi_gates = ceil_div_usize(self.public_input_index, NUM_WIRES);
+        for i in 0..num_pi_gates {
+            self.add_gate_no_constants(PublicInputGate::new(i * 2));
+            self.add_gate_no_constants(BufferGate::new(i * 2 + 1));
+        }
     }
 
     pub fn add_virtual_target(&mut self) -> Target {
-        let index = self.circuit_input_index;
-        self.circuit_input_index += 1;
+        let index = self.virtual_target_index;
+        self.virtual_target_index += 1;
         Target::VirtualTarget(VirtualTarget { index })
     }
 
@@ -205,11 +248,38 @@ impl<F: Field> CircuitBuilder<F> {
 
         let one = self.one_wire();
         let index = self.num_gates();
-        self.add_gate(MaddGate::new(index), vec![F::ONE, F::ONE, F::ZERO]);
-        self.copy(x, Target::Wire(Wire { gate: index, input: MaddGate::<F>::WIRE_MULTIPLICAND_0 }));
-        self.copy(one, Target::Wire(Wire { gate: index, input: MaddGate::<F>::WIRE_MULTIPLICAND_1 }));
-        self.copy(y, Target::Wire(Wire { gate: index, input: MaddGate::<F>::WIRE_ADDEND }));
-        Target::Wire(Wire { gate: index, input: MaddGate::<F>::WIRE_OUTPUT })
+        self.add_gate(ArithmeticGate::new(index), vec![F::ONE, F::ONE, F::ZERO]);
+        self.copy(x, Target::Wire(Wire { gate: index, input: ArithmeticGate::<F>::WIRE_MULTIPLICAND_0 }));
+        self.copy(one, Target::Wire(Wire { gate: index, input: ArithmeticGate::<F>::WIRE_MULTIPLICAND_1 }));
+        self.copy(y, Target::Wire(Wire { gate: index, input: ArithmeticGate::<F>::WIRE_ADDEND }));
+        Target::Wire(Wire { gate: index, input: ArithmeticGate::<F>::WIRE_OUTPUT })
+    }
+
+    pub fn add_many(&mut self, terms: &[Target]) -> Target {
+        let mut sum = self.zero_wire();
+        for term in terms {
+            sum = self.add(sum, *term);
+        }
+        sum
+    }
+
+    pub fn double(&mut self, x: Target) -> Target {
+        self.add(x, x)
+    }
+
+    pub fn sub(&mut self, x: Target, y: Target) -> Target {
+        let zero = self.zero_wire();
+        if y == zero {
+            return x;
+        }
+
+        let one = self.one_wire();
+        let index = self.num_gates();
+        self.add_gate(ArithmeticGate::new(index), vec![F::ONE, F::NEG_ONE, F::ZERO]);
+        self.copy(x, Target::Wire(Wire { gate: index, input: ArithmeticGate::<F>::WIRE_MULTIPLICAND_0 }));
+        self.copy(one, Target::Wire(Wire { gate: index, input: ArithmeticGate::<F>::WIRE_MULTIPLICAND_1 }));
+        self.copy(y, Target::Wire(Wire { gate: index, input: ArithmeticGate::<F>::WIRE_ADDEND }));
+        Target::Wire(Wire { gate: index, input: ArithmeticGate::<F>::WIRE_OUTPUT })
     }
 
     pub fn mul(&mut self, x: Target, y: Target) -> Target {
@@ -223,11 +293,56 @@ impl<F: Field> CircuitBuilder<F> {
 
         let zero = self.zero_wire();
         let index = self.num_gates();
-        self.add_gate(MaddGate::new(index), vec![F::ONE, F::ZERO, F::ZERO]);
-        self.copy(x, Target::Wire(Wire { gate: index, input: MaddGate::<F>::WIRE_MULTIPLICAND_0 }));
-        self.copy(y, Target::Wire(Wire { gate: index, input: MaddGate::<F>::WIRE_MULTIPLICAND_1 }));
-        self.copy(zero, Target::Wire(Wire { gate: index, input: MaddGate::<F>::WIRE_ADDEND }));
-        Target::Wire(Wire { gate: index, input: MaddGate::<F>::WIRE_OUTPUT })
+        self.add_gate(ArithmeticGate::new(index), vec![F::ONE, F::ZERO, F::ZERO]);
+        self.copy(x, Target::Wire(Wire { gate: index, input: ArithmeticGate::<F>::WIRE_MULTIPLICAND_0 }));
+        self.copy(y, Target::Wire(Wire { gate: index, input: ArithmeticGate::<F>::WIRE_MULTIPLICAND_1 }));
+        self.copy(zero, Target::Wire(Wire { gate: index, input: ArithmeticGate::<F>::WIRE_ADDEND }));
+        Target::Wire(Wire { gate: index, input: ArithmeticGate::<F>::WIRE_OUTPUT })
+    }
+
+    pub fn mul_many(&mut self, terms: &[Target]) -> Target {
+        let mut product = self.one_wire();
+        for term in terms {
+            product = self.mul(product, *term);
+        }
+        product
+    }
+
+    pub fn inv(&mut self, x: Target) -> Target {
+        struct InverseGenerator {
+            x: Target,
+            x_inv: Target,
+        };
+
+        impl<F: Field> WitnessGenerator<F> for InverseGenerator {
+            fn dependencies(&self) -> Vec<Target> {
+                vec![self.x]
+            }
+
+            fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
+                let x_value = witness.get_target(self.x);
+                let x_inv_value = x_value.multiplicative_inverse().expect("x = 0");
+
+                let mut result = PartialWitness::new();
+                result.set_target(self.x_inv, x_inv_value);
+                result
+            }
+        }
+
+        let x_inv = self.add_virtual_target();
+        self.add_generator(InverseGenerator { x, x_inv });
+
+        // Enforce that x * x_inv = 1.
+        let product = self.mul(x, x_inv);
+        let one = self.one_wire();
+        self.copy(product, one);
+
+        x_inv
+    }
+
+    pub fn div(&mut self, x: Target, y: Target) -> Target {
+        let y_inv = self.inv(y);
+        self.mul(x, y_inv)
     }
 
     pub fn neg(&mut self, x: Target) -> Target {
@@ -445,8 +560,26 @@ impl<F: Field> CircuitBuilder<F> {
         }
     }
 
+    pub fn curve_msm_fixed_base<C: Curve<BaseField = F>>(
+        &mut self,
+        parts: &[FixedBaseMsmPart<C>],
+    ) -> MsmResult {
+        // TODO: This can be done much more efficiently with windowed multiplication.
+        // For now, we just call out to the variable-base method.
+        let variable_parts: Vec<MsmPart> = parts.iter()
+            .map(|p| MsmPart {
+                scalar_bits: p.scalar_bits.clone(),
+                addend: self.constant_affine_point(p.addend),
+            })
+            .collect();
+        self.curve_msm::<C>(&variable_parts)
+    }
+
     /// Like `add_msm`, but uses the endomorphism described in the Halo paper.
-    pub fn curve_msm_endo<C: HaloEndomorphismCurve<BaseField = F>>(&mut self, parts: &[MsmPart]) -> MsmEndoResult {
+    pub fn curve_msm_endo<C: HaloEndomorphismCurve<BaseField = F>>(
+        &mut self,
+        parts: &[MsmPart],
+    ) -> MsmEndoResult {
         // Our implementation assumes 128-bit scalars.
         for part in parts {
             debug_assert_eq!(part.scalar_bits.len(), 128);
@@ -488,14 +621,14 @@ impl<F: Field> CircuitBuilder<F> {
 
     pub fn build(self) -> Circuit<F> {
         let routing_target_partitions = self.get_routing_partitions();
-        let CircuitBuilder { circuit_input_index, gate_constants, copy_constraints, generators, constant_wires } = self;
+        let CircuitBuilder { public_input_index, virtual_target_index, gate_constants, copy_constraints, generators, constant_wires } = self;
         Circuit { gate_constants, routing_target_partitions, generators }
     }
 
     fn get_routing_partitions(&self) -> RoutingTargetPartitions {
         let mut partitions = RoutingTargetPartitions::new();
 
-        for i in 0..self.circuit_input_index {
+        for i in 0..self.virtual_target_index {
             partitions.add_partition(Target::VirtualTarget(VirtualTarget { index: i }));
         }
 
