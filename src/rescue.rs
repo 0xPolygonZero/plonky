@@ -1,17 +1,21 @@
 use crate::Field;
 use crate::util::ceil_div_usize;
 
-pub(crate) fn generate_rescue_constants<F: Field>(width: usize) -> Vec<Vec<F>> {
+pub(crate) fn generate_rescue_constants<F: Field>(width: usize) -> Vec<(Vec<F>, Vec<F>)> {
+    // TODO: This should use deterministic randomness.
     let mut constants = Vec::new();
     for _i in 0..recommended_rounds::<F>(width) {
-        let mut round_constants = Vec::new();
-        for _j in 0..2 {
-            for _k in 0..width {
-                // TODO: This should use deterministic randomness.
-                round_constants.push(F::rand());
-            }
+        let mut step_a_constants = Vec::new();
+        for _k in 0..width {
+            step_a_constants.push(F::rand());
         }
-        constants.push(round_constants);
+
+        let mut step_b_constants = Vec::new();
+        for _k in 0..width {
+            step_b_constants.push(F::rand());
+        }
+
+        constants.push((step_a_constants, step_b_constants));
     }
     constants
 }

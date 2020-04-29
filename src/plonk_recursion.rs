@@ -105,12 +105,9 @@ fn verify_assumptions<F: Field>(
     let lagrange_1_eval_denominator = builder.mul(degree_wire, zeta_minus_one);
     let lagrange_1_eval = builder.div(zero_eval, lagrange_1_eval_denominator);
 
-    // Evaluate PI at zeta.
-    let pi_eval = todo!();
-
     // Evaluate the function which is supposed to vanish on H. It is a sum of several terms which
     // should vanish, each weighted by a different power of alpha.
-    let vanishing_eval = todo!();
+    let vanishing_eval = builder.zero_wire(); // TODO
 
     // Evaluate the quotient polynomial, and assert that it matches the prover's opening.
     let quotient_eval = builder.div(vanishing_eval, zero_eval);

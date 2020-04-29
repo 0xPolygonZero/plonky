@@ -2,9 +2,10 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use crate::{Field, generate_rescue_constants, Curve, HaloEndomorphismCurve, AffinePoint};
-use crate::plonk_gates::{BufferGate, Gate, RescueStepAGate, CurveAddGate, ArithmeticGate, CurveDblGate, PublicInputGate};
+use crate::plonk_gates::{BufferGate, Gate, RescueStepAGate, CurveAddGate, ArithmeticGate, CurveDblGate, PublicInputGate, RescueStepBGate};
 use std::marker::PhantomData;
 use crate::util::ceil_div_usize;
+use std::any::type_name;
 
 pub(crate) const NUM_WIRES: usize = 11;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
@@ -423,27 +424,49 @@ impl<F: Field> CircuitBuilder<F> {
 
     pub fn rescue_permutation_3x3(&mut self, inputs: [Target; 3]) -> [Target; 3] {
         let all_constants = generate_rescue_constants(3);
-
-        let first_gate_index = self.num_gates();
-        for constants in all_constants.into_iter() {
-            let gate = RescueStepAGate::new(self.num_gates());
-            self.add_gate(gate, constants);
+        let mut state = inputs;
+        for (a_constants, b_constants) in all_constants.into_iter() {
+            state = self.rescue_round(state, a_constants, b_constants);
         }
-        let last_gate_index = self.num_gates() - 1;
+        state
+    }
 
-        let in_0_target = Target::Wire(Wire { gate: first_gate_index, input: RescueStepAGate::<F>::WIRE_INPUT_0 });
-        let in_1_target = Target::Wire(Wire { gate: first_gate_index, input: RescueStepAGate::<F>::WIRE_INPUT_1 });
-        let in_2_target = Target::Wire(Wire { gate: first_gate_index, input: RescueStepAGate::<F>::WIRE_INPUT_1 });
+    fn rescue_round(
+        &mut self,
+        inputs: [Target; 3],
+        a_constants: Vec<F>,
+        b_constants: Vec<F>,
+    ) -> [Target; 3] {
+        let a_index = self.num_gates();
+        let a_gate = RescueStepAGate::new(a_index);
+        self.add_gate(a_gate, a_constants);
 
-        let out_0_target = Target::Wire(Wire { gate: last_gate_index, input: RescueStepAGate::<F>::WIRE_OUTPUT_0 });
-        let out_1_target = Target::Wire(Wire { gate: last_gate_index, input: RescueStepAGate::<F>::WIRE_OUTPUT_1 });
-        let out_2_target = Target::Wire(Wire { gate: last_gate_index, input: RescueStepAGate::<F>::WIRE_OUTPUT_1 });
+        let b_index = self.num_gates();
+        let b_gate = RescueStepAGate::new(b_index);
+        self.add_gate(b_gate, b_constants);
 
-        self.copy(inputs[0], in_0_target);
-        self.copy(inputs[1], in_1_target);
-        self.copy(inputs[2], in_2_target);
+        let a_in_0_target = Target::Wire(Wire { gate: a_index, input: RescueStepAGate::<F>::WIRE_INPUT_0 });
+        let a_in_1_target = Target::Wire(Wire { gate: a_index, input: RescueStepAGate::<F>::WIRE_INPUT_1 });
+        let a_in_2_target = Target::Wire(Wire { gate: a_index, input: RescueStepAGate::<F>::WIRE_INPUT_2 });
+        let a_out_0_target = Target::Wire(Wire { gate: a_index, input: RescueStepAGate::<F>::WIRE_OUTPUT_0 });
+        let a_out_1_target = Target::Wire(Wire { gate: a_index, input: RescueStepAGate::<F>::WIRE_OUTPUT_1 });
+        let a_out_2_target = Target::Wire(Wire { gate: a_index, input: RescueStepAGate::<F>::WIRE_OUTPUT_2 });
 
-        [out_0_target, out_1_target, out_2_target]
+        let b_in_0_target = Target::Wire(Wire { gate: b_index, input: RescueStepBGate::<F>::WIRE_INPUT_0 });
+        let b_in_1_target = Target::Wire(Wire { gate: b_index, input: RescueStepBGate::<F>::WIRE_INPUT_1 });
+        let b_in_2_target = Target::Wire(Wire { gate: b_index, input: RescueStepBGate::<F>::WIRE_INPUT_2 });
+        let b_out_0_target = Target::Wire(Wire { gate: b_index, input: RescueStepBGate::<F>::WIRE_OUTPUT_0 });
+        let b_out_1_target = Target::Wire(Wire { gate: b_index, input: RescueStepBGate::<F>::WIRE_OUTPUT_1 });
+        let b_out_2_target = Target::Wire(Wire { gate: b_index, input: RescueStepBGate::<F>::WIRE_OUTPUT_2 });
+
+        self.copy(inputs[0], a_in_0_target);
+        self.copy(inputs[1], a_in_1_target);
+        self.copy(inputs[2], a_in_2_target);
+        self.copy(a_out_0_target, b_in_0_target);
+        self.copy(a_out_1_target, b_in_1_target);
+        self.copy(a_out_2_target, b_in_2_target);
+
+        [b_out_0_target, b_out_1_target, b_out_2_target]
     }
 
     /// Assert that a given coordinate pair is on the curve `C`.
@@ -597,6 +620,7 @@ impl<F: Field> CircuitBuilder<F> {
 
     /// Adds a gate to the circuit, without doing any routing.
     pub fn add_gate<G: Gate<F>>(&mut self, gate: G, gate_constants: Vec<F>) {
+        println!("Adding gate: {}", type_name::<G>());
         // Merge the gate type's prefix bits with the given gate config constants.
         debug_assert!(G::PREFIX.len() + gate_constants.len() <= NUM_CONSTANTS);
         let mut all_constants = Vec::new();
