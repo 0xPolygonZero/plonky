@@ -73,10 +73,7 @@ pub fn recursive_verification_circuit<C: HaloEndomorphismCurve>(degree_pow: usiz
     verify_assumptions(&mut builder, degree_pow, &proof, zeta);
 
     let circuit = builder.build();
-    RecursiveCircuit {
-        circuit,
-        proof,
-    }
+    RecursiveCircuit { circuit, proof }
 }
 
 fn verify_assumptions<F: Field>(
