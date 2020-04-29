@@ -15,7 +15,7 @@
 
 use std::marker::PhantomData;
 
-use crate::{AffinePoint, Circuit, CircuitBuilder, Curve, Field, Wire, GRID_WIDTH, HaloEndomorphismCurve, PartialWitness, Target, WitnessGenerator, NUM_WIRES, NUM_ROUTED_WIRES, NUM_ADVICE_WIRES};
+use crate::{AffinePoint, Circuit, CircuitBuilder, Curve, Field, GRID_WIDTH, HaloEndomorphismCurve, NUM_ADVICE_WIRES, NUM_ROUTED_WIRES, NUM_WIRES, PartialWitness, Target, Wire, WitnessGenerator};
 use crate::mds::mds;
 
 pub trait Gate<F: Field>: WitnessGenerator<F> {
@@ -25,15 +25,27 @@ pub trait Gate<F: Field>: WitnessGenerator<F> {
     /// assign each gate type a binary prefix such that no two prefixes overlap.
     const PREFIX: &'static [bool];
 
-    fn evaluate_filtered(&self,
-                         local_constant_values: &[F],
+    fn evaluate_filtered(local_constant_values: &[F],
                          local_wire_values: &[F],
                          right_wire_values: &[F],
-                         below_wire_values: &[F]) -> Vec<F> {
+                         below_wire_values: &[F],
+    ) -> Vec<F> {
         let filter = Self::evaluate_prefix_filter(local_constant_values);
-        let unfiltered = self.evaluate_unfiltered(
+        let unfiltered = Self::evaluate_unfiltered(
             local_constant_values, local_wire_values, right_wire_values, below_wire_values);
         unfiltered.into_iter().map(|u| filter * u).collect()
+    }
+
+    fn evaluate_filtered_recursively(builder: &mut CircuitBuilder<F>,
+                                     local_constant_values: &[Target],
+                                     local_wire_values: &[Target],
+                                     right_wire_values: &[Target],
+                                     below_wire_values: &[Target],
+    ) -> Vec<Target> {
+        let filter = Self::evaluate_prefix_filter_recursively(builder, local_constant_values);
+        let unfiltered = Self::evaluate_unfiltered_recursively(
+            builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values);
+        unfiltered.into_iter().map(|u| builder.mul(filter, u)).collect()
     }
 
     fn evaluate_prefix_filter(local_constant_values: &[F]) -> F {
@@ -71,15 +83,13 @@ pub trait Gate<F: Field>: WitnessGenerator<F> {
     ///
     /// For example, if the gate computes `c = a * b`, this should return `[c(x) - a(x) * b(x)]`,
     /// where `x` is the challenge point.
-    fn evaluate_unfiltered(&self,
-                           local_constant_values: &[F],
+    fn evaluate_unfiltered(local_constant_values: &[F],
                            local_wire_values: &[F],
                            right_wire_values: &[F],
                            below_wire_values: &[F]) -> Vec<F>;
 
     /// Like the other `evaluate` method, but in the context of a recursive circuit.
-    fn evaluate_unfiltered_recursively(&self,
-                                       builder: &mut CircuitBuilder<F>,
+    fn evaluate_unfiltered_recursively(builder: &mut CircuitBuilder<F>,
                                        local_constant_values: &[Target],
                                        local_wire_values: &[Target],
                                        right_wire_values: &[Target],
@@ -111,7 +121,6 @@ impl<F: Field> Gate<F> for PublicInputGate {
     const PREFIX: &'static [bool] = &[false, false, true, false, true];
 
     fn evaluate_unfiltered(
-        &self,
         local_constant_values: &[F],
         local_wire_values: &[F],
         right_wire_values: &[F],
@@ -121,7 +130,6 @@ impl<F: Field> Gate<F> for PublicInputGate {
     }
 
     fn evaluate_unfiltered_recursively(
-        &self,
         builder: &mut CircuitBuilder<F>,
         local_constant_values: &[Target],
         local_wire_values: &[Target],
@@ -185,7 +193,6 @@ impl<F: Field> Gate<F> for BufferGate {
     const PREFIX: &'static [bool] = &[false, false, true, true];
 
     fn evaluate_unfiltered(
-        &self,
         local_constant_values: &[F],
         local_wire_values: &[F],
         right_wire_values: &[F],
@@ -195,7 +202,6 @@ impl<F: Field> Gate<F> for BufferGate {
     }
 
     fn evaluate_unfiltered_recursively(
-        &self,
         builder: &mut CircuitBuilder<F>,
         local_constant_values: &[Target],
         local_wire_values: &[Target],
@@ -251,7 +257,6 @@ impl<C: Curve> Gate<C::BaseField> for CurveAddGate<C> {
     const PREFIX: &'static [bool] = &[false, false, false, false, true];
 
     fn evaluate_unfiltered(
-        &self,
         local_constant_values: &[C::BaseField],
         local_wire_values: &[C::BaseField],
         right_wire_values: &[C::BaseField],
@@ -285,7 +290,6 @@ impl<C: Curve> Gate<C::BaseField> for CurveAddGate<C> {
     }
 
     fn evaluate_unfiltered_recursively(
-        &self,
         builder: &mut CircuitBuilder<C::BaseField>,
         local_constant_values: &[Target],
         local_wire_values: &[Target],
@@ -378,7 +382,6 @@ impl<C: Curve> Gate<C::BaseField> for CurveDblGate<C> {
     const PREFIX: &'static [bool] = &[false, false, false, true, false];
 
     fn evaluate_unfiltered(
-        &self,
         local_constant_values: &[C::BaseField],
         local_wire_values: &[C::BaseField],
         right_wire_values: &[C::BaseField],
@@ -388,7 +391,6 @@ impl<C: Curve> Gate<C::BaseField> for CurveDblGate<C> {
     }
 
     fn evaluate_unfiltered_recursively(
-        &self,
         builder: &mut CircuitBuilder<C::BaseField>,
         local_constant_values: &[Target],
         local_wire_values: &[Target],
@@ -460,7 +462,6 @@ impl<C: HaloEndomorphismCurve> Gate<C::BaseField> for CurveEndoGate<C> {
     const PREFIX: &'static [bool] = &[false, false, false, true, true];
 
     fn evaluate_unfiltered(
-        &self,
         local_constant_values: &[C::BaseField],
         local_wire_values: &[C::BaseField],
         right_wire_values: &[C::BaseField],
@@ -470,7 +471,6 @@ impl<C: HaloEndomorphismCurve> Gate<C::BaseField> for CurveEndoGate<C> {
     }
 
     fn evaluate_unfiltered_recursively(
-        &self,
         builder: &mut CircuitBuilder<C::BaseField>,
         local_constant_values: &[Target],
         local_wire_values: &[Target],
@@ -597,7 +597,6 @@ impl<F: Field> Gate<F> for RescueStepAGate<F> {
     const PREFIX: &'static [bool] = &[true, false];
 
     fn evaluate_unfiltered(
-        &self,
         local_constant_values: &[F],
         local_wire_values: &[F],
         right_wire_values: &[F],
@@ -607,7 +606,6 @@ impl<F: Field> Gate<F> for RescueStepAGate<F> {
     }
 
     fn evaluate_unfiltered_recursively(
-        &self,
         builder: &mut CircuitBuilder<F>,
         local_constant_values: &[Target],
         local_wire_values: &[Target],
@@ -689,7 +687,6 @@ impl<F: Field> Gate<F> for RescueStepBGate<F> {
     const PREFIX: &'static [bool] = &[true, true];
 
     fn evaluate_unfiltered(
-        &self,
         local_constant_values: &[F],
         local_wire_values: &[F],
         right_wire_values: &[F],
@@ -699,7 +696,6 @@ impl<F: Field> Gate<F> for RescueStepBGate<F> {
     }
 
     fn evaluate_unfiltered_recursively(
-        &self,
         builder: &mut CircuitBuilder<F>,
         local_constant_values: &[Target],
         local_wire_values: &[Target],
@@ -778,7 +774,6 @@ impl<F: Field> Gate<F> for Base4SumGate {
     const PREFIX: &'static [bool] = &[false, false, true, false, false];
 
     fn evaluate_unfiltered(
-        &self,
         local_constant_values: &[F],
         local_wire_values: &[F],
         right_wire_values: &[F],
@@ -788,7 +783,6 @@ impl<F: Field> Gate<F> for Base4SumGate {
     }
 
     fn evaluate_unfiltered_recursively(
-        &self,
         builder: &mut CircuitBuilder<F>,
         local_constant_values: &[Target],
         local_wire_values: &[Target],
@@ -838,7 +832,6 @@ impl<F: Field> Gate<F> for ArithmeticGate<F> {
     const PREFIX: &'static [bool] = &[false, true];
 
     fn evaluate_unfiltered(
-        &self,
         local_constant_values: &[F],
         local_wire_values: &[F],
         right_wire_values: &[F],
@@ -848,7 +841,6 @@ impl<F: Field> Gate<F> for ArithmeticGate<F> {
     }
 
     fn evaluate_unfiltered_recursively(
-        &self,
         builder: &mut CircuitBuilder<F>,
         local_constant_values: &[Target],
         local_wire_values: &[Target],
