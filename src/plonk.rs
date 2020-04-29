@@ -178,7 +178,9 @@ impl<F: Field> CircuitBuilder<F> {
         (0..n).map(|i| self.stage_public_input()).collect()
     }
 
-    pub fn add_public_inputs(&mut self) {
+    /// Add `PublicInputGate`s which enable public inputs to be routed. Should be called after all
+    /// `stage_public_input[s]` calls, but before any gates are added.
+    pub fn route_public_inputs(&mut self) {
         debug_assert_eq!(self.num_gates(), 0, "Must be called before any gates are added");
         let num_pi_gates = ceil_div_usize(self.public_input_index, NUM_WIRES);
         for i in 0..num_pi_gates {

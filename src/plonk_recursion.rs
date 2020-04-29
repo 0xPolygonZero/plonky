@@ -38,47 +38,23 @@ pub struct ProofTarget {
 
 pub fn recursive_verification_circuit<C: HaloEndomorphismCurve>(degree_pow: usize) -> RecursiveCircuit<C::BaseField> {
     let mut builder = CircuitBuilder::<C::BaseField>::new();
-
-    let inner_o_constants = builder.stage_public_inputs(NUM_CONSTANTS);
-    let inner_o_wires = builder.stage_public_inputs(NUM_WIRES);
-    let inner_o_plonk_z = builder.stage_public_input();
-    let inner_o_plonk_t = builder.stage_public_inputs(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER);
-    let inner_o_halo_us = builder.stage_public_inputs(degree_pow);
-    builder.add_public_inputs();
-
-    let c_wires = builder.add_virtual_targets(NUM_WIRES);
-    let c_z = builder.add_virtual_target();
-    let c_t = builder.add_virtual_targets(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER);
-
-    let o_constants = builder.add_virtual_targets(NUM_CONSTANTS);
-    let o_wires = builder.add_virtual_targets(NUM_WIRES);
-    let o_z = builder.add_virtual_target();
-    let o_t = builder.add_virtual_targets(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER);
-
-    let mut l_i = Vec::with_capacity(degree_pow);
-    let mut r_i = Vec::with_capacity(degree_pow);
-    for _i in 0..degree_pow {
-        l_i.push(builder.add_virtual_target());
-        r_i.push(builder.add_virtual_target());
-    }
-
-    // TODO: Can stuff be inlined without upsetting the borrow checker?
     let proof = ProofTarget {
-        c_wires,
-        c_z,
-        c_t,
-        o_constants,
-        o_wires,
-        o_z,
-        o_t,
-        inner_o_constants,
-        inner_o_wires,
-        inner_o_plonk_z,
-        inner_o_plonk_t,
-        inner_o_halo_us,
-        l_i,
-        r_i
+        c_wires: builder.add_virtual_targets(NUM_WIRES),
+        c_z: builder.add_virtual_target(),
+        c_t: builder.add_virtual_targets(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
+        o_constants: builder.add_virtual_targets(NUM_CONSTANTS),
+        o_wires: builder.add_virtual_targets(NUM_WIRES),
+        o_z: builder.add_virtual_target(),
+        o_t: builder.add_virtual_targets(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
+        inner_o_constants: builder.stage_public_inputs(NUM_CONSTANTS),
+        inner_o_wires: builder.stage_public_inputs(NUM_WIRES),
+        inner_o_plonk_z: builder.stage_public_input(),
+        inner_o_plonk_t: builder.stage_public_inputs(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
+        inner_o_halo_us: builder.stage_public_inputs(degree_pow),
+        l_i: builder.add_virtual_targets(degree_pow),
+        r_i: builder.add_virtual_targets(degree_pow),
     };
+    builder.route_public_inputs();
 
     // TODO: Verify that each prover polynomial commitment is on the curve.
 
