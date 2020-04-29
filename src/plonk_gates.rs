@@ -18,6 +18,84 @@ use std::marker::PhantomData;
 use crate::{AffinePoint, Circuit, CircuitBuilder, Curve, Field, GRID_WIDTH, HaloEndomorphismCurve, NUM_ADVICE_WIRES, NUM_ROUTED_WIRES, NUM_WIRES, PartialWitness, Target, Wire, WitnessGenerator};
 use crate::mds::mds;
 
+fn evaluate_all_constraints<C: HaloEndomorphismCurve>(
+    local_constant_values: &[C::BaseField],
+    local_wire_values: &[C::BaseField],
+    right_wire_values: &[C::BaseField],
+    below_wire_values: &[C::BaseField],
+    alpha: C::BaseField,
+) -> C::BaseField {
+    let constraint_sets_per_gate = vec![
+        CurveAddGate::<C>::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
+        CurveDblGate::<C>::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
+        CurveEndoGate::<C>::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
+        Base4SumGate::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
+        PublicInputGate::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
+        BufferGate::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
+        ArithmeticGate::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
+        RescueStepAGate::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
+        RescueStepBGate::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
+    ];
+
+    let mut unified_constraint_set = vec![];
+    for constraint_sets in constraint_sets_per_gate {
+        while unified_constraint_set.len() < constraint_sets.len() {
+            unified_constraint_set.push(C::BaseField::ZERO);
+        }
+        for i in 0..constraint_sets.len() {
+            unified_constraint_set[i] = unified_constraint_set[i] + constraint_sets[i];
+        }
+    }
+
+    let mut random_combination = C::BaseField::ZERO;
+    let mut multiplier = C::BaseField::ONE;
+    for unified_constraint in unified_constraint_set {
+        random_combination = random_combination + multiplier * unified_constraint;
+        multiplier = multiplier * alpha;
+    }
+    random_combination
+}
+
+fn evaluate_all_constraints_recursively<C: HaloEndomorphismCurve>(
+    builder: &mut CircuitBuilder<C::BaseField>,
+    local_constant_values: &[Target],
+    local_wire_values: &[Target],
+    right_wire_values: &[Target],
+    below_wire_values: &[Target],
+    alpha: Target,
+) -> Target {
+    let constraint_sets_per_gate = vec![
+        CurveAddGate::<C>::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
+        CurveDblGate::<C>::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
+        CurveEndoGate::<C>::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
+        Base4SumGate::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
+        PublicInputGate::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
+        BufferGate::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
+        ArithmeticGate::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
+        RescueStepAGate::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
+        RescueStepBGate::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
+    ];
+
+    let mut unified_constraint_set = vec![];
+    for constraint_set in constraint_sets_per_gate {
+        while unified_constraint_set.len() < constraint_set.len() {
+            unified_constraint_set.push(builder.zero_wire());
+        }
+        for i in 0..constraint_set.len() {
+            unified_constraint_set[i] = builder.add(unified_constraint_set[i], constraint_set[i]);
+        }
+    }
+
+    let mut random_combination = builder.zero_wire();
+    let mut multiplier = builder.one_wire();
+    for unified_constraint in unified_constraint_set {
+        let weighted_constraint = builder.mul(multiplier, unified_constraint);
+        random_combination = builder.add(random_combination, weighted_constraint);
+        multiplier = builder.mul(multiplier, alpha);
+    }
+    random_combination
+}
+
 pub trait Gate<F: Field>: WitnessGenerator<F> {
     const NAME: &'static str;
 
