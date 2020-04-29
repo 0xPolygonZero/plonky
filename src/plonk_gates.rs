@@ -21,6 +21,8 @@ use crate::{AffinePoint, Circuit, CircuitBuilder, Curve, Field, Wire, GRID_WIDTH
 use crate::mds::mds;
 
 pub trait Gate<F: Field>: WitnessGenerator<F> {
+    const NAME: &'static str;
+
     /// In order to combine the constraints of various gate types into a unified constraint set, we
     /// assign each gate type a binary prefix such that no two prefixes overlap.
     const PREFIX: &'static [bool];
@@ -64,6 +66,8 @@ impl PublicInputGate {
 }
 
 impl<F: Field> Gate<F> for PublicInputGate {
+    const NAME: &'static str = "PublicInputGate";
+
     const PREFIX: &'static [bool] = &[false, false, true, false, true];
 
     fn evaluate(
@@ -136,6 +140,8 @@ impl BufferGate {
 }
 
 impl<F: Field> Gate<F> for BufferGate {
+    const NAME: &'static str = "BufferGate";
+
     const PREFIX: &'static [bool] = &[false, false, true, true];
 
     fn evaluate(
@@ -200,6 +206,8 @@ impl<C: Curve> CurveAddGate<C> {
 }
 
 impl<C: Curve> Gate<C::BaseField> for CurveAddGate<C> {
+    const NAME: &'static str = "CurveAddGate";
+
     const PREFIX: &'static [bool] = &[false, false, false, false, true];
 
     fn evaluate(
@@ -325,6 +333,8 @@ impl<C: Curve> CurveDblGate<C> {
 }
 
 impl<C: Curve> Gate<C::BaseField> for CurveDblGate<C> {
+    const NAME: &'static str = "CurveDblGate";
+
     const PREFIX: &'static [bool] = &[false, false, false, true, false];
 
     fn evaluate(
@@ -405,6 +415,8 @@ impl<C: HaloEndomorphismCurve> CurveEndoGate<C> {
 }
 
 impl<C: HaloEndomorphismCurve> Gate<C::BaseField> for CurveEndoGate<C> {
+    const NAME: &'static str = "CurveEndoGate";
+
     const PREFIX: &'static [bool] = &[false, false, false, true, true];
 
     fn evaluate(
@@ -540,6 +552,8 @@ impl<F: Field> RescueStepAGate<F> {
 }
 
 impl<F: Field> Gate<F> for RescueStepAGate<F> {
+    const NAME: &'static str = "RescueStepAGate";
+
     const PREFIX: &'static [bool] = &[true, false];
 
     fn evaluate(
@@ -630,6 +644,8 @@ impl<F: Field> RescueStepBGate<F> {
 }
 
 impl<F: Field> Gate<F> for RescueStepBGate<F> {
+    const NAME: &'static str = "RescueStepBGate";
+
     const PREFIX: &'static [bool] = &[true, true];
 
     fn evaluate(
@@ -717,6 +733,8 @@ impl Base4SumGate {
 }
 
 impl<F: Field> Gate<F> for Base4SumGate {
+    const NAME: &'static str = "Base4SumGate";
+
     const PREFIX: &'static [bool] = &[false, false, true, false, false];
 
     fn evaluate(
@@ -775,6 +793,8 @@ impl<F: Field> ArithmeticGate<F> {
 }
 
 impl<F: Field> Gate<F> for ArithmeticGate<F> {
+    const NAME: &'static str = "ArithmeticGate";
+
     const PREFIX: &'static [bool] = &[false, true];
 
     fn evaluate(

@@ -125,6 +125,7 @@ pub struct AffinePointTarget {
 pub struct CircuitBuilder<F: Field> {
     public_input_index: usize,
     virtual_target_index: usize,
+    gate_counts: HashMap<&'static str, usize>,
     gate_constants: Vec<Vec<F>>,
     copy_constraints: Vec<(Target, Target)>,
     generators: Vec<Box<dyn WitnessGenerator<F>>>,
@@ -162,6 +163,7 @@ impl<F: Field> CircuitBuilder<F> {
         CircuitBuilder {
             public_input_index: 0,
             virtual_target_index: 0,
+            gate_counts: HashMap::new(),
             gate_constants: Vec::new(),
             copy_constraints: Vec::new(),
             generators: Vec::new(),
@@ -442,7 +444,7 @@ impl<F: Field> CircuitBuilder<F> {
         self.add_gate(a_gate, a_constants);
 
         let b_index = self.num_gates();
-        let b_gate = RescueStepAGate::new(b_index);
+        let b_gate = RescueStepBGate::new(b_index);
         self.add_gate(b_gate, b_constants);
 
         let a_in_0_target = Target::Wire(Wire { gate: a_index, input: RescueStepAGate::<F>::WIRE_INPUT_0 });
@@ -620,7 +622,6 @@ impl<F: Field> CircuitBuilder<F> {
 
     /// Adds a gate to the circuit, without doing any routing.
     pub fn add_gate<G: Gate<F>>(&mut self, gate: G, gate_constants: Vec<F>) {
-        println!("Adding gate: {}", type_name::<G>());
         // Merge the gate type's prefix bits with the given gate config constants.
         debug_assert!(G::PREFIX.len() + gate_constants.len() <= NUM_CONSTANTS);
         let mut all_constants = Vec::new();
@@ -630,6 +631,7 @@ impl<F: Field> CircuitBuilder<F> {
         all_constants.extend(gate_constants);
         self.gate_constants.push(all_constants);
         self.add_generator(gate);
+        *self.gate_counts.entry(G::NAME).or_insert(0) += 1;
     }
 
     pub fn add_generator<G: WitnessGenerator<F>>(&mut self, gate: G) {
@@ -647,7 +649,15 @@ impl<F: Field> CircuitBuilder<F> {
 
     pub fn build(self) -> Circuit<F> {
         let routing_target_partitions = self.get_routing_partitions();
-        let CircuitBuilder { public_input_index, virtual_target_index, gate_constants, copy_constraints, generators, constant_wires } = self;
+        let CircuitBuilder { gate_counts, gate_constants, generators, .. } = self;
+
+        // Print gate counts.
+        println!("Gate counts:");
+        for (gate, count) in gate_counts {
+            println!("{}: {}", gate, count);
+        }
+        println!();
+
         Circuit { gate_constants, routing_target_partitions, generators }
     }
 
