@@ -1,7 +1,7 @@
 //! For reference, here is our gate prefix tree:
 //!
 //! ```text
-//! 00000 <unused>
+//! 00000 <unused> (TODO: Use for "loading" several constants in one gate?)
 //! 00001 CurveAddGate
 //! 00010 CurveDblGate
 //! 00011 CurveEndoGate
@@ -12,8 +12,6 @@
 //! 10*** RescueStepAGate
 //! 11*** RescueStepBGate
 //! ```
-
-// TODO: Add a gate for "loading" several constants at once
 
 use std::marker::PhantomData;
 
@@ -47,6 +45,24 @@ pub trait Gate<F: Field>: WitnessGenerator<F> {
             } else {
                 product = product * (F::ONE - c);
             }
+        }
+        product
+    }
+
+    fn evaluate_prefix_filter_recursively(
+        builder: &mut CircuitBuilder<F>,
+        local_constant_values: &[Target],
+    ) -> Target {
+        let one = builder.one_wire();
+        let mut product = one;
+        for (i, &bit) in Self::PREFIX.iter().enumerate() {
+            let c = local_constant_values[i];
+            let term = if bit {
+                c
+            } else {
+                builder.sub(one, c)
+            };
+            product = builder.mul(product, term);
         }
         product
     }
