@@ -10,18 +10,18 @@ pub struct ProofTarget {
     /// A commitment to each wire polynomial.
     c_wires: Vec<Target>,
     /// A commitment to Z, in the context of the permutation argument.
-    c_z: Target,
+    c_plonk_z: Target,
     /// A commitment to the quotient polynomial.
-    c_t: Vec<Target>,
+    c_plonk_t: Vec<Target>,
 
     /// The purported opening of each constant polynomial.
     o_constants: Vec<Target>,
     /// The purported opening of each wire polynomial.
     o_wires: Vec<Target>,
     /// The purported opening of Z, in the context of the permutation argument.
-    o_z: Target,
+    o_plonk_z: Target,
     /// The purported opening of the quotient polynomial.
-    o_t: Vec<Target>,
+    o_plonk_t: Vec<Target>,
 
     // Data for the previous proof in the recursive chain, which hasn't been fully verified.
     inner_o_constants: Vec<PublicInput>,
@@ -31,28 +31,33 @@ pub struct ProofTarget {
     inner_o_halo_us: Vec<PublicInput>,
 
     /// L_i in the Halo reduction.
-    l_i: Vec<Target>,
+    halo_l_i: Vec<Target>,
     /// R_i in the Halo reduction.
-    r_i: Vec<Target>,
+    halo_r_i: Vec<Target>,
+    /// The purported value of G, i.e. <s, G>, in the context of Halo.
+    halo_g: Target,
 }
 
-pub fn recursive_verification_circuit<C: HaloEndomorphismCurve>(degree_pow: usize) -> RecursiveCircuit<C::BaseField> {
+pub fn recursive_verification_circuit<C: HaloEndomorphismCurve>(
+    degree_pow: usize,
+) -> RecursiveCircuit<C::BaseField> {
     let mut builder = CircuitBuilder::<C::BaseField>::new();
     let proof = ProofTarget {
         c_wires: builder.add_virtual_targets(NUM_WIRES),
-        c_z: builder.add_virtual_target(),
-        c_t: builder.add_virtual_targets(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
+        c_plonk_z: builder.add_virtual_target(),
+        c_plonk_t: builder.add_virtual_targets(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
         o_constants: builder.add_virtual_targets(NUM_CONSTANTS),
         o_wires: builder.add_virtual_targets(NUM_WIRES),
-        o_z: builder.add_virtual_target(),
-        o_t: builder.add_virtual_targets(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
+        o_plonk_z: builder.add_virtual_target(),
+        o_plonk_t: builder.add_virtual_targets(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
         inner_o_constants: builder.stage_public_inputs(NUM_CONSTANTS),
         inner_o_wires: builder.stage_public_inputs(NUM_WIRES),
         inner_o_plonk_z: builder.stage_public_input(),
         inner_o_plonk_t: builder.stage_public_inputs(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
         inner_o_halo_us: builder.stage_public_inputs(degree_pow),
-        l_i: builder.add_virtual_targets(degree_pow),
-        r_i: builder.add_virtual_targets(degree_pow),
+        halo_l_i: builder.add_virtual_targets(degree_pow),
+        halo_r_i: builder.add_virtual_targets(degree_pow),
+        halo_g: builder.add_virtual_target(),
     };
     builder.route_public_inputs();
 
@@ -60,14 +65,14 @@ pub fn recursive_verification_circuit<C: HaloEndomorphismCurve>(degree_pow: usiz
 
     // Compute random challenges.
     let (beta, gamma) = builder.rescue_hash_n_to_2(&proof.c_wires);
-    let alpha = builder.rescue_hash_n_to_1(&vec![beta, proof.c_z]);
-    let zeta = builder.rescue_hash_n_to_1(&[vec![alpha], proof.c_t.clone()].concat());
+    let alpha = builder.rescue_hash_n_to_1(&vec![beta, proof.c_plonk_z]);
+    let zeta = builder.rescue_hash_n_to_1(&[vec![alpha], proof.c_plonk_t.clone()].concat());
     let (v, u) = builder.rescue_hash_n_to_2(&[
         vec![zeta],
         proof.o_constants.clone(),
         proof.o_wires.clone(),
-        vec![proof.o_z],
-        proof.o_t.clone(),
+        vec![proof.o_plonk_z],
+        proof.o_plonk_t.clone(),
     ].concat());
 
     verify_assumptions(&mut builder, degree_pow, &proof, zeta);
