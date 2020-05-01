@@ -723,7 +723,7 @@ impl RoutingTargetPartitions {
         for old_partition in &self.partitions {
             let mut new_partition = Vec::new();
             for target in old_partition {
-                if let &Target::Wire(gi) = target {
+                if let Target::Wire(gi) = *target {
                     new_partition.push(gi);
                 }
             }

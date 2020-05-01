@@ -306,6 +306,6 @@ pub trait TwoAdicField: Field {
     fn primitive_root_of_unity(n_power: usize) -> Self {
         assert!(n_power <= Self::TWO_ADICITY);
         let base_root = Self::MULTIPLICATIVE_SUBGROUP_GENERATOR.exp(Self::T);
-        base_root.exp(Self::from_canonical_u64(1u64 << Self::TWO_ADICITY as u64 - n_power as u64))
+        base_root.exp(Self::from_canonical_u64(1u64 << (Self::TWO_ADICITY as u64 - n_power as u64)))
     }
 }

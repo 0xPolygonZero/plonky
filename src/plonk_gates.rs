@@ -708,7 +708,7 @@ impl<F: Field> WitnessGenerator<F> for RescueStepAGate<F> {
         let root_1 = in_1.kth_root_u32(5);
         let root_2 = in_2.kth_root_u32(5);
 
-        let out_0 = mds::<F>(3, 0, 0) * root_0 + mds::<F>(3, 0, 1) * root_1 + mds::<F>(3, 0, 2) * root_2 + constants[Self::PREFIX.len() + 0];
+        let out_0 = mds::<F>(3, 0, 0) * root_0 + mds::<F>(3, 0, 1) * root_1 + mds::<F>(3, 0, 2) * root_2 + constants[Self::PREFIX.len()];
         let out_1 = mds::<F>(3, 1, 0) * root_0 + mds::<F>(3, 1, 1) * root_1 + mds::<F>(3, 1, 2) * root_2 + constants[Self::PREFIX.len() + 1];
         let out_2 = mds::<F>(3, 2, 0) * root_0 + mds::<F>(3, 2, 1) * root_1 + mds::<F>(3, 2, 2) * root_2 + constants[Self::PREFIX.len() + 2];
 
@@ -795,7 +795,7 @@ impl<F: Field> WitnessGenerator<F> for RescueStepBGate<F> {
         let exp_1 = in_1.exp_u32(5);
         let exp_2 = in_2.exp_u32(5);
 
-        let out_0 = mds::<F>(3, 0, 0) * exp_0 + mds::<F>(3, 0, 1) * exp_1 + mds::<F>(3, 0, 2) * exp_2 + constants[Self::PREFIX.len() + 0];
+        let out_0 = mds::<F>(3, 0, 0) * exp_0 + mds::<F>(3, 0, 1) * exp_1 + mds::<F>(3, 0, 2) * exp_2 + constants[Self::PREFIX.len()];
         let out_1 = mds::<F>(3, 1, 0) * exp_0 + mds::<F>(3, 1, 1) * exp_1 + mds::<F>(3, 1, 2) * exp_2 + constants[Self::PREFIX.len() + 1];
         let out_2 = mds::<F>(3, 2, 0) * exp_0 + mds::<F>(3, 2, 1) * exp_1 + mds::<F>(3, 2, 2) * exp_2 + constants[Self::PREFIX.len() + 2];
 
@@ -927,7 +927,7 @@ impl<F: Field> WitnessGenerator<F> for ArithmeticGate<F> {
         let addend_target = Wire { gate: self.index, input: Self::WIRE_ADDEND };
         let output_target = Wire { gate: self.index, input: Self::WIRE_OUTPUT };
 
-        let const_0 = circuit.gate_constants[self.index][Self::PREFIX.len() + 0];
+        let const_0 = circuit.gate_constants[self.index][Self::PREFIX.len()];
         let const_1 = circuit.gate_constants[self.index][Self::PREFIX.len() + 1];
         let const_2 = circuit.gate_constants[self.index][Self::PREFIX.len() + 2];
 

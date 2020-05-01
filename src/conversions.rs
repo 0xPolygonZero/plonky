@@ -18,7 +18,7 @@ pub fn u64_slice_to_biguint(n: &[u64]) -> BigUint {
     let mut bytes_le = Vec::new();
     for n_i in n {
         for j in 0..8 {
-            bytes_le.push((n_i >> j * 8) as u8);
+            bytes_le.push((n_i >> (j * 8)) as u8);
         }
     }
     BigUint::from_bytes_le(&bytes_le)

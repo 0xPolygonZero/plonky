@@ -94,7 +94,7 @@ pub fn recursive_verification_circuit<C: HaloEndomorphismCurve>(
 
     // Compute random challenges.
     let (beta, gamma) = builder.rescue_hash_n_to_2(&proof.c_wires);
-    let alpha = builder.rescue_hash_n_to_1(&vec![beta, proof.c_plonk_z]);
+    let alpha = builder.rescue_hash_n_to_1(&[beta, proof.c_plonk_z]);
     let zeta = builder.rescue_hash_n_to_1(&[vec![alpha], proof.c_plonk_t.clone()].concat());
     let (v, u) = builder.rescue_hash_n_to_2(&[
         vec![zeta],
