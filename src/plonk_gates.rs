@@ -1168,7 +1168,15 @@ impl<F: Field> Gate<F> for ArithmeticGate<F> {
         right_wire_values: &[F],
         below_wire_values: &[F],
     ) -> Vec<F> {
-        unimplemented!()
+        let const_0 = local_constant_values[Self::PREFIX.len()];
+        let const_1 = local_constant_values[Self::PREFIX.len() + 1];
+        let const_2 = local_constant_values[Self::PREFIX.len() + 2];
+        let multiplicand_0 = local_wire_values[Self::WIRE_MULTIPLICAND_0];
+        let multiplicand_1 = local_wire_values[Self::WIRE_MULTIPLICAND_1];
+        let addend = local_wire_values[Self::WIRE_ADDEND];
+        let output = local_wire_values[Self::WIRE_OUTPUT];
+        let computed_output = const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend + const_2;
+        vec![computed_output - output]
     }
 
     fn evaluate_unfiltered_recursively(
@@ -1178,7 +1186,18 @@ impl<F: Field> Gate<F> for ArithmeticGate<F> {
         right_wire_values: &[Target],
         below_wire_values: &[Target],
     ) -> Vec<Target> {
-        unimplemented!()
+        let const_0 = local_constant_values[Self::PREFIX.len()];
+        let const_1 = local_constant_values[Self::PREFIX.len() + 1];
+        let const_2 = local_constant_values[Self::PREFIX.len() + 2];
+        let multiplicand_0 = local_wire_values[Self::WIRE_MULTIPLICAND_0];
+        let multiplicand_1 = local_wire_values[Self::WIRE_MULTIPLICAND_1];
+        let addend = local_wire_values[Self::WIRE_ADDEND];
+        let output = local_wire_values[Self::WIRE_OUTPUT];
+
+        let product_term = builder.mul_many(&[const_0, multiplicand_0, multiplicand_1]);
+        let addend_term = builder.mul(const_1, addend);
+        let computed_output = builder.add_many(&[product_term, addend_term, const_2]);
+        vec![builder.sub(computed_output, output)]
     }
 }
 
