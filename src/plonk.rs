@@ -311,6 +311,10 @@ impl<F: Field> CircuitBuilder<F> {
         product
     }
 
+    pub fn square(&mut self, x: Target) -> Target {
+        self.mul(x, x)
+    }
+
     pub fn inv(&mut self, x: Target) -> Target {
         struct InverseGenerator {
             x: Target,

@@ -458,7 +458,38 @@ impl<C: Curve> Gate<C::BaseField> for CurveDblGate<C> {
         right_wire_values: &[Target],
         below_wire_values: &[Target],
     ) -> Vec<Target> {
-        unimplemented!()
+        let one = builder.one_wire();
+        let three = builder.constant_wire_u32(3);
+        let a = builder.constant_wire(C::A);
+
+        let x_old = local_wire_values[Self::WIRE_X_OLD];
+        let y_old = local_wire_values[Self::WIRE_Y_OLD];
+        let x_new = local_wire_values[Self::WIRE_X_NEW];
+        let y_new = local_wire_values[Self::WIRE_Y_NEW];
+        let inverse = local_wire_values[Self::WIRE_INVERSE];
+
+        let two_x_old = builder.double(x_old);
+        let two_y_old = builder.double(y_old);
+        let x_old_squared = builder.square(x_old);
+        let three_x_old_squared = builder.mul(three, x_old_squared);
+        let lambda_numerator = builder.add(three_x_old_squared, a);
+        let lambda = builder.mul(lambda_numerator, inverse);
+        let lambda_squared = builder.square(lambda);
+        let computed_x_new = builder.sub(lambda_squared, two_x_old);
+        let delta_x = builder.sub(x_old, x_new);
+        let lambda_times_delta_x = builder.mul(lambda, delta_x);
+        let computed_y_new = builder.sub(lambda_times_delta_x, y_old);
+
+        let two_y_old_times_inverse = builder.mul(two_y_old, inverse);
+
+        vec![
+            // Verify that computed_x_new matches x_new
+            builder.sub(computed_x_new, x_new),
+            // Verify that computed_y_new matches y_new
+            builder.sub(computed_y_new, y_new),
+            // Verify that 2 * y_old times its purported inverse is 1.
+            builder.sub(two_y_old_times_inverse, one),
+        ]
     }
 }
 

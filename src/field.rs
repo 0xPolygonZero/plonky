@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::ops::{Add, Div, Mul, Neg, Shl, Sub};
+use std::ops::{Add, Div, Mul, Neg, Sub};
 
 use num::{BigUint, FromPrimitive, Integer, One};
 
