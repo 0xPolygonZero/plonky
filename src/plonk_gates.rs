@@ -205,7 +205,10 @@ impl<F: Field> Gate<F> for PublicInputGate {
         right_wire_values: &[F],
         below_wire_values: &[F],
     ) -> Vec<F> {
-        unimplemented!()
+        // This ensures that advice wires' values are copied to the following buffer gate.
+        (0..NUM_ADVICE_WIRES).map(|i| {
+            local_wire_values[NUM_ROUTED_WIRES + i] - right_wire_values[i]
+        }).collect()
     }
 
     fn evaluate_unfiltered_recursively(
@@ -215,7 +218,10 @@ impl<F: Field> Gate<F> for PublicInputGate {
         right_wire_values: &[Target],
         below_wire_values: &[Target],
     ) -> Vec<Target> {
-        unimplemented!()
+        // This ensures that advice wires' values are copied to the following buffer gate.
+        (0..NUM_ADVICE_WIRES).map(|i| {
+            builder.sub(local_wire_values[NUM_ROUTED_WIRES + i], right_wire_values[i])
+        }).collect()
     }
 }
 
