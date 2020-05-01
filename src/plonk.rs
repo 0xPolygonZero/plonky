@@ -3,9 +3,7 @@ use std::time::Instant;
 
 use crate::{Field, generate_rescue_constants, Curve, HaloEndomorphismCurve, AffinePoint};
 use crate::plonk_gates::{BufferGate, Gate, RescueStepAGate, CurveAddGate, ArithmeticGate, CurveDblGate, PublicInputGate, RescueStepBGate};
-use std::marker::PhantomData;
 use crate::util::ceil_div_usize;
-use std::any::type_name;
 
 pub(crate) const NUM_WIRES: usize = 11;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;

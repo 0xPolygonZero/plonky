@@ -1,4 +1,4 @@
-use crate::{AffinePoint, Bls12377Base, Bls12377Scalar, Curve, ProjectivePoint};
+use crate::{AffinePoint, Bls12377Base, Bls12377Scalar, Curve};
 use crate::field::Field;
 
 // Parameters taken from the implementation of Bls12-377 in Zexe found here:

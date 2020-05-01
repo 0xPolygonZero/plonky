@@ -203,17 +203,8 @@ impl TwoAdicField for Bls12377Scalar {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12377Scalar, div2_4, Field, mul_6_6, TwoAdicField};
+    use crate::{Bls12377Scalar, Field, TwoAdicField};
     use crate::conversions::u64_slice_to_biguint;
-
-    #[test]
-    fn test_mul_6_6() {
-        let a = [11111111u64, 22222222, 33333333, 44444444, 55555555, 66666666];
-        let b = [77777777u64, 88888888, 99999999, 11111111, 22222222, 33333333];
-        assert_eq!(
-            u64_slice_to_biguint(&mul_6_6(a, b)),
-            u64_slice_to_biguint(&a) * u64_slice_to_biguint(&b));
-    }
 
     #[test]
     fn bls12scalar_to_and_from_canonical() {
@@ -296,16 +287,6 @@ mod tests {
         for (x_i, x_i_inv) in x.into_iter().zip(x_inv) {
             assert_eq!(x_i * x_i_inv, Bls12377Scalar::ONE);
         }
-    }
-
-    #[test]
-    fn test_div2() {
-        assert_eq!(div2_4([40, 0, 0, 0]), [20, 0, 0, 0]);
-
-        assert_eq!(
-            div2_4(
-                [15668009436471190370, 3102040391300197453, 4166322749169705801, 3518225024268476800]),
-            [17057376755090370993, 10774392232504874534, 2083161374584852900, 1759112512134238400]);
     }
 
     #[test]
