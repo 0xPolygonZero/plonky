@@ -315,6 +315,35 @@ impl<F: Field> CircuitBuilder<F> {
         self.mul(x, x)
     }
 
+    /// Compute `x^power`, where `power` is a constant.
+    pub fn exp_constant(&mut self, x: Target, power: F) -> Target {
+        let power_bits = power.num_bits();
+        let mut current = x;
+        let mut product = self.one_wire();
+
+        for (i, limb) in power.to_canonical_u64_vec().iter().enumerate() {
+            for j in 0..64 {
+                // If we've gone through all the 1 bits already, no need to keep squaring.
+                let bit_index = i * 64 + j;
+                if bit_index == power_bits {
+                    return product;
+                }
+
+                if (limb >> j & 1) != 0 {
+                    product = self.mul(product, current);
+                }
+                current = self.square(current);
+            }
+        }
+
+        product
+    }
+
+    /// Compute `x^power`, where `power` is a constant `usize`.
+    pub fn exp_constant_usize(&mut self, x: Target, power: usize) -> Target {
+        self.exp_constant(x, F::from_canonical_usize(power))
+    }
+
     pub fn inv(&mut self, x: Target) -> Target {
         struct InverseGenerator {
             x: Target,

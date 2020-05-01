@@ -769,7 +769,28 @@ impl<F: Field> Gate<F> for RescueStepAGate<F> {
         right_wire_values: &[F],
         below_wire_values: &[F],
     ) -> Vec<F> {
-        unimplemented!()
+        let in_0 = local_wire_values[Self::WIRE_INPUT_0];
+        let in_1 = local_wire_values[Self::WIRE_INPUT_1];
+        let in_2 = local_wire_values[Self::WIRE_INPUT_2];
+        let out_0 = local_wire_values[Self::WIRE_OUTPUT_0];
+        let out_1 = local_wire_values[Self::WIRE_OUTPUT_1];
+        let out_2 = local_wire_values[Self::WIRE_OUTPUT_2];
+        let root_0 = local_wire_values[Self::WIRE_ROOT_0];
+        let root_1 = local_wire_values[Self::WIRE_ROOT_1];
+        let root_2 = local_wire_values[Self::WIRE_ROOT_2];
+
+        let computed_out_0 = mds::<F>(3, 0, 0) * root_0 + mds::<F>(3, 0, 1) * root_1 + mds::<F>(3, 0, 2) * root_2 + local_constant_values[Self::PREFIX.len()];
+        let computed_out_1 = mds::<F>(3, 1, 0) * root_0 + mds::<F>(3, 1, 1) * root_1 + mds::<F>(3, 1, 2) * root_2 + local_constant_values[Self::PREFIX.len() + 1];
+        let computed_out_2 = mds::<F>(3, 2, 0) * root_0 + mds::<F>(3, 2, 1) * root_1 + mds::<F>(3, 2, 2) * root_2 + local_constant_values[Self::PREFIX.len() + 2];
+
+        vec![
+            root_0.exp_u32(5) - in_0,
+            root_1.exp_u32(5) - in_1,
+            root_2.exp_u32(5) - in_2,
+            computed_out_0 - out_0,
+            computed_out_1 - out_1,
+            computed_out_2 - out_2,
+        ]
     }
 
     fn evaluate_unfiltered_recursively(
@@ -779,7 +800,52 @@ impl<F: Field> Gate<F> for RescueStepAGate<F> {
         right_wire_values: &[Target],
         below_wire_values: &[Target],
     ) -> Vec<Target> {
-        unimplemented!()
+        let in_0 = local_wire_values[Self::WIRE_INPUT_0];
+        let in_1 = local_wire_values[Self::WIRE_INPUT_1];
+        let in_2 = local_wire_values[Self::WIRE_INPUT_2];
+        let out_0 = local_wire_values[Self::WIRE_OUTPUT_0];
+        let out_1 = local_wire_values[Self::WIRE_OUTPUT_1];
+        let out_2 = local_wire_values[Self::WIRE_OUTPUT_2];
+        let root_0 = local_wire_values[Self::WIRE_ROOT_0];
+        let root_1 = local_wire_values[Self::WIRE_ROOT_1];
+        let root_2 = local_wire_values[Self::WIRE_ROOT_2];
+
+        let computed_in_0 = builder.exp_constant_usize(root_0, 5);
+        let computed_in_1 = builder.exp_constant_usize(root_1, 5);
+        let computed_in_2 = builder.exp_constant_usize(root_2, 5);
+
+        let mds00 = builder.constant_wire(mds::<F>(3, 0, 0));
+        let mds01 = builder.constant_wire(mds::<F>(3, 0, 1));
+        let mds02 = builder.constant_wire(mds::<F>(3, 0, 2));
+        let mds10 = builder.constant_wire(mds::<F>(3, 1, 0));
+        let mds11 = builder.constant_wire(mds::<F>(3, 1, 1));
+        let mds12 = builder.constant_wire(mds::<F>(3, 1, 2));
+        let mds20 = builder.constant_wire(mds::<F>(3, 2, 0));
+        let mds21 = builder.constant_wire(mds::<F>(3, 2, 1));
+        let mds22 = builder.constant_wire(mds::<F>(3, 2, 2));
+
+        let mds_00_root_0 = builder.mul(mds00, root_0);
+        let mds_01_root_1 = builder.mul(mds01, root_1);
+        let mds_02_root_2 = builder.mul(mds02, root_2);
+        let mds_10_root_0 = builder.mul(mds10, root_0);
+        let mds_11_root_1 = builder.mul(mds11, root_1);
+        let mds_12_root_2 = builder.mul(mds12, root_2);
+        let mds_20_root_0 = builder.mul(mds20, root_0);
+        let mds_21_root_1 = builder.mul(mds21, root_1);
+        let mds_22_root_2 = builder.mul(mds22, root_2);
+
+        let computed_out_0 = builder.add_many(&[mds_00_root_0, mds_01_root_1, mds_02_root_2, local_constant_values[Self::PREFIX.len()]]);
+        let computed_out_1 = builder.add_many(&[mds_10_root_0, mds_11_root_1, mds_12_root_2, local_constant_values[Self::PREFIX.len() + 1]]);
+        let computed_out_2 = builder.add_many(&[mds_20_root_0, mds_21_root_1, mds_22_root_2, local_constant_values[Self::PREFIX.len() + 2]]);
+
+        vec![
+            builder.sub(computed_in_0, in_0),
+            builder.sub(computed_in_1, in_1),
+            builder.sub(computed_in_2, in_2),
+            builder.sub(computed_out_0, out_0),
+            builder.sub(computed_out_1, out_1),
+            builder.sub(computed_out_2, out_2),
+        ]
     }
 }
 
