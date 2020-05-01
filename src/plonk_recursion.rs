@@ -1,4 +1,4 @@
-use crate::{Circuit, CircuitBuilder, Field, HaloEndomorphismCurve, NUM_CONSTANTS, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, Target, PublicInput};
+use crate::{Circuit, CircuitBuilder, Field, HaloEndomorphismCurve, NUM_CONSTANTS, NUM_WIRES, PublicInput, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, Target};
 use crate::plonk_gates::evaluate_all_constraints_recursively;
 
 /// Wraps a `Circuit` for recursive verification with inputs for the proof data.

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
-use crate::{Field, generate_rescue_constants, Curve, HaloEndomorphismCurve, AffinePoint};
-use crate::plonk_gates::{BufferGate, Gate, RescueStepAGate, CurveAddGate, ArithmeticGate, CurveDblGate, PublicInputGate, RescueStepBGate};
+use crate::{AffinePoint, Curve, Field, generate_rescue_constants, HaloEndomorphismCurve};
+use crate::plonk_gates::{ArithmeticGate, BufferGate, CurveAddGate, CurveDblGate, Gate, PublicInputGate, RescueStepAGate, RescueStepBGate};
 use crate::util::ceil_div_usize;
 
 pub(crate) const NUM_WIRES: usize = 11;

@@ -159,7 +159,7 @@ pub fn affine_multisummation_batch_inversion<C: Curve>(summations: Vec<Vec<Affin
 
 #[cfg(test)]
 mod tests {
-    use crate::{affine_summation_batch_inversion, affine_summation_pairwise, Bls12377, ProjectivePoint, Curve};
+    use crate::{affine_summation_batch_inversion, affine_summation_pairwise, Bls12377, Curve, ProjectivePoint};
 
     #[test]
     fn test_pairwise_affine_summation() {

@@ -2,7 +2,7 @@ use criterion::{black_box, Criterion};
 use criterion::criterion_group;
 use criterion::criterion_main;
 
-use plonky::{affine_summation_batch_inversion, affine_summation_pairwise, ProjectivePoint, Bls12377, Curve};
+use plonky::{affine_summation_batch_inversion, affine_summation_pairwise, Bls12377, Curve, ProjectivePoint};
 
 fn criterion_benchmark(c: &mut Criterion) {
     let n = 150;

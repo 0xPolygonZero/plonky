@@ -2,7 +2,7 @@ use criterion::{black_box, Criterion};
 use criterion::criterion_group;
 use criterion::criterion_main;
 
-use plonky::{Bls12377Base, Bls12377Scalar, Field, ProjectivePoint, Bls12377, Curve};
+use plonky::{Bls12377, Bls12377Base, Bls12377Scalar, Curve, Field, ProjectivePoint};
 
 fn criterion_benchmark(c: &mut Criterion) {
     // We want a scalar with a Hamming weight of 0.5, to simulate the "average case".

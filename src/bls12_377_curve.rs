@@ -34,7 +34,7 @@ const BLS12_377_GENERATOR_Y: Bls12377Base = Bls12377Base {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12377, Bls12377Scalar, Field, ProjectivePoint, Curve};
+    use crate::{Bls12377, Bls12377Scalar, Curve, Field, ProjectivePoint};
 
     #[test]
     fn test_naive_multiplication() {

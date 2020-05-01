@@ -1,11 +1,11 @@
 use std::collections::HashSet;
+use std::fmt::Debug;
 use std::hash::Hash;
-use std::ops::{Add, Div, Mul, Neg, Sub, Shl};
+use std::ops::{Add, Div, Mul, Neg, Shl, Sub};
 
 use num::{BigUint, FromPrimitive, Integer, One};
 
 use crate::{biguint_to_field, field_to_biguint};
-use std::fmt::Debug;
 
 pub trait Field: 'static + Sized + Copy + Eq + Hash + Send + Sync + Debug
 + Neg<Output=Self>

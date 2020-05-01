@@ -157,7 +157,7 @@ pub(crate) fn to_digits<C: Curve>(x: &C::ScalarField, w: usize) -> Vec<usize> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12377, Bls12377Scalar, msm_execute, msm_precompute, to_digits, Curve};
+    use crate::{Bls12377, Bls12377Scalar, Curve, msm_execute, msm_precompute, to_digits};
 
     #[test]
     fn test_to_digits() {
