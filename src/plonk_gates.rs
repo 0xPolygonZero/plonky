@@ -448,7 +448,25 @@ impl<C: Curve> Gate<C::BaseField> for CurveDblGate<C> {
         right_wire_values: &[C::BaseField],
         below_wire_values: &[C::BaseField],
     ) -> Vec<C::BaseField> {
-        unimplemented!()
+        let x_old = local_wire_values[Self::WIRE_X_OLD];
+        let y_old = local_wire_values[Self::WIRE_Y_OLD];
+        let x_new = local_wire_values[Self::WIRE_X_NEW];
+        let y_new = local_wire_values[Self::WIRE_Y_NEW];
+        let inverse = local_wire_values[Self::WIRE_INVERSE];
+
+        let lambda_numerator = x_old.square().triple() + C::A;
+        let lambda = lambda_numerator * inverse;
+        let computed_x_new = lambda.square() - x_old.double();
+        let computed_y_new = lambda * (x_old - x_new) - y_old;
+
+        vec![
+            // Verify that computed_x_new matches x_new.
+            computed_x_new - x_new,
+            // Verify that computed_y_new matches y_new.
+            computed_y_new - y_new,
+            // Verify that 2 * y_old times its purported inverse is 1.
+            y_old.double() * inverse - C::BaseField::ONE,
+        ]
     }
 
     fn evaluate_unfiltered_recursively(
@@ -483,9 +501,9 @@ impl<C: Curve> Gate<C::BaseField> for CurveDblGate<C> {
         let two_y_old_times_inverse = builder.mul(two_y_old, inverse);
 
         vec![
-            // Verify that computed_x_new matches x_new
+            // Verify that computed_x_new matches x_new.
             builder.sub(computed_x_new, x_new),
-            // Verify that computed_y_new matches y_new
+            // Verify that computed_y_new matches y_new.
             builder.sub(computed_y_new, y_new),
             // Verify that 2 * y_old times its purported inverse is 1.
             builder.sub(two_y_old_times_inverse, one),
