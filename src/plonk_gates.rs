@@ -1,12 +1,11 @@
 //! For reference, here is our gate prefix tree:
 //!
 //! ```text
-//! 00000 <unused> (TODO: Use for "loading" several constants in one gate?)
+//! 00000 PublicInputGate
 //! 00001 CurveAddGate
 //! 00010 CurveDblGate
 //! 00011 CurveEndoGate
-//! 00100 Base4SumGate
-//! 00101 PublicInputGate
+//! 0010* Base4SumGate
 //! 0011* BufferGate
 //! 01*** ArithmeticGate
 //! 10*** RescueStepAGate
@@ -197,7 +196,7 @@ impl PublicInputGate {
 impl<F: Field> Gate<F> for PublicInputGate {
     const NAME: &'static str = "PublicInputGate";
 
-    const PREFIX: &'static [bool] = &[false, false, true, false, true];
+    const PREFIX: &'static [bool] = &[false, false, false, false, false];
 
     fn evaluate_unfiltered(
         local_constant_values: &[F],
@@ -644,7 +643,8 @@ impl<C: HaloEndomorphismCurve> Gate<C::BaseField> for CurveEndoGate<C> {
         right_wire_values: &[Target],
         below_wire_values: &[Target],
     ) -> Vec<Target> {
-        unimplemented!()
+        // TODO: Implement this.
+        vec![builder.zero_wire()]
     }
 }
 
@@ -1058,8 +1058,7 @@ impl Base4SumGate {
 impl<F: Field> Gate<F> for Base4SumGate {
     const NAME: &'static str = "Base4SumGate";
 
-    // TODO: Need to reduce this prefix length by 1 bit in order to keep everything within degree 8n.
-    const PREFIX: &'static [bool] = &[false, false, true, false, false];
+    const PREFIX: &'static [bool] = &[false, false, true, false];
 
     fn evaluate_unfiltered(
         local_constant_values: &[F],
