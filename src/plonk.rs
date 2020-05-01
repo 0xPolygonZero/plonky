@@ -352,6 +352,20 @@ impl<F: Field> CircuitBuilder<F> {
         self.mul(x, y_inv)
     }
 
+    /// Multiply and add; i.e. computes `x * y + z`.
+    pub fn mul_add(&mut self, x: Target, y: Target, z: Target) -> Target {
+        // TODO: Should be done with a single gate.
+        let product = self.mul(x, y);
+        self.add(product, z)
+    }
+
+    /// Multiply and subtract; i.e. computes `x * y - z`.
+    pub fn mul_sub(&mut self, x: Target, y: Target, z: Target) -> Target {
+        // TODO: Should be done with a single gate.
+        let product = self.mul(x, y);
+        self.sub(product, z)
+    }
+
     pub fn neg(&mut self, x: Target) -> Target {
         let neg_one = self.neg_one_wire();
         self.mul(x, neg_one)

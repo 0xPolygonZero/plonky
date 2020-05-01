@@ -79,6 +79,24 @@ pub(crate) fn evaluate_all_constraints_recursively<C: HaloEndomorphismCurve>(
     unified_constraint_set
 }
 
+/// Computes `x * (x - 1)`, which should vanish iff `x` is binary.
+fn assert_binary_recursively<F: Field>(builder: &mut CircuitBuilder<F>, x: Target) -> Target {
+    let one = builder.one_wire();
+    let x_minus_one = builder.sub(x, one);
+    builder.mul(x, x_minus_one)
+}
+
+/// Computes `x * y - 1`, which should vanish iff `x` and `y` are inverses.
+fn assert_inverses_recursively<F: Field>(
+    builder: &mut CircuitBuilder<F>,
+    x: Target,
+    y: Target,
+) -> Target {
+    let one = builder.one_wire();
+    let x_y = builder.mul(x, y);
+    builder.sub(x_y, one)
+}
+
 pub trait Gate<F: Field>: WitnessGenerator<F> {
     const NAME: &'static str;
 
@@ -323,30 +341,28 @@ impl<C: Curve> Gate<C::BaseField> for CurveAddGate<C> {
         right_wire_values: &[C::BaseField],
         below_wire_values: &[C::BaseField],
     ) -> Vec<C::BaseField> {
-        let local_group_acc_x = local_wire_values[Self::WIRE_GROUP_ACC_X];
-        let local_group_acc_y = local_wire_values[Self::WIRE_GROUP_ACC_Y];
-        let right_group_acc_x = right_wire_values[Self::WIRE_GROUP_ACC_X];
-        let right_group_acc_y = right_wire_values[Self::WIRE_GROUP_ACC_Y];
+        let x1 = local_wire_values[Self::WIRE_GROUP_ACC_X];
+        let y1 = local_wire_values[Self::WIRE_GROUP_ACC_Y];
+        let x3 = right_wire_values[Self::WIRE_GROUP_ACC_X];
+        let y3 = right_wire_values[Self::WIRE_GROUP_ACC_Y];
 
         let scalar_acc_old = local_wire_values[Self::WIRE_SCALAR_ACC_OLD];
         let scalar_acc_new = local_wire_values[Self::WIRE_SCALAR_ACC_NEW];
-        let addend_x = local_wire_values[Self::WIRE_ADDEND_X];
-        let addend_y = local_wire_values[Self::WIRE_ADDEND_Y];
+        let x2 = local_wire_values[Self::WIRE_ADDEND_X];
+        let y2 = local_wire_values[Self::WIRE_ADDEND_Y];
         let scalar_bit = local_wire_values[Self::WIRE_SCALAR_BIT];
         let inverse = local_wire_values[Self::WIRE_INVERSE];
 
-        let dx = local_group_acc_x - addend_x;
-        let dy = local_group_acc_y - addend_y;
-        let lambda = dy * inverse;
-        let sum_x = lambda.square() - local_group_acc_x - addend_x;
-        let sum_y = lambda * dx - local_group_acc_y;
+        let lambda = (y1 - y2) * inverse;
+        let computed_x3 = lambda.square() - x1 - x2;
+        let computed_y3 = lambda * (x1 - x3) - y1;
 
         vec![
-            sum_x - right_group_acc_x,
-            sum_y - right_group_acc_y,
+            computed_x3 - x3,
+            computed_y3 - y3,
             scalar_acc_new - scalar_acc_old.double() + scalar_bit,
             scalar_bit * (scalar_bit - C::BaseField::ONE),
-            inverse * dx - C::BaseField::ONE,
+            inverse * (x1 - x2) - C::BaseField::ONE,
         ]
     }
 
@@ -357,7 +373,38 @@ impl<C: Curve> Gate<C::BaseField> for CurveAddGate<C> {
         right_wire_values: &[Target],
         below_wire_values: &[Target],
     ) -> Vec<Target> {
-        unimplemented!()
+        let x1 = local_wire_values[Self::WIRE_GROUP_ACC_X];
+        let y1 = local_wire_values[Self::WIRE_GROUP_ACC_Y];
+        let x3 = right_wire_values[Self::WIRE_GROUP_ACC_X];
+        let y3 = right_wire_values[Self::WIRE_GROUP_ACC_Y];
+
+        let scalar_acc_old = local_wire_values[Self::WIRE_SCALAR_ACC_OLD];
+        let scalar_acc_new = local_wire_values[Self::WIRE_SCALAR_ACC_NEW];
+        let x2 = local_wire_values[Self::WIRE_ADDEND_X];
+        let y2 = local_wire_values[Self::WIRE_ADDEND_Y];
+        let scalar_bit = local_wire_values[Self::WIRE_SCALAR_BIT];
+        let inverse = local_wire_values[Self::WIRE_INVERSE];
+
+        let x1_minus_x2 = builder.sub(x1, x2);
+        let x1_plus_x2 = builder.sub(x1, x2);
+        let x1_minus_x3 = builder.sub(x1, x3);
+        let y1_minus_y2 = builder.sub(y1, y2);
+
+        let lambda = builder.mul(y1_minus_y2, inverse);
+        let lambda_squared = builder.square(lambda);
+        let computed_x3 = builder.sub(lambda_squared, x1_plus_x2);
+        let computed_y3 = builder.mul_sub(lambda, x1_minus_x3, y1);
+
+        let double_scalar_acc_old = builder.double(scalar_acc_old);
+        let computed_scalar_acc_new = builder.add(double_scalar_acc_old, scalar_bit);
+
+        vec![
+            builder.sub(computed_x3, x3),
+            builder.sub(computed_y3, y3),
+            builder.sub(computed_scalar_acc_new, scalar_acc_new),
+            assert_binary_recursively(builder, scalar_bit),
+            assert_inverses_recursively(builder, inverse, x1_minus_x2),
+        ]
     }
 }
 
@@ -498,15 +545,13 @@ impl<C: Curve> Gate<C::BaseField> for CurveDblGate<C> {
         let lambda_times_delta_x = builder.mul(lambda, delta_x);
         let computed_y_new = builder.sub(lambda_times_delta_x, y_old);
 
-        let two_y_old_times_inverse = builder.mul(two_y_old, inverse);
-
         vec![
             // Verify that computed_x_new matches x_new.
             builder.sub(computed_x_new, x_new),
             // Verify that computed_y_new matches y_new.
             builder.sub(computed_y_new, y_new),
             // Verify that 2 * y_old times its purported inverse is 1.
-            builder.sub(two_y_old_times_inverse, one),
+            assert_inverses_recursively(builder, two_y_old, inverse),
         ]
     }
 }
