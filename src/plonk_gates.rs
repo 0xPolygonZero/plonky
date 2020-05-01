@@ -206,6 +206,7 @@ impl<F: Field> Gate<F> for PublicInputGate {
         below_wire_values: &[F],
     ) -> Vec<F> {
         // This ensures that advice wires' values are copied to the following buffer gate.
+        // TODO: Consider enforcing this via copy constraints, in which case there would be nothing to do here.
         (0..NUM_ADVICE_WIRES).map(|i| {
             local_wire_values[NUM_ROUTED_WIRES + i] - right_wire_values[i]
         }).collect()
@@ -219,6 +220,7 @@ impl<F: Field> Gate<F> for PublicInputGate {
         below_wire_values: &[Target],
     ) -> Vec<Target> {
         // This ensures that advice wires' values are copied to the following buffer gate.
+        // TODO: Consider enforcing this via copy constraints, in which case there would be nothing to do here.
         (0..NUM_ADVICE_WIRES).map(|i| {
             builder.sub(local_wire_values[NUM_ROUTED_WIRES + i], right_wire_values[i])
         }).collect()
@@ -283,7 +285,9 @@ impl<F: Field> Gate<F> for BufferGate {
         right_wire_values: &[F],
         below_wire_values: &[F],
     ) -> Vec<F> {
-        unimplemented!()
+        let wire_value = local_wire_values[Self::WIRE_BUFFER_CONST];
+        let const_value = local_constant_values[<Self as Gate<F>>::PREFIX.len()];
+        vec![wire_value - const_value]
     }
 
     fn evaluate_unfiltered_recursively(
@@ -293,7 +297,9 @@ impl<F: Field> Gate<F> for BufferGate {
         right_wire_values: &[Target],
         below_wire_values: &[Target],
     ) -> Vec<Target> {
-        unimplemented!()
+        let wire_value = local_wire_values[Self::WIRE_BUFFER_CONST];
+        let const_value = local_constant_values[<Self as Gate<F>>::PREFIX.len()];
+        vec![builder.sub(wire_value, const_value)]
     }
 }
 
