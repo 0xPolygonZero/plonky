@@ -10,10 +10,8 @@ pub(crate) const NUM_ROUTED_WIRES: usize = 6;
 pub(crate) const NUM_ADVICE_WIRES: usize = NUM_WIRES - NUM_ROUTED_WIRES;
 pub(crate) const NUM_CONSTANTS: usize = 5;
 pub(crate) const GRID_WIDTH: usize = 65;
-/// TODO: Double check this and look into reducing it. RescueStepBGate has a degree-5 constraint,
-/// and the prefix filter adds 2, but division by Z_H subtracts 1, so it should be 6? The Rescue
-/// gates' constraints could be made lower degree if we store some intermediate products in wires
-/// rather than computing x^5 directly.
+// This is currently dominated by Base4SumGate. It has degree-4n constraints, and its prefix is 4
+// bits long, so its filtered constraints are degree-8n. Dividing by Z_H makes t degree-7n.
 pub(crate) const QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER: usize = 7;
 
 pub struct PartialWitness<F: Field> {

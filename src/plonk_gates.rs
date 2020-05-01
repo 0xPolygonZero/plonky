@@ -1037,6 +1037,7 @@ impl<F: Field> WitnessGenerator<F> for RescueStepBGate<F> {
     }
 }
 
+/// A gate for accumulating base-4 limbs.
 pub(crate) struct Base4SumGate {
     pub index: usize,
     /// Make the constructor private.
@@ -1048,20 +1049,16 @@ impl Base4SumGate {
         Base4SumGate { index, _private: () }
     }
 
-    pub const WIRE_ACC: usize = 0;
-    pub const WIRE_LIMB_0: usize = 1;
-    pub const WIRE_LIMB_1: usize = 2;
-    pub const WIRE_LIMB_2: usize = 3;
-    pub const WIRE_LIMB_3: usize = 4;
-    pub const WIRE_LIMB_4: usize = 5;
-    pub const WIRE_LIMB_5: usize = 6;
-    pub const WIRE_LIMB_6: usize = 7;
-    pub const WIRE_LIMB_7: usize = 8;
+    pub const WIRE_ACC_OLD: usize = 0;
+    pub const WIRE_ACC_NEW: usize = 1;
+    pub const WIRE_LIMB_0: usize = 2;
+    pub const NUM_LIMBS: usize = 9;
 }
 
 impl<F: Field> Gate<F> for Base4SumGate {
     const NAME: &'static str = "Base4SumGate";
 
+    // TODO: Need to reduce this prefix length by 1 bit in order to keep everything within degree 8n.
     const PREFIX: &'static [bool] = &[false, false, true, false, false];
 
     fn evaluate_unfiltered(
@@ -1070,7 +1067,26 @@ impl<F: Field> Gate<F> for Base4SumGate {
         right_wire_values: &[F],
         below_wire_values: &[F],
     ) -> Vec<F> {
-        unimplemented!()
+        let acc_old = local_wire_values[Self::WIRE_ACC_OLD];
+        let acc_new = local_wire_values[Self::WIRE_ACC_NEW];
+        let limbs: Vec<F> = (0..Self::NUM_LIMBS).map(
+            |i| local_wire_values[Self::WIRE_LIMB_0 + i]
+        ).collect();
+
+        let mut computed_acc_new = acc_old;
+        for &limb in &limbs {
+            computed_acc_new = computed_acc_new.quadruple() + limb;
+        }
+
+        let mut constraints = vec![computed_acc_new - acc_new];
+        for limb in limbs {
+            let mut product = F::ONE;
+            for j in 0..4 {
+                product = product * (limb - F::from_canonical_usize(j));
+            }
+            constraints.push(product);
+        }
+        constraints
     }
 
     fn evaluate_unfiltered_recursively(
@@ -1080,7 +1096,31 @@ impl<F: Field> Gate<F> for Base4SumGate {
         right_wire_values: &[Target],
         below_wire_values: &[Target],
     ) -> Vec<Target> {
-        unimplemented!()
+        let four = builder.constant_wire_u32(4);
+
+        let acc_old = local_wire_values[Self::WIRE_ACC_OLD];
+        let acc_new = local_wire_values[Self::WIRE_ACC_NEW];
+        let limbs: Vec<Target> = (0..Self::NUM_LIMBS).map(
+            |i| local_wire_values[Self::WIRE_LIMB_0 + i]
+        ).collect();
+
+        let mut computed_acc_new = acc_old;
+        for &limb in &limbs {
+            let shifted_acc_new = builder.mul(computed_acc_new, four);
+            computed_acc_new = builder.add(shifted_acc_new, limb);
+        }
+
+        let mut constraints = vec![builder.sub(computed_acc_new, acc_new)];
+        for limb in limbs {
+            let mut product = builder.one_wire();
+            for j in 0..4 {
+                let j_target = builder.constant_wire_u32(j);
+                let limb_minus_j = builder.sub(limb, j_target);
+                product = builder.mul(product, limb_minus_j);
+            }
+            constraints.push(product);
+        }
+        constraints
     }
 }
 
