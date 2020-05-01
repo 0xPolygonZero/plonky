@@ -141,10 +141,12 @@ fn verify_assumptions<C: HaloEndomorphismCurve>(
     let vanishing_v_shift_term = todo!();
     let constraint_terms = evaluate_all_constraints_recursively::<C>(
         builder, &o_constants, &o_local_wires, &o_right_wires, &o_below_wires);
-    let vanishing_eval = alpha_reduction(
-        builder,
-        &[vec![vanishing_z_1_term], vec![vanishing_v_shift_term], constraint_terms].concat(),
-        alpha);
+    let vanishing_terms = [
+        vec![vanishing_z_1_term],
+        vec![vanishing_v_shift_term],
+        constraint_terms
+    ].concat();
+    let vanishing_eval = alpha_reduction(builder, &vanishing_terms, alpha);
 
     // Evaluate the quotient polynomial, and assert that it matches the prover's opening.
     let quotient_eval = builder.div(vanishing_eval, zero_eval);
