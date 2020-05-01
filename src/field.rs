@@ -256,7 +256,7 @@ pub trait Field: 'static + Sized + Copy + Eq + Hash + Send + Sync + Debug
 
     fn is_quadratic_residue(&self) -> bool {
         // This is based on Euler's criterion.
-        let power = biguint_to_field(field_to_biguint(Self::NEG_ONE).shl(1));
+        let power = biguint_to_field(field_to_biguint(Self::NEG_ONE) / 2u8);
         let exp = self.exp(power);
         if exp == Self::ONE {
             return true;
