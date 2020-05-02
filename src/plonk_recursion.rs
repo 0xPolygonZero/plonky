@@ -40,11 +40,11 @@ pub struct ProofTarget {
     inner_halo_us: Vec<PublicInput>,
 
     /// L_i in the Halo reduction.
-    halo_l_i: Vec<Target>,
+    halo_l_i: Vec<AffinePointTarget>,
     /// R_i in the Halo reduction.
-    halo_r_i: Vec<Target>,
+    halo_r_i: Vec<AffinePointTarget>,
     /// The purported value of G, i.e. <s, G>, in the context of Halo.
-    halo_g: Target,
+    halo_g: AffinePointTarget,
 }
 
 impl ProofTarget {
@@ -114,9 +114,9 @@ pub fn recursive_verification_circuit<C: HaloEndomorphismCurve>(
         inner_o_plonk_z_right: builder.stage_public_input(),
         inner_o_plonk_t: builder.stage_public_inputs(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
         inner_halo_us: builder.stage_public_inputs(degree_pow),
-        halo_l_i: builder.add_virtual_targets(degree_pow),
-        halo_r_i: builder.add_virtual_targets(degree_pow),
-        halo_g: builder.add_virtual_target(),
+        halo_l_i: builder.add_virtual_point_targets(degree_pow),
+        halo_r_i: builder.add_virtual_point_targets(degree_pow),
+        halo_g: builder.add_virtual_point_target(),
     };
     builder.route_public_inputs();
 
@@ -132,6 +132,19 @@ pub fn recursive_verification_circuit<C: HaloEndomorphismCurve>(
         vec![zeta],
         proof.all_opening_targets(),
     ].concat());
+
+    // Compute IPA challenges.
+    let mut transcript_state = v;
+    let mut halo_u_i = Vec::new();
+    for i in 0..degree_pow {
+        let u_i = builder.rescue_hash_n_to_1(&[
+            vec![transcript_state],
+            proof.halo_l_i[i].to_vec(),
+            proof.halo_r_i[i].to_vec(),
+        ].concat());
+        halo_u_i.push(u_i);
+        transcript_state = u_i;
+    }
 
     verify_ipas::<C>(&mut builder, &proof, u, v);
 
@@ -162,23 +175,29 @@ fn verify_ipas<C: HaloEndomorphismCurve>(
         vec![proof.c_plonk_z],
         proof.c_plonk_t.clone(),
     ].concat();
-    let mut c_reduction_parts = Vec::new();
+    let mut c_reduction_msm_parts = Vec::new();
     let powers_of_u = powers(builder, u, c_all.len());
     for (&c, &power) in c_all.iter().zip(powers_of_u.iter()) {
         // TODO: Need to split into a mix of base 2 and 4, and verify the weighted sum.
         let scalar_bits = builder.split_binary(power, 128);
-        c_reduction_parts.push(MsmPart { scalar_bits, addend: c });
+        c_reduction_msm_parts.push(MsmPart { scalar_bits, addend: c });
     }
-    let c_reduction_msm_result = builder.curve_msm_endo::<C>(&c_reduction_parts);
+    let c_reduction_msm_result = builder.curve_msm_endo::<C>(&c_reduction_msm_parts);
     let actual_scalars = c_reduction_msm_result.actual_scalars;
     let c_reduction = c_reduction_msm_result.msm_result;
 
-    // For each opening location, we do a similar reduction, using the actual scalars above.
-    let o_all = proof.all_opening_sets();
-    let o_reductions: Vec<Target> = o_all.iter()
+    // For each opening set, we do a similar reduction, using the actual scalars above.
+    let opening_set_reductions: Vec<Target> = proof.all_opening_sets().iter()
         .map(|opening_set| reduce_with_coefficients(
             builder, &opening_set.to_vec(), &actual_scalars))
         .collect();
+
+    // Then, we reduce the above opening set reductions to a single value.
+    let reduced_opening = reduce_with_powers(builder, &opening_set_reductions, v);
+
+    // Compute Q as defined in the Halo paper.
+    // let q_msm_parts = ;
+    // let q = ;
 
     // TODO: Verify reduced IPA.
 }
