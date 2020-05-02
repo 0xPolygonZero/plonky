@@ -1,4 +1,4 @@
-use crate::{Circuit, CircuitBuilder, Field, HaloEndomorphismCurve, NUM_CONSTANTS, NUM_WIRES, PublicInput, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, Target};
+use crate::{Circuit, CircuitBuilder, Field, HaloEndomorphismCurve, NUM_CONSTANTS, NUM_WIRES, PublicInput, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, Target, AffinePointTarget, MsmPart};
 use crate::plonk_gates::evaluate_all_constraints_recursively;
 
 /// Wraps a `Circuit` for recursive verification with inputs for the proof data.
@@ -9,28 +9,20 @@ pub struct RecursiveCircuit<F: Field> {
 
 pub struct ProofTarget {
     /// A commitment to each wire polynomial.
-    c_wires: Vec<Target>,
+    c_wires: Vec<AffinePointTarget>,
     /// A commitment to Z, in the context of the permutation argument.
-    c_plonk_z: Target,
+    c_plonk_z: AffinePointTarget,
     /// A commitment to the quotient polynomial.
-    c_plonk_t: Vec<Target>,
+    c_plonk_t: Vec<AffinePointTarget>,
 
-    /// The purported opening of each constant polynomial.
-    o_constants: Vec<Target>,
-    /// The purported opening of each S_sigma polynomial in the context of Plonk's permutation argument.
-    o_plonk_sigmas: Vec<Target>,
-    /// The purported opening of each wire polynomial at `zeta`.
-    o_wires_local: Vec<Target>,
-    /// The purported opening of each wire polynomial at `g * zeta`.
-    o_wires_right: Vec<Target>,
-    /// The purported opening of each wire polynomial at `g^65 * zeta`.
-    o_wires_below: Vec<Target>,
-    /// The purported opening of `Z(zeta)`.
-    o_plonk_z_local: Target,
-    /// The purported opening of `Z(g * zeta)`.
-    o_plonk_z_right: Target,
-    /// The purported opening of `t(zeta)`.
-    o_plonk_t: Vec<Target>,
+    /// The opening of each polynomial at each `PublicInputGate` index.
+    o_public_inputs: Vec<OpeningSetTarget>,
+    /// The opening of each polynomial at `zeta`.
+    o_local: OpeningSetTarget,
+    /// The opening of each polynomial at `g * zeta`.
+    o_right: OpeningSetTarget,
+    /// The opening of each polynomial at `g^65 * zeta`.
+    o_below: OpeningSetTarget,
 
     // Data for the previous proof in the recursive chain, which hasn't been fully verified.
     inner_beta: PublicInput,
@@ -45,7 +37,7 @@ pub struct ProofTarget {
     inner_o_plonk_z_local: PublicInput,
     inner_o_plonk_z_right: PublicInput,
     inner_o_plonk_t: Vec<PublicInput>,
-    inner_o_halo_us: Vec<PublicInput>,
+    inner_halo_us: Vec<PublicInput>,
 
     /// L_i in the Halo reduction.
     halo_l_i: Vec<Target>,
@@ -55,22 +47,60 @@ pub struct ProofTarget {
     halo_g: Target,
 }
 
+impl ProofTarget {
+    fn all_opening_sets(&self) -> Vec<OpeningSetTarget> {
+        [
+            self.o_public_inputs.as_slice(),
+            &[self.o_local.clone(), self.o_right.clone(), self.o_below.clone()],
+        ].concat()
+    }
+
+    fn all_opening_targets(&self) -> Vec<Target> {
+        let targets_2d: Vec<Vec<Target>> = self.all_opening_sets().into_iter()
+            .map(|set| set.to_vec())
+            .collect();
+        targets_2d.concat()
+    }
+}
+
+#[derive(Clone)]
+struct OpeningSetTarget {
+    /// The purported opening of each constant polynomial.
+    o_constants: Vec<Target>,
+    /// The purported opening of each S_sigma polynomial in the context of Plonk's permutation argument.
+    o_plonk_sigmas: Vec<Target>,
+    /// The purported opening of each wire polynomial.
+    o_wires: Vec<Target>,
+    /// The purported opening of `Z`.
+    o_plonk_z: Target,
+    /// The purported opening of `t`.
+    o_plonk_t: Vec<Target>,
+}
+
+impl OpeningSetTarget {
+    fn to_vec(&self) -> Vec<Target> {
+        [
+            self.o_constants.as_slice(),
+            self.o_plonk_sigmas.as_slice(),
+            self.o_wires.as_slice(),
+            &[self.o_plonk_z],
+            self.o_plonk_t.as_slice(),
+        ].concat()
+    }
+}
+
 pub fn recursive_verification_circuit<C: HaloEndomorphismCurve>(
     degree_pow: usize,
 ) -> RecursiveCircuit<C::BaseField> {
     let mut builder = CircuitBuilder::<C::BaseField>::new();
     let proof = ProofTarget {
-        c_wires: builder.add_virtual_targets(NUM_WIRES),
-        c_plonk_z: builder.add_virtual_target(),
-        c_plonk_t: builder.add_virtual_targets(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
-        o_constants: builder.add_virtual_targets(NUM_CONSTANTS),
-        o_plonk_sigmas: builder.add_virtual_targets(NUM_WIRES),
-        o_wires_local: builder.add_virtual_targets(NUM_WIRES),
-        o_wires_right: builder.add_virtual_targets(NUM_WIRES),
-        o_wires_below: builder.add_virtual_targets(NUM_WIRES),
-        o_plonk_z_local: builder.add_virtual_target(),
-        o_plonk_z_right: builder.add_virtual_target(),
-        o_plonk_t: builder.add_virtual_targets(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
+        c_wires: builder.add_virtual_point_targets(NUM_WIRES),
+        c_plonk_z: builder.add_virtual_point_target(),
+        c_plonk_t: builder.add_virtual_point_targets(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
+        o_public_inputs: todo!(),
+        o_local: make_opening_set(&mut builder),
+        o_right: make_opening_set(&mut builder),
+        o_below: make_opening_set(&mut builder),
         inner_beta: builder.stage_public_input(),
         inner_gamma: builder.stage_public_input(),
         inner_alpha: builder.stage_public_input(),
@@ -83,33 +113,84 @@ pub fn recursive_verification_circuit<C: HaloEndomorphismCurve>(
         inner_o_plonk_z_local: builder.stage_public_input(),
         inner_o_plonk_z_right: builder.stage_public_input(),
         inner_o_plonk_t: builder.stage_public_inputs(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
-        inner_o_halo_us: builder.stage_public_inputs(degree_pow),
+        inner_halo_us: builder.stage_public_inputs(degree_pow),
         halo_l_i: builder.add_virtual_targets(degree_pow),
         halo_r_i: builder.add_virtual_targets(degree_pow),
         halo_g: builder.add_virtual_target(),
     };
     builder.route_public_inputs();
 
+    verify_assumptions::<C>(&mut builder, degree_pow, &proof);
+
     // TODO: Verify that each prover polynomial commitment is on the curve.
 
     // Compute random challenges.
-    let (beta, gamma) = builder.rescue_hash_n_to_2(&proof.c_wires);
-    let alpha = builder.rescue_hash_n_to_1(&[beta, proof.c_plonk_z]);
-    let zeta = builder.rescue_hash_n_to_1(&[vec![alpha], proof.c_plonk_t.clone()].concat());
+    let (beta, gamma) = builder.rescue_hash_n_to_2(&flatten_points(&proof.c_wires));
+    let alpha = builder.rescue_hash_n_to_1(&[vec![beta], proof.c_plonk_z.to_vec()].concat());
+    let zeta = builder.rescue_hash_n_to_1(&[vec![alpha], flatten_points(&proof.c_plonk_t)].concat());
     let (v, u) = builder.rescue_hash_n_to_2(&[
         vec![zeta],
-        proof.o_constants.clone(),
-        proof.o_wires_local.clone(),
-        proof.o_wires_right.clone(),
-        proof.o_wires_below.clone(),
-        vec![proof.o_plonk_z_local, proof.o_plonk_z_right],
-        proof.o_plonk_t.clone(),
+        proof.all_opening_targets(),
     ].concat());
 
-    verify_assumptions::<C>(&mut builder, degree_pow, &proof);
+    verify_ipas::<C>(&mut builder, &proof, u, v);
 
     let circuit = builder.build();
     RecursiveCircuit { circuit, proof }
+}
+
+fn flatten_points(points: &[AffinePointTarget]) -> Vec<Target> {
+    let coordinate_pairs: Vec<Vec<Target>> = points.iter()
+        .map(|p| p.to_vec())
+        .collect();
+    coordinate_pairs.concat()
+}
+
+fn verify_ipas<C: HaloEndomorphismCurve>(
+    builder: &mut CircuitBuilder<C::BaseField>,
+    proof: &ProofTarget,
+    u: Target,
+    v: Target,
+) {
+    // Reduce all polynomial commitments to a single one.
+    let c_constants = todo!();
+    let c_plonk_sigmas = todo!();
+    let c_all: Vec<AffinePointTarget> = [
+        c_constants,
+        c_plonk_sigmas,
+        proof.c_wires.clone(),
+        vec![proof.c_plonk_z],
+        proof.c_plonk_t.clone(),
+    ].concat();
+    let mut c_reduction_parts = Vec::new();
+    let powers_of_u = powers(builder, u, c_all.len());
+    for (&c, &power) in c_all.iter().zip(powers_of_u.iter()) {
+        // TODO: Need to split into a mix of base 2 and 4, and verify the weighted sum.
+        let scalar_bits = builder.split_binary(power, 128);
+        c_reduction_parts.push(MsmPart { scalar_bits, addend: c });
+    }
+    let c_reduction_msm_result = builder.curve_msm_endo::<C>(&c_reduction_parts);
+    let actual_scalars = c_reduction_msm_result.actual_scalars;
+    let c_reduction = c_reduction_msm_result.msm_result;
+
+    // For each opening location, we do a similar reduction, using the actual scalars above.
+    let o_all = proof.all_opening_sets();
+    let o_reductions: Vec<Target> = o_all.iter()
+        .map(|opening_set| reduce_with_coefficients(
+            builder, &opening_set.to_vec(), &actual_scalars))
+        .collect();
+
+    // TODO: Verify reduced IPA.
+}
+
+fn make_opening_set<F: Field>(builder: &mut CircuitBuilder<F>) -> OpeningSetTarget {
+    OpeningSetTarget {
+        o_constants: builder.add_virtual_targets(NUM_CONSTANTS),
+        o_plonk_sigmas: builder.add_virtual_targets(NUM_WIRES),
+        o_wires: builder.add_virtual_targets(NUM_WIRES),
+        o_plonk_z: builder.add_virtual_target(),
+        o_plonk_t: builder.add_virtual_targets(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
+    }
 }
 
 /// In our recursion scheme, to avoid non-native field arithmetic, each proof in a recursive chain
@@ -187,7 +268,7 @@ fn verify_assumptions<C: HaloEndomorphismCurve>(
         vec![vanishing_v_shift_term],
         constraint_terms
     ].concat();
-    let vanishing_eval = alpha_reduction(builder, &vanishing_terms, alpha);
+    let vanishing_eval = reduce_with_powers(builder, &vanishing_terms, alpha);
 
     // Evaluate the quotient polynomial, and assert that it matches the prover's opening.
     let quotient_eval = builder.div(vanishing_eval, zero_eval);
@@ -199,21 +280,43 @@ fn verify_assumptions<C: HaloEndomorphismCurve>(
     builder.copy(quotient_eval, inner_o_plonk_t_eval);
 }
 
-fn alpha_reduction<F: Field>(
+/// Computes a sum of terms weighted by the given coefficients.
+fn reduce_with_coefficients<F: Field>(
+    builder: &mut CircuitBuilder<F>,
+    terms: &[Target],
+    coefficients: &[Target],
+) -> Target {
+    let mut reduction = builder.zero_wire();
+    for (i, &term) in terms.iter().enumerate() {
+        reduction = builder.mul_add(coefficients[i], term, reduction);
+    }
+    reduction
+}
+
+/// Computes a sum of terms weighted by powers of alpha.
+fn reduce_with_powers<F: Field>(
     builder: &mut CircuitBuilder<F>,
     terms: &[Target],
     alpha: Target,
 ) -> Target {
-    let mut reduction = builder.zero_wire();
-    let mut weight = builder.one_wire();
-    for (i, &term) in terms.iter().enumerate() {
-        if i != 0 {
-            weight = builder.mul(weight, alpha);
-        }
-        let weighted_term = builder.mul(weight, term);
-        reduction = builder.add(reduction, weighted_term);
+    let mut sum = builder.zero_wire();
+    for &term in terms.iter().rev() {
+        sum = builder.mul_add(sum, alpha, term);
     }
-    reduction
+    sum
+}
+
+/// Compute `[x^0, x^1, ..., x^(n - 1)]`.
+fn powers<F: Field>(builder: &mut CircuitBuilder<F>, x: Target, n: usize) -> Vec<Target> {
+    let mut powers = Vec::new();
+    let mut current = builder.one_wire();
+    for i in 0..n {
+        if i != 0 {
+            current = builder.mul(current, x);
+        }
+        powers.push(current);
+    }
+    powers
 }
 
 /// In Plonk, some polynomials are broken up into degree-d components. Given an evaluation of each
@@ -223,22 +326,16 @@ fn eval_composite_poly<F: Field>(
     component_evals: &[Target],
     zeta_power_d: Target,
 ) -> Target {
-    let mut sum = builder.zero_wire();
-    for &component_eval in component_evals.iter().rev() {
-        sum = builder.mul(sum, zeta_power_d);
-        sum = builder.add(sum, component_eval);
-    }
-    sum
+    reduce_with_powers(builder, component_evals, zeta_power_d)
 }
 
-/// Evaluate g(X, {u_i}) as defined in the Halo paper.
+/// Evaluate `g(X, {u_i})` as defined in the Halo paper.
 fn halo_g<F: Field>(builder: &mut CircuitBuilder<F>, x: Target, us: &[Target]) -> Target {
     let mut product = builder.one_wire();
     let mut x_power = x;
     for &u_i in us {
         let u_i_inv = builder.inv(u_i);
-        let u_i_inv_times_x_power = builder.mul(u_i_inv, x_power);
-        let term = builder.add(u_i, u_i_inv_times_x_power);
+        let term = builder.mul_add(u_i_inv, x_power, u_i);
         product = builder.mul(product, term);
         x_power = builder.double(x_power);
     }

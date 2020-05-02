@@ -122,6 +122,12 @@ pub struct AffinePointTarget {
     y: Target,
 }
 
+impl AffinePointTarget {
+    pub fn to_vec(&self) -> Vec<Target> {
+        vec![self.x, self.y]
+    }
+}
+
 pub struct CircuitBuilder<F: Field> {
     public_input_index: usize,
     virtual_target_index: usize,
@@ -200,6 +206,16 @@ impl<F: Field> CircuitBuilder<F> {
 
     pub fn add_virtual_targets(&mut self, n: usize) -> Vec<Target> {
         (0..n).map(|i| self.add_virtual_target()).collect()
+    }
+
+    pub fn add_virtual_point_target(&mut self) -> AffinePointTarget {
+        let x = self.add_virtual_target();
+        let y = self.add_virtual_target();
+        AffinePointTarget { x, y }
+    }
+
+    pub fn add_virtual_point_targets(&mut self, n: usize) -> Vec<AffinePointTarget> {
+        (0..n).map(|i| self.add_virtual_point_target()).collect()
     }
 
     pub fn zero_wire(&mut self) -> Target {
@@ -385,16 +401,22 @@ impl<F: Field> CircuitBuilder<F> {
 
     /// Multiply and add; i.e. computes `x * y + z`.
     pub fn mul_add(&mut self, x: Target, y: Target, z: Target) -> Target {
-        // TODO: Should be done with a single gate.
-        let product = self.mul(x, y);
-        self.add(product, z)
+        let index = self.num_gates();
+        self.add_gate(ArithmeticGate::new(index), vec![F::ONE, F::ONE, F::ZERO]);
+        self.copy(x, Target::Wire(Wire { gate: index, input: ArithmeticGate::<F>::WIRE_MULTIPLICAND_0 }));
+        self.copy(y, Target::Wire(Wire { gate: index, input: ArithmeticGate::<F>::WIRE_MULTIPLICAND_1 }));
+        self.copy(z, Target::Wire(Wire { gate: index, input: ArithmeticGate::<F>::WIRE_ADDEND }));
+        Target::Wire(Wire { gate: index, input: ArithmeticGate::<F>::WIRE_OUTPUT })
     }
 
     /// Multiply and subtract; i.e. computes `x * y - z`.
     pub fn mul_sub(&mut self, x: Target, y: Target, z: Target) -> Target {
-        // TODO: Should be done with a single gate.
-        let product = self.mul(x, y);
-        self.sub(product, z)
+        let index = self.num_gates();
+        self.add_gate(ArithmeticGate::new(index), vec![F::ONE, F::NEG_ONE, F::ZERO]);
+        self.copy(x, Target::Wire(Wire { gate: index, input: ArithmeticGate::<F>::WIRE_MULTIPLICAND_0 }));
+        self.copy(y, Target::Wire(Wire { gate: index, input: ArithmeticGate::<F>::WIRE_MULTIPLICAND_1 }));
+        self.copy(z, Target::Wire(Wire { gate: index, input: ArithmeticGate::<F>::WIRE_ADDEND }));
+        Target::Wire(Wire { gate: index, input: ArithmeticGate::<F>::WIRE_OUTPUT })
     }
 
     pub fn neg(&mut self, x: Target) -> Target {
@@ -402,7 +424,7 @@ impl<F: Field> CircuitBuilder<F> {
         self.mul(x, neg_one)
     }
 
-    pub fn split_binary(&mut self, x: Target, bits: usize) -> Vec<Target> {
+    pub fn split_binary(&mut self, x: Target, num_bits: usize) -> Vec<Target> {
         struct SplitGenerator {
             x: Target,
             bits: Vec<Target>,
@@ -424,7 +446,7 @@ impl<F: Field> CircuitBuilder<F> {
             }
         }
 
-        let bits = self.add_virtual_targets(bits);
+        let bits = self.add_virtual_targets(num_bits);
         let generator = SplitGenerator { x, bits: bits.clone() };
         self.add_generator(generator);
         bits
