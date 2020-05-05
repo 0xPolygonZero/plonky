@@ -24,6 +24,7 @@ pub trait Curve: 'static + Sized + Copy {
 /// where `phi(P) = [zeta_q] P` for some `zeta_q` of multiplicative order 3.
 pub trait HaloEndomorphismCurve: Curve {
     const ZETA: Self::BaseField;
+    const ZETA_SCALAR: Self::ScalarField;
 }
 
 /// A point on a short Weierstrass curve, represented in affine coordinates.
