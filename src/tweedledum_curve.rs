@@ -8,6 +8,7 @@ impl Curve for Tweedledum {
     type ScalarField = TweedledeeBase;
 
     const A: TweedledumBase = TweedledumBase::ZERO;
+    // B = 7
     const B: TweedledumBase = TweedledumBase {
         limbs: [
             18317648394857742309,
