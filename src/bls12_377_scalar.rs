@@ -8,8 +8,11 @@ use rand::RngCore;
 use rand::rngs::OsRng;
 use unroll::unroll_for_loops;
 
-use crate::{add_4_4_no_overflow, cmp_4_4, Field, sub_4_4, TwoAdicField};
+use crate::{add_4_4_no_overflow, cmp_4_4, Field, sub_4_4, TwoAdicField, field_to_biguint};
 use crate::bigint_inverse::nonzero_multiplicative_inverse_4;
+use std::cmp::Ordering;
+use std::fmt;
+use std::fmt::{Display, Formatter};
 
 /// An element of the BLS12 group's scalar field.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -162,6 +165,9 @@ impl Field for Bls12377Scalar {
 
     const MULTIPLICATIVE_SUBGROUP_GENERATOR: Self = Self { limbs: [1855201571499933546, 8511318076631809892, 6222514765367795509, 1122129207579058019] };
 
+    /// x^11 is a permutation in this field.
+    const ALPHA: Self = Self { limbs: [1855201571499933546, 8511318076631809892, 6222514765367795509, 1122129207579058019] };
+
     fn to_canonical_u64_vec(&self) -> Vec<u64> {
         self.to_canonical().to_vec()
     }
@@ -199,6 +205,24 @@ impl TwoAdicField for Bls12377Scalar {
 
     /// 60001509534603559531609739528203892656505753216962260608619555
     const T: Self = Self { limbs: [725501752471715841, 6461107452199829505, 6968279316240510977, 1345280370688042326] };
+}
+
+impl Ord for Bls12377Scalar {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.cmp_helper(other)
+    }
+}
+
+impl PartialOrd for Bls12377Scalar {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Display for Bls12377Scalar {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        field_to_biguint(*self).fmt(f)
+    }
 }
 
 #[cfg(test)]

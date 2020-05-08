@@ -129,6 +129,7 @@ impl AffinePointTarget {
 }
 
 pub struct CircuitBuilder<F: Field> {
+    pub(crate) security_bits: usize,
     public_input_index: usize,
     virtual_target_index: usize,
     gate_counts: HashMap<&'static str, usize>,
@@ -165,8 +166,9 @@ pub struct MsmEndoResult {
 }
 
 impl<F: Field> CircuitBuilder<F> {
-    pub fn new() -> Self {
+    pub fn new(security_bits: usize) -> Self {
         CircuitBuilder {
+            security_bits,
             public_input_index: 0,
             virtual_target_index: 0,
             gate_counts: HashMap::new(),
@@ -494,7 +496,7 @@ impl<F: Field> CircuitBuilder<F> {
     }
 
     pub fn rescue_permutation_3x3(&mut self, inputs: [Target; 3]) -> [Target; 3] {
-        let all_constants = generate_rescue_constants(3);
+        let all_constants = generate_rescue_constants(3, self.security_bits);
         let mut state = inputs;
         for (a_constants, b_constants) in all_constants.into_iter() {
             state = self.rescue_round(state, a_constants, b_constants);

@@ -6,8 +6,11 @@ use std::ops::{Add, Div, Mul, Neg, Sub};
 
 use unroll::unroll_for_loops;
 
-use crate::{add_6_6_no_overflow, cmp_6_6, Field, mul2_6, rand_range_6, sub_6_6};
+use crate::{add_6_6_no_overflow, cmp_6_6, Field, mul2_6, rand_range_6, sub_6_6, field_to_biguint};
 use crate::bigint_inverse::nonzero_multiplicative_inverse_6;
+use std::cmp::Ordering;
+use std::fmt::{Formatter, Display};
+use std::fmt;
 
 /// An element of the BLS12 group's base field.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -208,6 +211,8 @@ impl Field for Bls12377Base {
 
     const MULTIPLICATIVE_SUBGROUP_GENERATOR: Self = Self::FIVE;
 
+    const ALPHA: Self = Self::FIVE;
+
     fn to_canonical_u64_vec(&self) -> Vec<u64> {
         self.to_canonical().to_vec()
     }
@@ -254,6 +259,24 @@ impl Field for Bls12377Base {
 
     fn rand() -> Self {
         Self { limbs: rand_range_6(Self::ORDER) }
+    }
+}
+
+impl Ord for Bls12377Base {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.cmp_helper(other)
+    }
+}
+
+impl PartialOrd for Bls12377Base {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Display for Bls12377Base {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        field_to_biguint(*self).fmt(f)
     }
 }
 

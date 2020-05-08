@@ -4,8 +4,11 @@ use std::ops::{Add, Div, Mul, Neg, Sub};
 
 use unroll::unroll_for_loops;
 
-use crate::{add_4_4_no_overflow, cmp_4_4, Field, rand_range_4, sub_4_4, TwoAdicField};
+use crate::{add_4_4_no_overflow, cmp_4_4, Field, rand_range_4, sub_4_4, TwoAdicField, field_to_biguint};
 use crate::bigint_inverse::nonzero_multiplicative_inverse_4;
+use std::cmp::Ordering;
+use std::fmt::{Display, Formatter};
+use std::fmt;
 
 /// An element of the Tweedledum group's base field.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -156,6 +159,8 @@ impl Field for TweedledumBase {
 
     const MULTIPLICATIVE_SUBGROUP_GENERATOR: Self = Self::FIVE;
 
+    const ALPHA: Self = Self::FIVE;
+
     fn to_canonical_u64_vec(&self) -> Vec<u64> {
         self.to_canonical().to_vec()
     }
@@ -184,6 +189,24 @@ impl TwoAdicField for TweedledumBase {
 
     /// 3369993333393829974333376885877453834205191076727970393464588218993
     const T: Self = Self { limbs: [11619397960441266177, 255193519591741881, 0, 4611686016279904256] };
+}
+
+impl Ord for TweedledumBase {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.cmp_helper(other)
+    }
+}
+
+impl PartialOrd for TweedledumBase {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Display for TweedledumBase {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        field_to_biguint(*self).fmt(f)
+    }
 }
 
 #[cfg(test)]

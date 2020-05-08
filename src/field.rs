@@ -1,13 +1,15 @@
 use std::collections::HashSet;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
-use num::{BigUint, FromPrimitive, Integer, One};
+use num::{BigUint, Integer, One};
 
 use crate::{biguint_to_field, field_to_biguint};
+use std::cmp::Ordering;
+use std::cmp::Ordering::Equal;
 
-pub trait Field: 'static + Sized + Copy + Eq + Hash + Send + Sync + Debug
+pub trait Field: 'static + Sized + Copy + Ord + Hash + Send + Sync + Debug + Display
 + Neg<Output=Self>
 + Add<Self, Output=Self>
 + Sub<Self, Output=Self>
@@ -24,6 +26,11 @@ pub trait Field: 'static + Sized + Copy + Eq + Hash + Send + Sync + Debug
     const NEG_ONE: Self;
 
     const MULTIPLICATIVE_SUBGROUP_GENERATOR: Self;
+
+    /// An element `a` such that `x^a` is a permutation in this field. Although not strictly
+    /// required, the smallest such `a` should be configured to minimize the cost of evaluating the
+    /// monomial.
+    const ALPHA: Self;
 
     fn to_canonical_u64_vec(&self) -> Vec<u64>;
 
@@ -233,8 +240,23 @@ pub trait Field: 'static + Sized + Copy + Eq + Hash + Send + Sync + Debug
         self.exp(Self::from_canonical_u32(power))
     }
 
-    /// Assumes x^k is a permutation in this field; undefined behavior otherwise.
+    /// If this is a quadratic residue, return an arbitrary (but deterministic) one of its square
+    /// roots, otherwise return `None`.
+    fn square_root(&self) -> Option<Self> {
+        if self.is_quadratic_residue() {
+            todo!("Compute a square root, perhaps with Tonelli-Shanks")
+        } else {
+            None
+        }
+    }
+
     fn kth_root_u32(&self, k: u32) -> Self {
+        self.kth_root(Self::from_canonical_u32(k))
+    }
+
+    /// Computes `x^(1/k)`. Assumes that `x^k` is a permutation in this field; undefined behavior
+    /// otherwise.
+    fn kth_root(&self, k: Self) -> Self {
         // By Fermat's little theorem, x^p = x and x^(p - 1) = 1, so x^(p + n(p - 1)) = x for any n.
         // Our assumption that the k'th root operation is a permutation implies gcd(p - 1, k) = 1,
         // so there exists some n such that p + n(p - 1) is a multiple of k. Once we find such an n,
@@ -243,13 +265,15 @@ pub trait Field: 'static + Sized + Copy + Eq + Hash + Send + Sync + Debug
         // implying that x^((p + n(p - 1))/k) is a k'th root of x.
         let p_minus_1_bu = field_to_biguint(Self::NEG_ONE);
         let p_bu = &p_minus_1_bu + BigUint::one();
-        let k_bu = BigUint::from_u32(k).unwrap();
-        for n in 0..k {
-            let numerator_bu = &p_bu + BigUint::from_u32(n).unwrap() * &p_minus_1_bu;
+        let k_bu = field_to_biguint(k);
+        let mut n = Self::ZERO;
+        while n < k {
+            let numerator_bu = &p_bu + field_to_biguint(n) * &p_minus_1_bu;
             if numerator_bu.is_multiple_of(&k_bu) {
                 let power_bu = numerator_bu.div_floor(&k_bu).mod_floor(&p_minus_1_bu);
                 return self.exp(biguint_to_field(power_bu));
             }
+            n = n + Self::ONE;
         }
         panic!("x^{} and x^(1/{}) are not permutations in this field, or we have a bug!", k, k);
     }
@@ -291,6 +315,22 @@ pub trait Field: 'static + Sized + Copy + Eq + Hash + Send + Sync + Debug
             }
         }
         n
+    }
+
+    /// Like `Ord::cmp`. We can't implement `Ord` directly due to Rust's trait coherence rules, so
+    /// instead we provide this helper which implementations can use to trivially implement `Ord`.
+    fn cmp_helper(&self, other: &Self) -> Ordering {
+        let self_limbs = self.to_canonical_u64_vec().into_iter();
+        let other_limbs = other.to_canonical_u64_vec().into_iter();
+
+        let mut result = Equal;
+        for (self_limb, other_limb) in self_limbs.zip(other_limbs) {
+            let limb_ordering = self_limb.cmp(&other_limb);
+            if limb_ordering != Equal {
+                result = limb_ordering;
+            }
+        }
+        result
     }
 
     fn rand() -> Self;

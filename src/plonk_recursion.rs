@@ -91,8 +91,9 @@ impl OpeningSetTarget {
 
 pub fn recursive_verification_circuit<C: HaloEndomorphismCurve>(
     degree_pow: usize,
+    security_bits: usize,
 ) -> RecursiveCircuit<C::BaseField> {
-    let mut builder = CircuitBuilder::<C::BaseField>::new();
+    let mut builder = CircuitBuilder::<C::BaseField>::new(security_bits);
     let proof = ProofTarget {
         c_wires: builder.add_virtual_point_targets(NUM_WIRES),
         c_plonk_z: builder.add_virtual_point_target(),
@@ -179,7 +180,7 @@ fn verify_ipas<C: HaloEndomorphismCurve>(
     let powers_of_u = powers(builder, u, c_all.len());
     for (&c, &power) in c_all.iter().zip(powers_of_u.iter()) {
         // TODO: Need to split into a mix of base 2 and 4, and verify the weighted sum.
-        let scalar_bits = builder.split_binary(power, 128);
+        let scalar_bits = builder.split_binary(power, builder.security_bits);
         c_reduction_msm_parts.push(MsmPart { scalar_bits, addend: c });
     }
     let c_reduction_msm_result = builder.curve_msm_endo::<C>(&c_reduction_msm_parts);
