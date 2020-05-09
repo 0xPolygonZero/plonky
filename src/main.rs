@@ -7,7 +7,7 @@ fn main() {
 
     println!("Generating circuit...");
     let start = Instant::now();
-    let recursive_circuit = recursive_verification_circuit::<Tweedledum>(degree_pow);
+    let recursive_circuit = recursive_verification_circuit::<Tweedledum>(degree_pow, 128);
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!("Gate count: {}", recursive_circuit.circuit.num_gates());
     println!();
