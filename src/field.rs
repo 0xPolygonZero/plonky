@@ -32,6 +32,11 @@ pub trait Field: 'static + Sized + Copy + Ord + Hash + Send + Sync + Debug + Dis
     /// monomial.
     const ALPHA: Self;
 
+    const TWO_ADICITY: usize;
+
+    /// `T = (ORDER - 1) / 2^TWO_ADICITY`
+    const T: Self;
+
     fn to_canonical_u64_vec(&self) -> Vec<u64>;
 
     fn to_canonical_u32_vec(&self) -> Vec<u32> {
@@ -334,13 +339,6 @@ pub trait Field: 'static + Sized + Copy + Ord + Hash + Send + Sync + Debug + Dis
     }
 
     fn rand() -> Self;
-}
-
-pub trait TwoAdicField: Field {
-    const TWO_ADICITY: usize;
-
-    /// `T = (ORDER - 1) / 2^TWO_ADICITY`
-    const T: Self;
 
     /// Computes a `2^n_power`th primitive root of unity.
     fn primitive_root_of_unity(n_power: usize) -> Self {
@@ -351,6 +349,7 @@ pub trait TwoAdicField: Field {
 
     /// If this is a quadratic residue, return an arbitrary (but deterministic) one of its square
     /// roots, otherwise return `None`.
+    /// Inspired by implementation in https://github.com/scipr-lab/zexe/blob/85bae796a411077733ddeefda042d02f4b4772e5/algebra-core/src/fields/arithmetic.rs
     fn square_root(&self) -> Option<Self> {
         if self.is_quadratic_residue() {
             let mut z = Self::MULTIPLICATIVE_SUBGROUP_GENERATOR.exp(Self::T);

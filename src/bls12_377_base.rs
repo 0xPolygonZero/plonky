@@ -213,6 +213,11 @@ impl Field for Bls12377Base {
 
     const ALPHA: Self = Self::FIVE;
 
+    const TWO_ADICITY: usize = 46;
+
+    // 3675842578061421676390135839012792950148785745837396071634149488243117337281387659330802195819009059
+    const T: Self = Self { limbs: [9586122913090633729, 1660523435060625408, 2230234197602682880, 1883307231910630287, 14284016967150029115, 121098312706232554]};
+
     fn to_canonical_u64_vec(&self) -> Vec<u64> {
         self.to_canonical().to_vec()
     }
@@ -381,5 +386,13 @@ mod tests {
 
         assert_eq!(Bls12377Base::FIVE.kth_root_u32(5).exp_u32(5), Bls12377Base::FIVE);
         assert_eq!(Bls12377Base::FIVE.kth_root_u32(11).exp_u32(11), Bls12377Base::FIVE);
+    }
+
+    #[test]
+    fn test_bls12base_square_root() {
+        let x = Bls12377Base::rand();
+        let y = x.square();
+        let y_sq = y.square_root().unwrap();
+        assert!((x == y_sq) || (x==-y_sq));
     }
 }

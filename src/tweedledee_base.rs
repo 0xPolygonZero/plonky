@@ -5,9 +5,7 @@ use std::ops::{Add, Div, Mul, Neg, Sub};
 use unroll::unroll_for_loops;
 
 use crate::bigint_inverse::nonzero_multiplicative_inverse_4;
-use crate::{
-    add_4_4_no_overflow, cmp_4_4, field_to_biguint, rand_range_4, sub_4_4, Field, TwoAdicField,
-};
+use crate::{add_4_4_no_overflow, cmp_4_4, field_to_biguint, rand_range_4, sub_4_4, Field};
 use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -232,6 +230,18 @@ impl Field for TweedledeeBase {
 
     const ALPHA: Self = Self::FIVE;
 
+    const TWO_ADICITY: usize = 34;
+
+    /// 1684996666696914987166688442938726917102595538363933628829375605749
+    const T: Self = Self {
+        limbs: [
+            9524180637049683969,
+            255193519543715529,
+            0,
+            4611686017353646080,
+        ],
+    };
+
     fn to_canonical_u64_vec(&self) -> Vec<u64> {
         self.to_canonical().to_vec()
     }
@@ -259,20 +269,6 @@ impl Field for TweedledeeBase {
     }
 }
 
-impl TwoAdicField for TweedledeeBase {
-    const TWO_ADICITY: usize = 34;
-
-    /// 1684996666696914987166688442938726917102595538363933628829375605749
-    const T: Self = Self {
-        limbs: [
-            9524180637049683969,
-            255193519543715529,
-            0,
-            4611686017353646080,
-        ],
-    };
-}
-
 impl Ord for TweedledeeBase {
     fn cmp(&self, other: &Self) -> Ordering {
         self.cmp_helper(other)
@@ -293,7 +289,7 @@ impl Display for TweedledeeBase {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Field, TweedledeeBase, TwoAdicField};
+    use crate::{Field, TweedledeeBase};
 
     #[test]
     fn primitive_root_order() {
@@ -305,9 +301,10 @@ mod tests {
     }
 
     #[test]
-    fn test_square_root() {
+    fn test_tweedledee_square_root() {
         let x = TweedledeeBase::rand();
         let y = x.square();
-        assert!((x == y.square_root().unwrap()) || (x == -y.square_root().unwrap()));
+        let y_sq = y.square_root().unwrap();
+        assert!((x == y_sq) || (x==-y_sq));
     }
 }

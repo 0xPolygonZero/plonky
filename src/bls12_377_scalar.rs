@@ -8,7 +8,7 @@ use rand::RngCore;
 use rand::rngs::OsRng;
 use unroll::unroll_for_loops;
 
-use crate::{add_4_4_no_overflow, cmp_4_4, Field, sub_4_4, TwoAdicField, field_to_biguint};
+use crate::{add_4_4_no_overflow, cmp_4_4, Field, sub_4_4, field_to_biguint};
 use crate::bigint_inverse::nonzero_multiplicative_inverse_4;
 use std::cmp::Ordering;
 use std::fmt;
@@ -168,6 +168,11 @@ impl Field for Bls12377Scalar {
     /// x^11 is a permutation in this field.
     const ALPHA: Self = Self { limbs: [1855201571499933546, 8511318076631809892, 6222514765367795509, 1122129207579058019] };
 
+    const TWO_ADICITY: usize = 47;
+
+    /// 60001509534603559531609739528203892656505753216962260608619555
+    const T: Self = Self { limbs: [725501752471715841, 6461107452199829505, 6968279316240510977, 1345280370688042326] };
+
     fn to_canonical_u64_vec(&self) -> Vec<u64> {
         self.to_canonical().to_vec()
     }
@@ -200,13 +205,6 @@ impl Field for Bls12377Scalar {
     }
 }
 
-impl TwoAdicField for Bls12377Scalar {
-    const TWO_ADICITY: usize = 47;
-
-    /// 60001509534603559531609739528203892656505753216962260608619555
-    const T: Self = Self { limbs: [725501752471715841, 6461107452199829505, 6968279316240510977, 1345280370688042326] };
-}
-
 impl Ord for Bls12377Scalar {
     fn cmp(&self, other: &Self) -> Ordering {
         self.cmp_helper(other)
@@ -227,7 +225,7 @@ impl Display for Bls12377Scalar {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12377Scalar, Field, TwoAdicField};
+    use crate::{Bls12377Scalar, Field};
     use crate::conversions::u64_slice_to_biguint;
 
     #[test]
@@ -343,5 +341,13 @@ mod tests {
             let order = Bls12377Scalar::generator_order(root);
             assert_eq!(order, 1 << n_power, "2^{}'th primitive root", n_power);
         }
+    }
+
+    #[test]
+    fn test_bls12scalar_square_root() {
+        let x = Bls12377Scalar::rand();
+        let y = x.square();
+        let y_sq = y.square_root().unwrap();
+        assert!((x == y_sq) || (x==-y_sq));
     }
 }
