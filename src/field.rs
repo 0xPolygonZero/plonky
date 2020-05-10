@@ -240,15 +240,15 @@ pub trait Field: 'static + Sized + Copy + Ord + Hash + Send + Sync + Debug + Dis
         self.exp(Self::from_canonical_u32(power))
     }
 
-    /// If this is a quadratic residue, return an arbitrary (but deterministic) one of its square
-    /// roots, otherwise return `None`.
-    fn square_root(&self) -> Option<Self> {
-        if self.is_quadratic_residue() {
-            todo!("Compute a square root, perhaps with Tonelli-Shanks")
-        } else {
-            None
-        }
-    }
+    // /// If this is a quadratic residue, return an arbitrary (but deterministic) one of its square
+    // /// roots, otherwise return `None`.
+    // fn square_root(&self) -> Option<Self> {
+    //     if self.is_quadratic_residue() {
+    //         todo!("Compute a square root, perhaps with Tonelli-Shanks")
+    //     } else {
+    //         None
+    //     }
+    // }
 
     fn kth_root_u32(&self, k: u32) -> Self {
         self.kth_root(Self::from_canonical_u32(k))
@@ -347,5 +347,40 @@ pub trait TwoAdicField: Field {
         assert!(n_power <= Self::TWO_ADICITY);
         let base_root = Self::MULTIPLICATIVE_SUBGROUP_GENERATOR.exp(Self::T);
         base_root.exp(Self::from_canonical_u64(1u64 << (Self::TWO_ADICITY as u64 - n_power as u64)))
+    }
+
+    /// If this is a quadratic residue, return an arbitrary (but deterministic) one of its square
+    /// roots, otherwise return `None`.
+    fn square_root(&self) -> Option<Self> {
+        if self.is_quadratic_residue() {
+            let mut z = Self::MULTIPLICATIVE_SUBGROUP_GENERATOR.exp(Self::T);
+            let mut w = self.exp((Self::T-Self::ONE)/Self::TWO);
+            let mut x = w * *self;
+            let mut b = x * w;
+
+            let mut v = Self::TWO_ADICITY as usize;
+
+            while !b.is_one() {
+                let mut k = 0usize;
+                let mut b2k = b;
+                while !b2k.is_one() {
+                    b2k = b2k.square();
+                    k += 1;
+                }
+                let j = v - k - 1;
+                w = z;
+                for _ in 0..j {
+                    w = w.square();
+                }
+
+                z = w.square();
+                b = b * z;
+                x = x * w;
+                v = k;
+            }
+            Some(x)
+        } else {
+            None
+        }
     }
 }
