@@ -223,6 +223,7 @@ impl Display for Bls12377Scalar {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use crate::{Bls12377Scalar, Field};

@@ -287,6 +287,7 @@ impl Display for TweedledumBase {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use crate::{Field, TweedledumBase};

@@ -245,16 +245,6 @@ pub trait Field: 'static + Sized + Copy + Ord + Hash + Send + Sync + Debug + Dis
         self.exp(Self::from_canonical_u32(power))
     }
 
-    // /// If this is a quadratic residue, return an arbitrary (but deterministic) one of its square
-    // /// roots, otherwise return `None`.
-    // fn square_root(&self) -> Option<Self> {
-    //     if self.is_quadratic_residue() {
-    //         todo!("Compute a square root, perhaps with Tonelli-Shanks")
-    //     } else {
-    //         None
-    //     }
-    // }
-
     fn kth_root_u32(&self, k: u32) -> Self {
         self.kth_root(Self::from_canonical_u32(k))
     }
