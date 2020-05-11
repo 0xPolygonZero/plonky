@@ -376,9 +376,9 @@ pub trait Field: 'static + Sized + Copy + Ord + Hash + Send + Sync + Debug + Dis
 
 #[macro_export]
 macro_rules! test_square_root {
-    ($fn_name:ident, $field:ty) => {
+    ($field:ty) => {
         #[test]
-        fn $fn_name() {
+        fn test_square_root() {
             let x = <$field>::rand();
             let y = x.square();
             let y_sq = y.square_root().unwrap();

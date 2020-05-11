@@ -389,5 +389,5 @@ mod tests {
         assert_eq!(Bls12377Base::FIVE.kth_root_u32(11).exp_u32(11), Bls12377Base::FIVE);
     }
 
-    test_square_root!(test_bls12base_square_root, Bls12377Base);
+    test_square_root!(Bls12377Base);
 }

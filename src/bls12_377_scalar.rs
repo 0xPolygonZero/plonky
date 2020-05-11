@@ -345,5 +345,5 @@ mod tests {
         }
     }
 
-    test_square_root!(test_bls12scalar_square_root, Bls12377Scalar);
+    test_square_root!(Bls12377Scalar);
 }

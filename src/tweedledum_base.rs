@@ -302,5 +302,5 @@ mod tests {
         }
     }
 
-    test_square_root!(test_tweedledum_square_root, TweedledumBase);
+    test_square_root!(TweedledumBase);
 }
