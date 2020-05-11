@@ -32,6 +32,11 @@ pub trait Field: 'static + Sized + Copy + Ord + Hash + Send + Sync + Debug + Dis
     /// monomial.
     const ALPHA: Self;
 
+    const TWO_ADICITY: usize;
+
+    /// `T = (ORDER - 1) / 2^TWO_ADICITY`
+    const T: Self;
+
     fn to_canonical_u64_vec(&self) -> Vec<u64>;
 
     fn to_canonical_u32_vec(&self) -> Vec<u32> {
@@ -240,16 +245,6 @@ pub trait Field: 'static + Sized + Copy + Ord + Hash + Send + Sync + Debug + Dis
         self.exp(Self::from_canonical_u32(power))
     }
 
-    /// If this is a quadratic residue, return an arbitrary (but deterministic) one of its square
-    /// roots, otherwise return `None`.
-    fn square_root(&self) -> Option<Self> {
-        if self.is_quadratic_residue() {
-            todo!("Compute a square root, perhaps with Tonelli-Shanks")
-        } else {
-            None
-        }
-    }
-
     fn kth_root_u32(&self, k: u32) -> Self {
         self.kth_root(Self::from_canonical_u32(k))
     }
@@ -334,18 +329,47 @@ pub trait Field: 'static + Sized + Copy + Ord + Hash + Send + Sync + Debug + Dis
     }
 
     fn rand() -> Self;
-}
-
-pub trait TwoAdicField: Field {
-    const TWO_ADICITY: usize;
-
-    /// `T = (ORDER - 1) / 2^TWO_ADICITY`
-    const T: Self;
 
     /// Computes a `2^n_power`th primitive root of unity.
     fn primitive_root_of_unity(n_power: usize) -> Self {
         assert!(n_power <= Self::TWO_ADICITY);
         let base_root = Self::MULTIPLICATIVE_SUBGROUP_GENERATOR.exp(Self::T);
         base_root.exp(Self::from_canonical_u64(1u64 << (Self::TWO_ADICITY as u64 - n_power as u64)))
+    }
+
+    /// If this is a quadratic residue, return an arbitrary (but deterministic) one of its square
+    /// roots, otherwise return `None`.
+    /// Inspired by implementation in https://github.com/scipr-lab/zexe/blob/85bae796a411077733ddeefda042d02f4b4772e5/algebra-core/src/fields/arithmetic.rs
+    fn square_root(&self) -> Option<Self> {
+        if self.is_quadratic_residue() {
+            let mut z = Self::MULTIPLICATIVE_SUBGROUP_GENERATOR.exp(Self::T);
+            let mut w = self.exp((Self::T-Self::ONE)/Self::TWO);
+            let mut x = w * *self;
+            let mut b = x * w;
+
+            let mut v = Self::TWO_ADICITY as usize;
+
+            while !b.is_one() {
+                let mut k = 0usize;
+                let mut b2k = b;
+                while !b2k.is_one() {
+                    b2k = b2k.square();
+                    k += 1;
+                }
+                let j = v - k - 1;
+                w = z;
+                for _ in 0..j {
+                    w = w.square();
+                }
+
+                z = w.square();
+                b = b * z;
+                x = x * w;
+                v = k;
+            }
+            Some(x)
+        } else {
+            None
+        }
     }
 }

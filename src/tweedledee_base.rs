@@ -4,11 +4,11 @@ use std::ops::{Add, Div, Mul, Neg, Sub};
 
 use unroll::unroll_for_loops;
 
-use crate::{add_4_4_no_overflow, cmp_4_4, Field, rand_range_4, sub_4_4, TwoAdicField, field_to_biguint};
 use crate::bigint_inverse::nonzero_multiplicative_inverse_4;
+use crate::{add_4_4_no_overflow, cmp_4_4, field_to_biguint, rand_range_4, sub_4_4, Field};
 use std::cmp::Ordering;
-use std::fmt::{Display, Formatter};
 use std::fmt;
+use std::fmt::{Display, Formatter};
 
 /// An element of the Tweedledee group's base field.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -19,26 +19,53 @@ pub struct TweedledeeBase {
 
 impl TweedledeeBase {
     /// The order of the field: 28948022309329048855892746252171976963322203655954433126947083963168578338817
-    const ORDER: [u64; 4] = [9524180637049683969, 255193519543715529, 0, 4611686018427387904];
+    const ORDER: [u64; 4] = [
+        9524180637049683969,
+        255193519543715529,
+        0,
+        4611686018427387904,
+    ];
 
     /// Twice the order of the field: 57896044618658097711785492504343953926644407311908866253894167926337156677634
-    const ORDER_X2: [u64; 4] = [601617200389816322, 510387039087431059, 0, 9223372036854775808];
+    const ORDER_X2: [u64; 4] = [
+        601617200389816322,
+        510387039087431059,
+        0,
+        9223372036854775808,
+    ];
 
     /// R in the context of the Montgomery reduction, i.e. 2^256 % |F|.
-    const R: [u64; 4] = [8320946236270051325, 17681163515078405027, 18446744073709551615, 4611686018427387903];
+    const R: [u64; 4] = [
+        8320946236270051325,
+        17681163515078405027,
+        18446744073709551615,
+        4611686018427387903,
+    ];
 
     /// R^2 in the context of the Montgomery reduction, i.e. 2^(256*2) % |F|.
-    const R2: [u64; 4] = [9625875206237061136, 9085631154807722544, 17636350113745641634, 56485833733595155];
+    const R2: [u64; 4] = [
+        9625875206237061136,
+        9085631154807722544,
+        17636350113745641634,
+        56485833733595155,
+    ];
 
     /// R^3 in the context of the Montgomery reduction, i.e. 2^(256*3) % |F|.
-    const R3: [u64; 4] = [11971961131424865118, 6311318431551332850, 14638507591886519234, 739379759776372087];
+    const R3: [u64; 4] = [
+        11971961131424865118,
+        6311318431551332850,
+        14638507591886519234,
+        739379759776372087,
+    ];
 
     /// In the context of Montgomery multiplication, µ = -|F|^-1 mod 2^64.
     const MU: u64 = 9524180637049683967;
 
     pub fn from_canonical(c: [u64; 4]) -> Self {
         // We compute M(c, R^2) = c * R^2 * R^-1 = c * R.
-        Self { limbs: Self::montgomery_multiply(c, Self::R2) }
+        Self {
+            limbs: Self::montgomery_multiply(c, Self::R2),
+        }
     }
 
     pub fn to_canonical(&self) -> [u64; 4] {
@@ -71,7 +98,8 @@ impl TweedledeeBase {
             // C += N q
             carry = 0;
             for j in 0..4 {
-                let result = c[(i + j) % 5] as u128 + q as u128 * Self::ORDER[j] as u128 + carry as u128;
+                let result =
+                    c[(i + j) % 5] as u128 + q as u128 * Self::ORDER[j] as u128 + carry as u128;
                 c[(i + j) % 5] = result as u64;
                 carry = (result >> 64) as u64;
             }
@@ -123,7 +151,9 @@ impl Mul<TweedledeeBase> for TweedledeeBase {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self {
-        Self { limbs: Self::montgomery_multiply(self.limbs, rhs.limbs) }
+        Self {
+            limbs: Self::montgomery_multiply(self.limbs, rhs.limbs),
+        }
     }
 }
 
@@ -142,7 +172,9 @@ impl Neg for TweedledeeBase {
         if self == Self::ZERO {
             Self::ZERO
         } else {
-            Self { limbs: sub_4_4(Self::ORDER, self.limbs) }
+            Self {
+                limbs: sub_4_4(Self::ORDER, self.limbs),
+            }
         }
     }
 }
@@ -150,16 +182,65 @@ impl Neg for TweedledeeBase {
 impl Field for TweedledeeBase {
     const BITS: usize = 255;
     const ZERO: Self = Self { limbs: [0; 4] };
-    const ONE: Self = Self { limbs: [8320946236270051325, 17681163515078405027, 18446744073709551615, 4611686018427387903] };
-    const TWO: Self = Self { limbs: [7117711835490418681, 16660389436903542909, 18446744073709551615, 4611686018427387903] };
-    const THREE: Self = Self { limbs: [5914477434710786037, 15639615358728680791, 18446744073709551615, 4611686018427387903] };
-    const FOUR: Self = Self { limbs: [4711243033931153393, 14618841280553818673, 18446744073709551615, 4611686018427387903] };
-    const FIVE: Self = Self { limbs: [3508008633151520749, 13598067202378956555, 18446744073709551615, 4611686018427387903] };
-    const NEG_ONE: Self = Self { limbs: [1203234400779632644, 1020774078174862118, 0, 0] };
+    const ONE: Self = Self {
+        limbs: [
+            8320946236270051325,
+            17681163515078405027,
+            18446744073709551615,
+            4611686018427387903,
+        ],
+    };
+    const TWO: Self = Self {
+        limbs: [
+            7117711835490418681,
+            16660389436903542909,
+            18446744073709551615,
+            4611686018427387903,
+        ],
+    };
+    const THREE: Self = Self {
+        limbs: [
+            5914477434710786037,
+            15639615358728680791,
+            18446744073709551615,
+            4611686018427387903,
+        ],
+    };
+    const FOUR: Self = Self {
+        limbs: [
+            4711243033931153393,
+            14618841280553818673,
+            18446744073709551615,
+            4611686018427387903,
+        ],
+    };
+    const FIVE: Self = Self {
+        limbs: [
+            3508008633151520749,
+            13598067202378956555,
+            18446744073709551615,
+            4611686018427387903,
+        ],
+    };
+    const NEG_ONE: Self = Self {
+        limbs: [1203234400779632644, 1020774078174862118, 0, 0],
+    };
 
     const MULTIPLICATIVE_SUBGROUP_GENERATOR: Self = Self::FIVE;
 
     const ALPHA: Self = Self::FIVE;
+
+    const TWO_ADICITY: usize = 34;
+
+    /// 1684996666696914987166688442938726917102595538363933628829375605749
+    const T: Self = Self {
+        limbs: [
+            9524180637049683969,
+            255193519543715529,
+            0,
+            4611686017353646080,
+        ],
+    };
 
     fn to_canonical_u64_vec(&self) -> Vec<u64> {
         self.to_canonical().to_vec()
@@ -176,19 +257,16 @@ impl Field for TweedledeeBase {
     fn multiplicative_inverse_assuming_nonzero(&self) -> Self {
         // Let x R = self. We compute M((x R)^-1, R^3) = x^-1 R^-1 R^3 R^-1 = x^-1 R.
         let self_r_inv = nonzero_multiplicative_inverse_4(self.limbs, Self::ORDER);
-        Self { limbs: Self::montgomery_multiply(self_r_inv, Self::R3) }
+        Self {
+            limbs: Self::montgomery_multiply(self_r_inv, Self::R3),
+        }
     }
 
     fn rand() -> Self {
-        Self { limbs: rand_range_4(Self::ORDER) }
+        Self {
+            limbs: rand_range_4(Self::ORDER),
+        }
     }
-}
-
-impl TwoAdicField for TweedledeeBase {
-    const TWO_ADICITY: usize = 34;
-
-    /// 1684996666696914987166688442938726917102595538363933628829375605749
-    const T: Self = Self { limbs: [9524180637049683969, 255193519543715529, 0, 4611686017353646080] };
 }
 
 impl Ord for TweedledeeBase {
@@ -209,9 +287,10 @@ impl Display for TweedledeeBase {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
-    use crate::{Field, TweedledeeBase, TwoAdicField};
+    use crate::{Field, TweedledeeBase};
 
     #[test]
     fn primitive_root_order() {
@@ -220,5 +299,13 @@ mod tests {
             let order = TweedledeeBase::generator_order(root);
             assert_eq!(order, 1 << n_power, "2^{}'th primitive root", n_power);
         }
+    }
+
+    #[test]
+    fn test_tweedledee_square_root() {
+        let x = TweedledeeBase::rand();
+        let y = x.square();
+        let y_sq = y.square_root().unwrap();
+        assert!((x == y_sq) || (x==-y_sq));
     }
 }

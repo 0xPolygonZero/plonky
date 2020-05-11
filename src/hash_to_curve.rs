@@ -1,4 +1,4 @@
-use crate::{AffinePoint, Curve, Field, rescue_sponge};
+use crate::{rescue_sponge, AffinePoint, Curve, Field};
 
 pub fn hash_u32_to_curve<C: Curve>(seed: u32, security_bits: usize) -> AffinePoint<C> {
     let seed_f = C::BaseField::from_canonical_u32(seed);
@@ -25,7 +25,7 @@ pub fn hash_base_field_to_curve<C: Curve>(
             if y_neg {
                 y = -y;
             }
-            return AffinePoint::nonzero(x, y)
+            return AffinePoint::nonzero(x, y);
         }
 
         i += 1;
@@ -34,13 +34,24 @@ pub fn hash_base_field_to_curve<C: Curve>(
 
 #[cfg(test)]
 mod tests {
-    use crate::{hash_u32_to_curve, Tweedledum};
+    use crate::{hash_u32_to_curve, rescue_sponge, Field, Tweedledum, TweedledumBase};
+
+    // Will not work for now, since the function `generate_rescue_constants` is not deterministic.
+    #[test]
+    fn test_rescue_deterministic() {
+        let inputs = [TweedledumBase::ZERO, TweedledumBase::ZERO];
+        let outputs1 = rescue_sponge(inputs.to_vec(), 2, 128);
+        let outputs2 = rescue_sponge(inputs.to_vec(), 2, 128);
+        assert_eq!(outputs1, outputs2);
+    }
 
     #[test]
     fn test_hash_u32_to_point() {
-        // Just make sure it runs with no errors.
+        // Just make sure it runs with no errors and is deterministic.
         for i in 0..5 {
-            hash_u32_to_curve::<Tweedledum>(i, 128);
+            let x = hash_u32_to_curve::<Tweedledum>(i, 128);
+            // Will not work for now, since the function `generate_rescue_constants` is not deterministic.
+            // assert_eq!(x, hash_u32_to_curve::<Tweedledum>(i, 128));
         }
     }
 }

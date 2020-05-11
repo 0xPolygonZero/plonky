@@ -1,6 +1,6 @@
 use rayon::prelude::*;
 
-use crate::TwoAdicField;
+use crate::Field;
 
 /// Permutes `arr` such that each index is mapped to its reverse in binary.
 fn reverse_index_bits<T: Copy>(arr: Vec<T>) -> Vec<T> {
@@ -39,18 +39,18 @@ fn log2_strict(n: usize) -> usize {
     exp
 }
 
-pub struct FftPrecomputation<F: TwoAdicField> {
+pub struct FftPrecomputation<F: Field> {
     /// For each layer index i, stores the cyclic subgroup corresponding to the evaluation domain of
     /// layer i. The indices within these subgroup vectors are bit-reversed.
     subgroups_rev: Vec<Vec<F>>,
 }
 
-pub fn fft<F: TwoAdicField>(coefficients: &[F]) -> Vec<F> {
+pub fn fft<F: Field>(coefficients: &[F]) -> Vec<F> {
     let precomputation = fft_precompute(coefficients.len());
     fft_with_precomputation(coefficients, &precomputation)
 }
 
-pub fn fft_precompute<F: TwoAdicField>(degree: usize) -> FftPrecomputation<F> {
+pub fn fft_precompute<F: Field>(degree: usize) -> FftPrecomputation<F> {
     let degree_pow = log2_ceil(degree);
 
     let mut subgroups_rev = Vec::new();
@@ -64,7 +64,7 @@ pub fn fft_precompute<F: TwoAdicField>(degree: usize) -> FftPrecomputation<F> {
     FftPrecomputation { subgroups_rev }
 }
 
-pub fn fft_with_precomputation<F: TwoAdicField>(
+pub fn fft_with_precomputation<F: Field>(
     coefficients: &[F],
     precomputation: &FftPrecomputation<F>,
 ) -> Vec<F> {
@@ -85,7 +85,7 @@ pub fn fft_with_precomputation<F: TwoAdicField>(
     }
 }
 
-pub fn ifft_with_precomputation_power_of_2<F: TwoAdicField>(
+pub fn ifft_with_precomputation_power_of_2<F: Field>(
     points: &[F],
     precomputation: &FftPrecomputation<F>,
 ) -> Vec<F> {
@@ -101,7 +101,7 @@ pub fn ifft_with_precomputation_power_of_2<F: TwoAdicField>(
     coefficients
 }
 
-pub fn fft_with_precomputation_power_of_2<F: TwoAdicField>(
+pub fn fft_with_precomputation_power_of_2<F: Field>(
     coefficients: &[F],
     precomputation: &FftPrecomputation<F>,
 ) -> Vec<F> {
@@ -149,7 +149,7 @@ pub fn fft_with_precomputation_power_of_2<F: TwoAdicField>(
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12377Scalar, fft_precompute, fft_with_precomputation, Field, ifft_with_precomputation_power_of_2, TwoAdicField};
+    use crate::{Bls12377Scalar, fft_precompute, fft_with_precomputation, Field, ifft_with_precomputation_power_of_2};
     use crate::fft::{log2_ceil, log2_strict, reverse_bits, reverse_index_bits};
 
     #[test]
@@ -181,7 +181,7 @@ mod tests {
         assert_eq!(reverse_index_bits(vec!["a", "b", "c", "d"]), vec!["a", "c", "b", "d"]);
     }
 
-    fn evaluate_naive<F: TwoAdicField>(coefficients: &[F]) -> Vec<F> {
+    fn evaluate_naive<F: Field>(coefficients: &[F]) -> Vec<F> {
         let degree = coefficients.len();
         let degree_padded = 1 << log2_ceil(degree);
 
@@ -195,7 +195,7 @@ mod tests {
         evaluate_naive_power_of_2(&coefficients_padded)
     }
 
-    fn evaluate_naive_power_of_2<F: TwoAdicField>(coefficients: &[F]) -> Vec<F> {
+    fn evaluate_naive_power_of_2<F: Field>(coefficients: &[F]) -> Vec<F> {
         let degree = coefficients.len();
         let degree_pow = log2_strict(degree);
 
@@ -205,7 +205,7 @@ mod tests {
         powers_of_g.into_iter().map(|x| evaluate_at_naive(&coefficients, x)).collect()
     }
 
-    fn evaluate_at_naive<F: TwoAdicField>(coefficients: &[F], point: F) -> F {
+    fn evaluate_at_naive<F: Field>(coefficients: &[F], point: F) -> F {
         let mut sum = F::ZERO;
         let mut point_power = F::ONE;
         for &c in coefficients {
