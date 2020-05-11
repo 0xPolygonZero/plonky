@@ -19,15 +19,15 @@ impl<F: Field> PRF<F> for RescuePrf {
     }
 }
 
-pub(crate) fn rescue_hash_1_to_1<F: Field>(input: F, security_bits: usize) -> F {
+pub fn rescue_hash_1_to_1<F: Field>(input: F, security_bits: usize) -> F {
     rescue_hash_n_to_1(vec![input], security_bits)
 }
 
-pub(crate) fn rescue_hash_n_to_1<F: Field>(inputs: Vec<F>, security_bits: usize) -> F {
+pub fn rescue_hash_n_to_1<F: Field>(inputs: Vec<F>, security_bits: usize) -> F {
     rescue_sponge(inputs, 1, security_bits)[0]
 }
 
-pub(crate) fn rescue_sponge<F: Field>(
+pub fn rescue_sponge<F: Field>(
     inputs: Vec<F>,
     num_outputs: usize,
     security_bits: usize,
@@ -61,7 +61,7 @@ pub(crate) fn rescue_sponge<F: Field>(
     }
 }
 
-pub(crate) fn rescue_permutation<F: Field>(mut state: Vec<F>, security_bits: usize) -> Vec<F> {
+pub fn rescue_permutation<F: Field>(mut state: Vec<F>, security_bits: usize) -> Vec<F> {
     let width = state.len();
     let constants = generate_rescue_constants(width, security_bits);
 
