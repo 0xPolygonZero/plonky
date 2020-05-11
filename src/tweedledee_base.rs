@@ -291,6 +291,7 @@ impl Display for TweedledeeBase {
 #[cfg(test)]
 mod tests {
     use crate::{Field, TweedledeeBase};
+    use crate::test_square_root;
 
     #[test]
     fn primitive_root_order() {
@@ -301,11 +302,5 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_tweedledee_square_root() {
-        let x = TweedledeeBase::rand();
-        let y = x.square();
-        let y_sq = y.square_root().unwrap();
-        assert!((x == y_sq) || (x==-y_sq));
-    }
+    test_square_root!(test_tweedledee_square_root, TweedledeeBase);
 }

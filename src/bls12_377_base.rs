@@ -289,6 +289,7 @@ impl Display for Bls12377Base {
 mod tests {
     use crate::{Bls12377Base, Field};
     use crate::conversions::u64_slice_to_biguint;
+    use crate::test_square_root;
 
     #[test]
     fn bls12base_to_and_from_canonical() {
@@ -388,11 +389,5 @@ mod tests {
         assert_eq!(Bls12377Base::FIVE.kth_root_u32(11).exp_u32(11), Bls12377Base::FIVE);
     }
 
-    #[test]
-    fn test_bls12base_square_root() {
-        let x = Bls12377Base::rand();
-        let y = x.square();
-        let y_sq = y.square_root().unwrap();
-        assert!((x == y_sq) || (x==-y_sq));
-    }
+    test_square_root!(test_bls12base_square_root, Bls12377Base);
 }

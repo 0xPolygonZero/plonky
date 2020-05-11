@@ -228,6 +228,7 @@ impl Display for Bls12377Scalar {
 mod tests {
     use crate::{Bls12377Scalar, Field};
     use crate::conversions::u64_slice_to_biguint;
+    use crate::test_square_root;
 
     #[test]
     fn bls12scalar_to_and_from_canonical() {
@@ -344,11 +345,5 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_bls12scalar_square_root() {
-        let x = Bls12377Scalar::rand();
-        let y = x.square();
-        let y_sq = y.square_root().unwrap();
-        assert!((x == y_sq) || (x==-y_sq));
-    }
+    test_square_root!(test_bls12scalar_square_root, Bls12377Scalar);
 }
