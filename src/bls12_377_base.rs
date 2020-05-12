@@ -3,10 +3,11 @@
 use std::cmp::Ordering::Less;
 use std::convert::TryInto;
 use std::ops::{Add, Div, Mul, Neg, Sub};
+use rand::Rng;
 
 use unroll::unroll_for_loops;
 
-use crate::{add_6_6_no_overflow, cmp_6_6, Field, mul2_6, rand_range_6, sub_6_6, field_to_biguint};
+use crate::{add_6_6_no_overflow, cmp_6_6, Field, mul2_6, rand_range_6, rand_range_6_from_rng, sub_6_6, field_to_biguint};
 use crate::bigint_inverse::nonzero_multiplicative_inverse_6;
 use std::cmp::Ordering;
 use std::fmt::{Formatter, Display};
@@ -264,6 +265,10 @@ impl Field for Bls12377Base {
 
     fn rand() -> Self {
         Self { limbs: rand_range_6(Self::ORDER) }
+    }
+
+    fn rand_from_rng<R: Rng>(rng: &mut R) -> Self {
+        Self { limbs: rand_range_6_from_rng(Self::ORDER, rng) }
     }
 }
 

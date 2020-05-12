@@ -1,5 +1,7 @@
 use crate::{Field, apply_mds, PRF};
 use crate::util::ceil_div_usize;
+use rand_chacha::ChaCha8Rng;
+use rand_chacha::rand_core::SeedableRng;
 
 pub struct RescuePrf {
     security_bits: usize,
@@ -91,16 +93,20 @@ pub(crate) fn generate_rescue_constants<F: Field>(
     security_bits: usize,
 ) -> Vec<(Vec<F>, Vec<F>)> {
     // TODO: This should use deterministic randomness.
+    // FIX: Use ChaCha CSPRNG with a seed. This is somewhat similar to official implementation
+    // at https://github.com/KULeuven-COSIC/Marvellous/blob/master/instance_generator.sage where they 
+    // use SHAKE256 with a seed to generate randomness.
+    let mut rng = ChaCha8Rng::seed_from_u64(1337);
     let mut constants = Vec::new();
     for _i in 0..recommended_rounds::<F>(width, security_bits) {
         let mut step_a_constants = Vec::new();
         for _k in 0..width {
-            step_a_constants.push(F::rand());
+            step_a_constants.push(F::rand_from_rng(&mut rng));
         }
 
         let mut step_b_constants = Vec::new();
         for _k in 0..width {
-            step_b_constants.push(F::rand());
+            step_b_constants.push(F::rand_from_rng(&mut rng));
         }
 
         constants.push((step_a_constants, step_b_constants));

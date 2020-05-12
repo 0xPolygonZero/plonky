@@ -1,11 +1,12 @@
 use std::cmp::Ordering::Less;
 use std::convert::TryInto;
 use std::ops::{Add, Div, Mul, Neg, Sub};
+use rand::Rng;
 
 use unroll::unroll_for_loops;
 
 use crate::bigint_inverse::nonzero_multiplicative_inverse_4;
-use crate::{add_4_4_no_overflow, cmp_4_4, field_to_biguint, rand_range_4, sub_4_4, Field};
+use crate::{add_4_4_no_overflow, cmp_4_4, field_to_biguint, rand_range_4, rand_range_4_from_rng, sub_4_4, Field};
 use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -265,6 +266,12 @@ impl Field for TweedledumBase {
     fn rand() -> Self {
         Self {
             limbs: rand_range_4(Self::ORDER),
+        }
+    }
+
+    fn rand_from_rng<R: Rng>(rng: &mut R) -> Self {
+        Self {
+            limbs: rand_range_4_from_rng(Self::ORDER, rng),
         }
     }
 }

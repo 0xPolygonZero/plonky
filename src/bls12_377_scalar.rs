@@ -3,6 +3,7 @@
 use std::cmp::Ordering::Less;
 use std::convert::TryInto;
 use std::ops::{Add, Div, Mul, Neg, Sub};
+use rand::Rng;
 
 use rand::RngCore;
 use rand::rngs::OsRng;
@@ -203,6 +204,21 @@ impl Field for Bls12377Scalar {
 
         Self { limbs }
     }
+
+    fn rand_from_rng<R: Rng>(rng: &mut R) -> Self {
+        let mut limbs = [0; 4];
+
+        for limb_i in &mut limbs {
+            *limb_i = rng.next_u64();
+        }
+
+        // Remove a few of the most significant bits to ensure we're in range.
+        limbs[3] >>= 4;
+
+        Self { limbs }
+    }
+
+
 }
 
 impl Ord for Bls12377Scalar {

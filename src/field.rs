@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::{Add, Div, Mul, Neg, Sub};
+use rand::Rng;
 
 use num::{BigUint, Integer, One};
 
@@ -329,6 +330,8 @@ pub trait Field: 'static + Sized + Copy + Ord + Hash + Send + Sync + Debug + Dis
     }
 
     fn rand() -> Self;
+
+    fn rand_from_rng<R: Rng>(rng: &mut R) -> Self;
 
     /// Computes a `2^n_power`th primitive root of unity.
     fn primitive_root_of_unity(n_power: usize) -> Self {

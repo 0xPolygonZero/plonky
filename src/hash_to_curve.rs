@@ -36,7 +36,6 @@ pub fn hash_base_field_to_curve<C: Curve>(
 mod tests {
     use crate::{hash_u32_to_curve, rescue_sponge, Field, Tweedledum, TweedledumBase};
 
-    // Will not work for now, since the function `generate_rescue_constants` is not deterministic.
     #[test]
     fn test_rescue_deterministic() {
         let inputs = [TweedledumBase::ZERO, TweedledumBase::ZERO];
@@ -50,8 +49,7 @@ mod tests {
         // Just make sure it runs with no errors and is deterministic.
         for i in 0..5 {
             let x = hash_u32_to_curve::<Tweedledum>(i, 128);
-            // Will not work for now, since the function `generate_rescue_constants` is not deterministic.
-            // assert_eq!(x, hash_u32_to_curve::<Tweedledum>(i, 128));
+            assert_eq!(x, hash_u32_to_curve::<Tweedledum>(i, 128));
         }
     }
 }

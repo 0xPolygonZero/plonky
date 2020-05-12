@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::cmp::Ordering::{Equal, Greater, Less};
 
-use rand::RngCore;
+use rand::Rng;
 use rand::rngs::OsRng;
 use unroll::unroll_for_loops;
 
@@ -229,6 +229,11 @@ pub(crate) fn div2_6(x: [u64; 6]) -> [u64; 6] {
 }
 
 pub(crate) fn rand_range_6(limit_exclusive: [u64; 6]) -> [u64; 6] {
+    rand_range_6_from_rng(limit_exclusive, &mut OsRng)
+}
+
+// Same as `rand_range_6` but specifying a RNG (useful when dealing with seeded RNGs).
+pub(crate) fn rand_range_6_from_rng<R: Rng>(limit_exclusive: [u64; 6], rng: &mut R) -> [u64; 6] {
     // Our approach is to repeatedly generate random u64 arrays until one of them happens to be
     // within the limit. This could take a lot of attempts if the limit has many leading zero bits,
     // though. It is more efficient to generate n-bit random numbers, where n is the number of bits
@@ -239,7 +244,7 @@ pub(crate) fn rand_range_6(limit_exclusive: [u64; 6]) -> [u64; 6] {
 
     loop {
         for limb_i in &mut limbs {
-            *limb_i = OsRng.next_u64();
+            *limb_i = rng.next_u64();
         }
         limbs[5] >>= bits_to_strip;
 
@@ -250,6 +255,11 @@ pub(crate) fn rand_range_6(limit_exclusive: [u64; 6]) -> [u64; 6] {
 }
 
 pub(crate) fn rand_range_4(limit_exclusive: [u64; 4]) -> [u64; 4] {
+    rand_range_4_from_rng(limit_exclusive, &mut OsRng)
+}
+
+// Same as `rand_range_4` but specifying a RNG (useful when dealing with seeded RNGs).
+pub(crate) fn rand_range_4_from_rng<R: Rng>(limit_exclusive: [u64; 4], rng: &mut R) -> [u64; 4] {
     // Our approach is to repeatedly generate random u64 arrays until one of them happens to be
     // within the limit. This could take a lot of attempts if the limit has many leading zero bits,
     // though. It is more efficient to generate n-bit random numbers, where n is the number of bits
@@ -260,7 +270,7 @@ pub(crate) fn rand_range_4(limit_exclusive: [u64; 4]) -> [u64; 4] {
 
     loop {
         for limb_i in &mut limbs {
-            *limb_i = OsRng.next_u64();
+            *limb_i = rng.next_u64();
         }
         limbs[3] >>= bits_to_strip;
 
