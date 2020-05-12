@@ -1052,7 +1052,7 @@ impl Base4SumGate {
     pub const WIRE_ACC_OLD: usize = 0;
     pub const WIRE_ACC_NEW: usize = 1;
     pub const WIRE_LIMB_0: usize = 2;
-    pub const NUM_LIMBS: usize = 9;
+    pub const NUM_LIMBS: usize = 7;
 }
 
 impl<F: Field> Gate<F> for Base4SumGate {

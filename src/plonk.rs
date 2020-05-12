@@ -5,7 +5,7 @@ use crate::{AffinePoint, Curve, Field, generate_rescue_constants, HaloEndomorphi
 use crate::plonk_gates::{ArithmeticGate, BufferGate, CurveAddGate, CurveDblGate, Gate, PublicInputGate, RescueStepAGate, RescueStepBGate};
 use crate::util::ceil_div_usize;
 
-pub(crate) const NUM_WIRES: usize = 11;
+pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
 pub(crate) const NUM_ADVICE_WIRES: usize = NUM_WIRES - NUM_ROUTED_WIRES;
 pub(crate) const NUM_CONSTANTS: usize = 5;
@@ -94,6 +94,7 @@ pub enum Target {
     Wire(Wire),
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct PublicInput {
     pub index: usize,
 }
@@ -139,27 +140,20 @@ pub struct CircuitBuilder<F: Field> {
     constant_wires: HashMap<F, Target>,
 }
 
-/// A component of an MSM, or in other words, an individual scalar-group multiplication.
-pub struct MsmPart {
-    pub scalar_bits: Vec<Target>,
-    pub addend: AffinePointTarget,
+/// Represents a scalar * point multiplication operation.
+pub struct CurveMulOp {
+    pub scalar: Target,
+    pub point: AffinePointTarget,
 }
 
-/// Like `MsmPart`, but with a constant base point.
-pub struct FixedBaseMsmPart<C: Curve> {
-    pub scalar_bits: Vec<Target>,
-    pub addend: AffinePoint<C>,
+pub struct CurveMulEndoResult {
+    pub mul_result: AffinePointTarget,
+    pub actual_scalar: Target,
 }
 
-pub struct MsmResult {
-    pub sum: AffinePointTarget,
-    /// For each part, we return the weighted sum of the given scalar bits.
-    pub scalars: Vec<Target>,
-}
-
-pub struct MsmEndoResult {
-    pub msm_result: MsmResult,
-    /// While `msm` computes a sum of `[s] P` terms, `msm_end` computes a sum of `[n(s)] P` terms
+pub struct CurveMsmEndoResult {
+    pub msm_result: AffinePointTarget,
+    /// While `msm` computes a sum of `[s] P` terms, `msm_endo` computes a sum of `[n(s)] P` terms
     /// for some injective `n`. Here we return each `n(s)`, i.e., the scalar by which the point was
     /// actually multiplied.
     pub actual_scalars: Vec<Target>,
@@ -252,7 +246,7 @@ impl<F: Field> CircuitBuilder<F> {
         Target::Wire(Wire { gate: index, input: BufferGate::WIRE_BUFFER_CONST })
     }
 
-    pub fn constant_affine_point<C: Curve<BaseField = F>>(&mut self, point: AffinePoint<C>) -> AffinePointTarget {
+    pub fn constant_affine_point<C: Curve<BaseField=F>>(&mut self, point: AffinePoint<C>) -> AffinePointTarget {
         assert!(!point.zero);
         AffinePointTarget {
             x: self.constant_wire(point.x),
@@ -335,6 +329,11 @@ impl<F: Field> CircuitBuilder<F> {
         self.mul(x, x)
     }
 
+    pub fn deterministic_square_root(&mut self, x: Target) -> Target {
+        // Just do a range check to enforce determinism.
+        todo!()
+    }
+
     /// Compute `x^power`, where `power` is a constant.
     pub fn exp_constant(&mut self, x: Target, power: F) -> Target {
         let power_bits = power.num_bits();
@@ -368,7 +367,8 @@ impl<F: Field> CircuitBuilder<F> {
         struct InverseGenerator {
             x: Target,
             x_inv: Target,
-        };
+        }
+        ;
 
         impl<F: Field> WitnessGenerator<F> for InverseGenerator {
             fn dependencies(&self) -> Vec<Target> {
@@ -421,15 +421,32 @@ impl<F: Field> CircuitBuilder<F> {
         Target::Wire(Wire { gate: index, input: ArithmeticGate::<F>::WIRE_OUTPUT })
     }
 
+    /// Computes `-x`.
     pub fn neg(&mut self, x: Target) -> Target {
         let neg_one = self.neg_one_wire();
         self.mul(x, neg_one)
     }
 
-    pub fn split_binary(&mut self, x: Target, num_bits: usize) -> Vec<Target> {
+    /// Splits `x` into its binary representation. Note that this method merely adds a generator to
+    /// populate the bit wires; it does not enforce constraints to verify the decomposition.
+    fn split_binary(&mut self, x: Target, num_bits: usize) -> Vec<Target> {
+        let (bits, dibits) = self.split_binary_and_base_4(x, num_bits, 0);
+        bits
+    }
+
+    /// Splits `x` into a combination of binary and base 4 limbs. Note that this method merely adds
+    /// a generator to populate the limb wires; it does not enforce constraints to verify the
+    /// decomposition.
+    fn split_binary_and_base_4(
+        &mut self,
+        x: Target,
+        num_bits: usize,
+        num_dibits: usize,
+    ) -> (Vec<Target>, Vec<Target>) {
         struct SplitGenerator {
             x: Target,
             bits: Vec<Target>,
+            dibits: Vec<Target>,
         }
 
         impl<F: Field> WitnessGenerator<F> for SplitGenerator {
@@ -440,18 +457,26 @@ impl<F: Field> CircuitBuilder<F> {
             fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
                 let x = witness.wire_values[&self.x];
                 let x_bits = x.to_canonical_bool_vec();
+
                 let mut result = PartialWitness::new();
                 for i in 0..self.bits.len() {
                     result.set_target(self.bits[i], F::from_canonical_bool(x_bits[i]));
+                }
+                for i in 0..self.dibits.len() {
+                    let bit_1 = x_bits[self.bits.len() + i * 2];
+                    let bit_2 = x_bits[self.bits.len() + i * 2 + 1];
+                    let dibit = if bit_1 { 1 } else { 0 } + if bit_2 { 2 } else { 0 };
+                    result.set_target(self.dibits[i], F::from_canonical_u32(dibit));
                 }
                 result
             }
         }
 
         let bits = self.add_virtual_targets(num_bits);
-        let generator = SplitGenerator { x, bits: bits.clone() };
+        let dibits = self.add_virtual_targets(num_dibits);
+        let generator = SplitGenerator { x, bits: bits.clone(), dibits: dibits.clone() };
         self.add_generator(generator);
-        bits
+        (bits, dibits)
     }
 
     pub fn rescue_hash_n_to_1(&mut self, inputs: &[Target]) -> Target {
@@ -461,6 +486,11 @@ impl<F: Field> CircuitBuilder<F> {
     pub fn rescue_hash_n_to_2(&mut self, inputs: &[Target]) -> (Target, Target) {
         let outputs = self.rescue_sponge(inputs, 2);
         (outputs[0], outputs[1])
+    }
+
+    pub fn rescue_hash_n_to_3(&mut self, inputs: &[Target]) -> (Target, Target, Target) {
+        let outputs = self.rescue_sponge(inputs, 3);
+        (outputs[0], outputs[1], outputs[2])
     }
 
     pub fn rescue_sponge(
@@ -543,11 +573,11 @@ impl<F: Field> CircuitBuilder<F> {
     }
 
     /// Assert that a given coordinate pair is on the curve `C`.
-    pub fn curve_assert_valid<C: Curve<BaseField = F>>(&mut self, p: AffinePointTarget) {
+    pub fn curve_assert_valid<C: Curve<BaseField=F>>(&mut self, p: AffinePointTarget) {
         // TODO
     }
 
-    pub fn curve_neg<C: Curve<BaseField = F>>(
+    pub fn curve_neg<C: Curve<BaseField=F>>(
         &mut self,
         p: AffinePointTarget,
     ) -> AffinePointTarget {
@@ -555,7 +585,7 @@ impl<F: Field> CircuitBuilder<F> {
         AffinePointTarget { x: p.x, y: neg_y }
     }
 
-    pub fn curve_add<C: Curve<BaseField = F>>(
+    pub fn curve_add<C: Curve<BaseField=F>>(
         &mut self,
         p_1: AffinePointTarget,
         p_2: AffinePointTarget,
@@ -573,9 +603,9 @@ impl<F: Field> CircuitBuilder<F> {
     }
 
 
-    pub fn curve_double<C: Curve<BaseField = F>>(
+    pub fn curve_double<C: Curve<BaseField=F>>(
         &mut self,
-        p: AffinePointTarget
+        p: AffinePointTarget,
     ) -> AffinePointTarget {
         let idx_dbl = self.num_gates();
         self.add_gate_no_constants(CurveDblGate::<C>::new(idx_dbl));
@@ -587,7 +617,7 @@ impl<F: Field> CircuitBuilder<F> {
         }
     }
 
-    pub fn curve_sub<C: Curve<BaseField = F>>(
+    pub fn curve_sub<C: Curve<BaseField=F>>(
         &mut self,
         p_1: AffinePointTarget,
         p_2: AffinePointTarget,
@@ -596,7 +626,35 @@ impl<F: Field> CircuitBuilder<F> {
         self.curve_add::<C>(p_1, neg_p_2)
     }
 
-    pub fn curve_msm<C: Curve<BaseField = F>>(&mut self, parts: &[MsmPart]) -> MsmResult {
+    pub fn curve_mul<C: Curve<BaseField=F>>(&mut self, mul: CurveMulOp) -> AffinePointTarget {
+        self.curve_msm::<C>(&[mul])
+    }
+
+    pub fn curve_mul_endo<C: HaloEndomorphismCurve<BaseField=F>>(
+        &mut self,
+        mul: CurveMulOp,
+    ) -> CurveMulEndoResult {
+        let result = self.curve_msm_endo::<C>(&[mul]);
+        CurveMulEndoResult {
+            mul_result: result.msm_result,
+            actual_scalar: result.actual_scalars[0],
+        }
+    }
+
+    /// Note: This assumes the most significant bit of each scalar is unset. This occurs with high
+    /// probability if the field size is slightly larger than a power of two and the scalars are
+    /// uniformly random.
+    pub fn curve_msm<C: Curve<BaseField=F>>(
+        &mut self,
+        parts: &[CurveMulOp],
+    ) -> AffinePointTarget {
+        // We assume each most significant bit is unset; see the note in the method doc.
+        let f_bits = F::BITS - 1;
+
+        let all_bits: Vec<Vec<Target>> = parts.iter()
+            .map(|part| self.split_binary(part.scalar, f_bits))
+            .collect();
+
         // Normally we would start with zero, but to avoid exceptional cases, we start with some
         // arbitrary nonzero point and subtract it later. This avoids exception with high
         // probability provided that the scalars and points are random. (We don't worry about
@@ -604,10 +662,9 @@ impl<F: Field> CircuitBuilder<F> {
         // exceptional cases.)
         let mut filler = C::GENERATOR_AFFINE;
         let mut acc = self.constant_affine_point(filler);
-        let mut scalars = vec![self.zero_wire(); parts.len()];
+        let mut scalar_accs = vec![self.zero_wire(); parts.len()];
 
-        let max_bits = parts.iter().map(|p| p.scalar_bits.len()).max().expect("Empty MSM");
-        for i in (0..max_bits).rev() {
+        for i in (0..f_bits).rev() {
             // Route the accumulator to the first curve addition gate's inputs.
             self.copy(acc.x, Target::Wire(
                 Wire { gate: self.num_gates(), input: CurveAddGate::<C>::WIRE_GROUP_ACC_X }));
@@ -615,36 +672,43 @@ impl<F: Field> CircuitBuilder<F> {
                 Wire { gate: self.num_gates(), input: CurveAddGate::<C>::WIRE_GROUP_ACC_Y }));
 
             for (j, part) in parts.iter().enumerate() {
-                if i < part.scalar_bits.len() {
-                    let bit = part.scalar_bits[i];
-                    let idx_add = self.num_gates();
-                    self.add_gate_no_constants(CurveAddGate::<C>::new(idx_add));
-                    self.copy(scalars[j], Target::Wire(
-                        Wire { gate: idx_add, input: CurveAddGate::<C>::WIRE_SCALAR_ACC_OLD }));
-                    scalars[j] = Target::Wire(
-                        Wire { gate: idx_add, input: CurveAddGate::<C>::WIRE_SCALAR_ACC_NEW });
-                    self.copy(part.addend.x, Target::Wire(
-                        Wire { gate: idx_add, input: CurveAddGate::<C>::WIRE_ADDEND_X }));
-                    self.copy(part.addend.y, Target::Wire(
-                        Wire { gate: idx_add, input: CurveAddGate::<C>::WIRE_ADDEND_Y }));
-                    self.copy(bit, Target::Wire(
-                        Wire { gate: idx_add, input: CurveAddGate::<C>::WIRE_SCALAR_BIT }));
-                }
+                let bit = all_bits[j][i];
+
+                let idx_add = self.num_gates();
+                self.add_gate_no_constants(CurveAddGate::<C>::new(idx_add));
+                self.copy(scalar_accs[j], Target::Wire(
+                    Wire { gate: idx_add, input: CurveAddGate::<C>::WIRE_SCALAR_ACC_OLD }));
+                scalar_accs[j] = Target::Wire(
+                    Wire { gate: idx_add, input: CurveAddGate::<C>::WIRE_SCALAR_ACC_NEW });
+                self.copy(part.point.x, Target::Wire(
+                    Wire { gate: idx_add, input: CurveAddGate::<C>::WIRE_ADDEND_X }));
+                self.copy(part.point.y, Target::Wire(
+                    Wire { gate: idx_add, input: CurveAddGate::<C>::WIRE_ADDEND_Y }));
+                self.copy(bit, Target::Wire(
+                    Wire { gate: idx_add, input: CurveAddGate::<C>::WIRE_SCALAR_BIT }));
             }
 
             // Double the accumulator.
             let idx_dbl = self.num_gates();
             self.add_gate_no_constants(CurveDblGate::<C>::new(idx_dbl));
             // No need to route the double gate's inputs, because the last add gate would have
-            // constrained them. Just take its outputs as the new accumulator.
-            acc = AffinePointTarget {
-                x: Target::Wire(
-                    Wire { gate: idx_dbl, input: CurveDblGate::<C>::WIRE_X_NEW }),
-                y: Target::Wire(
-                    Wire { gate: idx_dbl, input: CurveDblGate::<C>::WIRE_Y_NEW }),
-            };
+            // constrained them.
+            // Normally, we will take the double gate's outputs as the new accumulator. If we just
+            // completed the last iteration of the MSM though, then we don't want to perform a final
+            // doubling, so we will take its inputs as the result instead.
+            if i == f_bits - 1 {
+                acc = AffinePointTarget {
+                    x: Target::Wire(Wire { gate: idx_dbl, input: CurveDblGate::<C>::WIRE_X_OLD }),
+                    y: Target::Wire(Wire { gate: idx_dbl, input: CurveDblGate::<C>::WIRE_Y_OLD }),
+                };
+            } else {
+                acc = AffinePointTarget {
+                    x: Target::Wire(Wire { gate: idx_dbl, input: CurveDblGate::<C>::WIRE_X_NEW }),
+                    y: Target::Wire(Wire { gate: idx_dbl, input: CurveDblGate::<C>::WIRE_Y_NEW }),
+                };
+            }
 
-            // Also double the filler, so we can subtract out the repeatedly doubled version later.
+            // Also double the filler, so we can subtract out a rescaled version later.
             filler = filler.double();
         }
 
@@ -652,37 +716,19 @@ impl<F: Field> CircuitBuilder<F> {
         let filler_target = self.constant_affine_point(filler);
         acc = self.curve_sub::<C>(acc, filler_target);
 
-        MsmResult {
-            sum: acc,
-            scalars,
-        }
-    }
-
-    pub fn curve_msm_fixed_base<C: Curve<BaseField = F>>(
-        &mut self,
-        parts: &[FixedBaseMsmPart<C>],
-    ) -> MsmResult {
-        // TODO: This can be done much more efficiently with windowed multiplication.
-        // For now, we just call out to the variable-base method.
-        let variable_parts: Vec<MsmPart> = parts.iter()
-            .map(|p| MsmPart {
-                scalar_bits: p.scalar_bits.clone(),
-                addend: self.constant_affine_point(p.addend),
-            })
-            .collect();
-        self.curve_msm::<C>(&variable_parts)
-    }
-
-    /// Like `add_msm`, but uses the endomorphism described in the Halo paper.
-    pub fn curve_msm_endo<C: HaloEndomorphismCurve<BaseField = F>>(
-        &mut self,
-        parts: &[MsmPart],
-    ) -> MsmEndoResult {
-        // Our implementation assumes 128-bit scalars.
-        for part in parts {
-            debug_assert_eq!(part.scalar_bits.len(), 128);
+        // Assert that each accumulation of scalar bits matches the original scalar.
+        for (j, part) in parts.iter().enumerate() {
+            self.copy(scalar_accs[j], part.scalar);
         }
 
+        acc
+    }
+
+    /// Like `curve_msm`, but uses the endomorphism described in the Halo paper.
+    pub fn curve_msm_endo<C: HaloEndomorphismCurve<BaseField=F>>(
+        &mut self,
+        parts: &[CurveMulOp],
+    ) -> CurveMsmEndoResult {
         todo!()
     }
 
