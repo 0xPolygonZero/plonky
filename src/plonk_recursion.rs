@@ -1,4 +1,4 @@
-use crate::{AffinePointTarget, Circuit, CircuitBuilder, CurveMulOp, Field, HaloEndomorphismCurve, NUM_CONSTANTS, NUM_WIRES, PublicInput, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, Target};
+use crate::{AffinePointTarget, Circuit, CircuitBuilder, CurveMulOp, Field, HaloEndomorphismCurve, NUM_CONSTANTS, NUM_WIRES, PublicInput, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, Target, NUM_ROUTED_WIRES};
 use crate::plonk_gates::evaluate_all_constraints_recursively;
 use crate::util::ceil_div_usize;
 
@@ -236,9 +236,12 @@ fn verify_all_ipas<C: HaloEndomorphismCurve>(
     x: Target,
     ipa_challenges: Vec<Target>,
 ) -> (Vec<Target>, Vec<Target>) {
-    // Reduce all polynomial commitments to a single one.
-    let c_constants = todo!();
-    let c_plonk_sigmas = todo!();
+    // Reduce all polynomial commitments to a single one, i.e. a random combination of them.
+    // TODO: Configure the actual constants and permutations of whatever circuit we wish to verify.
+    // For now, we use a dummy point for each of those polynomial commitments.
+    let dummy_point = builder.constant_affine_point(C::GENERATOR_AFFINE);
+    let c_constants = vec![dummy_point; NUM_CONSTANTS];
+    let c_plonk_sigmas = vec![dummy_point; NUM_ROUTED_WIRES];
     let c_all: Vec<AffinePointTarget> = [
         c_constants,
         c_plonk_sigmas,
