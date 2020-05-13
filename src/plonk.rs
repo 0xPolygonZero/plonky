@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use crate::{AffinePoint, Curve, Field, generate_rescue_constants, HaloEndomorphismCurve};
-use crate::plonk_gates::{ArithmeticGate, BufferGate, CurveAddGate, CurveDblGate, Gate, PublicInputGate, RescueStepAGate, RescueStepBGate};
+use crate::plonk_gates::{ArithmeticGate, BufferGate, CurveAddGate, CurveDblGate, Gate, PublicInputGate, RescueStepAGate, RescueStepBGate, Base4SumGate};
 use crate::util::ceil_div_usize;
 
 pub(crate) const NUM_WIRES: usize = 9;
@@ -254,6 +254,20 @@ impl<F: Field> CircuitBuilder<F> {
         }
     }
 
+    pub fn assert_zero(&mut self, x: Target) {
+        let zero = self.zero_wire();
+        self.copy(x, zero);
+    }
+
+    pub fn assert_binary(&mut self, x: Target) {
+        let zero = self.zero_wire();
+        let one = self.one_wire();
+
+        let x_minus_1 = self.sub(x, one);
+        let product = self.mul(x, x_minus_1);
+        self.assert_zero(product);
+    }
+
     pub fn add(&mut self, x: Target, y: Target) -> Target {
         let zero = self.zero_wire();
         if x == zero {
@@ -329,9 +343,74 @@ impl<F: Field> CircuitBuilder<F> {
         self.mul(x, x)
     }
 
+    /// Note: This assumes the most significant bit of each scalar is unset. This occurs with high
+    /// probability if the field size is slightly larger than a power of two and the inputs are
+    /// uniformly random.
     pub fn deterministic_square_root(&mut self, x: Target) -> Target {
-        // Just do a range check to enforce determinism.
-        todo!()
+        // Assume x != 0. Let y, z be the square roots of x. Since y + z = |F|, and |F| is odd, the
+        // parity of y and z must differ, so we can enforce determinism by checking for a certain
+        // parity bit state. We chose a parity bit of 0 since this also works for the x = 0 case.
+
+        struct SqrtGenerator {
+            x: Target,
+            x_sqrt: Target,
+        }
+
+        impl<F: Field> WitnessGenerator<F> for SqrtGenerator {
+            fn dependencies(&self) -> Vec<Target> {
+                vec![self.x]
+            }
+
+            fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
+                let x_value = witness.get_target(self.x);
+                let mut x_sqrt_value = x_value.square_root().expect("Not square");
+
+                if x_sqrt_value.to_canonical_bool_vec()[0] {
+                    // The parity bit is 1; we want the other square root.
+                    x_sqrt_value = -x_sqrt_value;
+                    debug_assert!(!x_sqrt_value.to_canonical_bool_vec()[0]);
+                }
+
+                let mut result = PartialWitness::new();
+                result.set_target(self.x_sqrt, x_sqrt_value);
+                result
+            }
+        }
+
+        let x_sqrt = self.add_virtual_target();
+        self.add_generator(SqrtGenerator { x, x_sqrt });
+
+        // We assume each most significant bit is unset; see the note in the method doc.
+        let f_bits = F::BITS - 1;
+        assert_eq!(f_bits, 254, "We currently only handle fields of size 2^254 + epsilon");
+        let (bits, dibits) = self.split_binary_and_base_4(x_sqrt, 2, 126);
+
+        // Verify that x_sqrt * x_sqrt = x.
+        let x_sqrt_squared = self.square(x_sqrt);
+        self.copy(x_sqrt_squared, x);
+
+        // Verify that the parity bit is 0, and the other bit is binary.
+        self.assert_zero(bits[0]);
+        self.assert_binary(bits[1]);
+
+        // Verify the decomposition by taking a weighted sum of the limbs. Since the first bit is
+        // always zero, we start with the second bit (scaled by its weight of 2) and then add the
+        // base 4 limbs.
+        let mut sum = self.double(bits[1]);
+        for chunk in dibits.chunks(Base4SumGate::NUM_LIMBS) {
+            assert_eq!(chunk.len(), Base4SumGate::NUM_LIMBS, "Should not have a partial chunk");
+
+            let index = self.num_gates();
+            self.add_gate_no_constants(Base4SumGate::new(index));
+            for i in 0..chunk.len() {
+                self.copy(sum, Target::Wire(Wire { gate: index, input: Base4SumGate::WIRE_ACC_OLD }));
+                self.copy(chunk[i], Target::Wire(Wire { gate: index, input: Base4SumGate::WIRE_LIMB_0 + i }));
+                sum = Target::Wire(Wire { gate: index, input: Base4SumGate::WIRE_ACC_NEW })
+            }
+        }
+        self.copy(sum, x);
+
+        x_sqrt
     }
 
     /// Compute `x^power`, where `power` is a constant.
@@ -368,7 +447,6 @@ impl<F: Field> CircuitBuilder<F> {
             x: Target,
             x_inv: Target,
         }
-        ;
 
         impl<F: Field> WitnessGenerator<F> for InverseGenerator {
             fn dependencies(&self) -> Vec<Target> {
@@ -430,7 +508,7 @@ impl<F: Field> CircuitBuilder<F> {
     /// Splits `x` into its binary representation. Note that this method merely adds a generator to
     /// populate the bit wires; it does not enforce constraints to verify the decomposition.
     fn split_binary(&mut self, x: Target, num_bits: usize) -> Vec<Target> {
-        let (bits, dibits) = self.split_binary_and_base_4(x, num_bits, 0);
+        let (bits, _dibits) = self.split_binary_and_base_4(x, num_bits, 0);
         bits
     }
 
