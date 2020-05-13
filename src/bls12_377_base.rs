@@ -14,7 +14,7 @@ use std::fmt::{Formatter, Display};
 use std::fmt;
 
 /// An element of the BLS12 group's base field.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
 pub struct Bls12377Base {
     /// Montgomery representation, encoded with little-endian u64 limbs.
     pub limbs: [u64; 6],

@@ -14,7 +14,7 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 
 /// An element of the BLS12 group's scalar field.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
 pub struct Bls12377Scalar {
     /// Montgomery representation, encoded with little-endian u64 limbs.
     pub limbs: [u64; 4],

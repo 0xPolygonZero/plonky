@@ -10,7 +10,7 @@ use crate::{biguint_to_field, field_to_biguint};
 use std::cmp::Ordering;
 use std::cmp::Ordering::Equal;
 
-pub trait Field: 'static + Sized + Copy + Ord + Hash + Send + Sync + Debug + Display
+pub trait Field: 'static + Sized + Copy + Ord + Hash + Send + Sync + Debug + Display + Default
 + Neg<Output=Self>
 + Add<Self, Output=Self>
 + Sub<Self, Output=Self>
