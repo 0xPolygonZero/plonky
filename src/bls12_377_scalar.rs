@@ -5,11 +5,9 @@ use std::convert::TryInto;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 use rand::Rng;
 
-use rand::RngCore;
-use rand::rngs::OsRng;
 use unroll::unroll_for_loops;
 
-use crate::{add_4_4_no_overflow, cmp_4_4, Field, sub_4_4, field_to_biguint};
+use crate::{add_4_4_no_overflow, cmp_4_4, Field, sub_4_4, field_to_biguint, rand_range_4, rand_range_4_from_rng};
 use crate::bigint_inverse::nonzero_multiplicative_inverse_4;
 use std::cmp::Ordering;
 use std::fmt;
@@ -193,29 +191,15 @@ impl Field for Bls12377Scalar {
     }
 
     fn rand() -> Self {
-        let mut limbs = [0; 4];
-
-        for limb_i in &mut limbs {
-            *limb_i = OsRng.next_u64();
+        Self {
+            limbs: rand_range_4(Self::ORDER),
         }
-
-        // Remove a few of the most significant bits to ensure we're in range.
-        limbs[3] >>= 4;
-
-        Self { limbs }
     }
 
     fn rand_from_rng<R: Rng>(rng: &mut R) -> Self {
-        let mut limbs = [0; 4];
-
-        for limb_i in &mut limbs {
-            *limb_i = rng.next_u64();
+        Self {
+            limbs: rand_range_4_from_rng(Self::ORDER, rng),
         }
-
-        // Remove a few of the most significant bits to ensure we're in range.
-        limbs[3] >>= 4;
-
-        Self { limbs }
     }
 
 
