@@ -12,7 +12,7 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 
 /// An element of the Tweedledee group's base field.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
 pub struct TweedledeeBase {
     /// Montgomery representation, encoded with little-endian u64 limbs.
     pub limbs: [u64; 4],
