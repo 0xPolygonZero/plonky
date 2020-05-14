@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use crate::{AffinePoint, Curve, Field, generate_rescue_constants, HaloEndomorphismCurve};
-use crate::plonk_gates::{ArithmeticGate, BufferGate, CurveAddGate, CurveDblGate, Gate, PublicInputGate, RescueStepAGate, RescueStepBGate, Base4SumGate};
+use crate::plonk_gates::{ArithmeticGate, BufferGate, CurveAddGate, CurveDblGate, Gate, PublicInputGate, RescueStepAGate, RescueStepBGate, Base4SumGate, CurveEndoGate};
 use crate::util::ceil_div_usize;
 
 pub(crate) const NUM_WIRES: usize = 9;
@@ -807,7 +807,127 @@ impl<F: Field> CircuitBuilder<F> {
         &mut self,
         parts: &[CurveMulOp],
     ) -> CurveMsmEndoResult {
-        todo!()
+        let zero = self.zero_wire();
+
+        // We assume each most significant bit is unset; see the note in curve_msm's method doc.
+        let f_bits = F::BITS - 1;
+        let scalar_bits = self.security_bits;
+        let scalar_dibits = (f_bits - scalar_bits) / 2;
+
+        // To keep things simple for now, we only handle the case of |F| ~= 2^254 and lambda = 128.
+        assert_eq!(f_bits, 254);
+        assert_eq!(scalar_bits, 128);
+        assert_eq!(scalar_dibits, 63);
+
+        // We split each scalar into 128 bits and 63 dibits. The bits are used in the MSM, while the
+        // dibits are ignored, except that we need to include them in our sum-of-limbs computation
+        // in order to verify that the decomposition was correct.
+        let (all_bits, all_dibits): (Vec<Vec<Target>>, Vec<Vec<Target>>) = parts.iter()
+            .map(|part| self.split_binary_and_base_4(part.scalar, scalar_bits, scalar_dibits))
+            .unzip();
+
+        // Normally we would start with zero, but to avoid exceptional cases, we start with some
+        // arbitrary nonzero point and subtract it later. This avoids exception with high
+        // probability provided that the scalars and points are random. (We don't worry about
+        // non-random inputs from malicious provers, since our curve gates will be unsatisfiable in
+        // exceptional cases.)
+        let mut filler = C::GENERATOR_AFFINE;
+        let mut acc = self.constant_affine_point(filler);
+
+        // For each scalar, we maintain two accumulators. The unsigned one is for computing a
+        // weighted sum of bits and dibits in the usual manner, so that we can later check that this
+        // sum equals the original scalar. The signed one is for computing n(s) for each scalar s.
+        // This is the "actual" scalar by which the associated point was multiplied, accounting for
+        // the endomorphism.
+        let mut scalar_acc_unsigned = Vec::new();
+        let mut scalar_acc_signed = Vec::new();
+
+        // As in the Halo paper, we process two scalar bits at a time.
+        for i in (0..scalar_bits).step_by(2).rev() {
+            // Route the point accumulator to the first gate's inputs.
+            self.copy(acc.x, Target::Wire(Wire { gate: self.num_gates(), input: CurveEndoGate::<C>::WIRE_GROUP_ACC_X }));
+            self.copy(acc.y, Target::Wire(Wire { gate: self.num_gates(), input: CurveEndoGate::<C>::WIRE_GROUP_ACC_Y }));
+
+            for (j, part) in parts.iter().enumerate() {
+                let bit_0 = all_bits[j][i];
+                let bit_1 = all_bits[j][i + 1];
+
+                let gate = self.num_gates();
+                self.add_gate_no_constants(CurveEndoGate::<C>::new(gate));
+
+                self.copy(part.point.x, Target::Wire(Wire { gate, input: CurveEndoGate::<C>::WIRE_ADDEND_X }));
+                self.copy(part.point.y, Target::Wire(Wire { gate, input: CurveEndoGate::<C>::WIRE_ADDEND_Y }));
+                self.copy(bit_0, Target::Wire(Wire { gate, input: CurveEndoGate::<C>::WIRE_SCALAR_BIT_0 }));
+                self.copy(bit_1, Target::Wire(Wire { gate, input: CurveEndoGate::<C>::WIRE_SCALAR_BIT_1 }));
+
+                // If this is the first pair of scalar bits being processed, route 0 to the scalar accumulators.
+                if i == scalar_bits - 2 {
+                    self.copy(zero, Target::Wire(Wire { gate, input: CurveEndoGate::<C>::WIRE_SCALAR_ACC_UNSIGNED }));
+                    self.copy(zero, Target::Wire(Wire { gate, input: CurveEndoGate::<C>::WIRE_SCALAR_ACC_SIGNED }));
+                }
+
+                // If this is the last pair of scalar bits being processed, save the final
+                // accumulator states.
+                // Since CurveEndoGate will store these in the "next" gate, but this is the last
+                // CurveEndoGate for this scalar, we need to add an extra BufferGate to receive them.
+                if i == 0 {
+                    let gate = self.num_gates();
+                    self.add_gate_no_constants(BufferGate::new(gate));
+                    scalar_acc_unsigned.push(Target::Wire(Wire { gate, input: CurveEndoGate::<C>::WIRE_SCALAR_ACC_UNSIGNED }));
+                    scalar_acc_signed.push(Target::Wire(Wire { gate, input: CurveEndoGate::<C>::WIRE_SCALAR_ACC_SIGNED }));
+                }
+            }
+
+            // Double the accumulator.
+            let gate = self.num_gates();
+            self.add_gate_no_constants(CurveDblGate::<C>::new(gate));
+            // No need to route the double gate's inputs, because the last endo gate would have
+            // constrained them.
+            // Normally, we will take the double gate's outputs as the new accumulator. If we just
+            // completed the last iteration of the MSM though, then we don't want to perform a final
+            // doubling, so we will take its inputs as the result instead.
+            if i == scalar_bits - 1 {
+                acc = AffinePointTarget {
+                    x: Target::Wire(Wire { gate, input: CurveDblGate::<C>::WIRE_X_OLD }),
+                    y: Target::Wire(Wire { gate, input: CurveDblGate::<C>::WIRE_Y_OLD }),
+                };
+            } else {
+                acc = AffinePointTarget {
+                    x: Target::Wire(Wire { gate, input: CurveDblGate::<C>::WIRE_X_NEW }),
+                    y: Target::Wire(Wire { gate, input: CurveDblGate::<C>::WIRE_Y_NEW }),
+                };
+            }
+
+            // Also double the filler, so we can subtract out a rescaled version later.
+            filler = filler.double();
+        }
+
+        // Subtract (a rescaled version of) the arbitrary nonzero value that we started with.
+        let filler_target = self.constant_affine_point(filler);
+        acc = self.curve_sub::<C>(acc, filler_target);
+
+        // By now we've accumulated all the bits of each scalar, but we also need to accumulate the dibits.
+        for j in 0..parts.len() {
+            for dibits_chunk in all_dibits[j].chunks(Base4SumGate::NUM_LIMBS) {
+                assert_eq!(dibits_chunk.len(), Base4SumGate::NUM_LIMBS);
+
+                let gate = self.num_gates();
+                self.add_gate_no_constants(Base4SumGate::new(gate));
+                self.copy(scalar_acc_unsigned[j], Target::Wire(Wire { gate, input: Base4SumGate::WIRE_ACC_OLD }));
+                scalar_acc_unsigned[j] = Target::Wire(Wire { gate, input: Base4SumGate::WIRE_ACC_NEW });
+
+                for (i, &dibit) in dibits_chunk.iter().enumerate() {
+                    self.copy(dibit, Target::Wire(Wire { gate, input: Base4SumGate::WIRE_LIMB_0 + i }));
+                }
+            }
+        }
+
+        // Finally, assert that each unsigned accumulator matches the original scalar.
+        for (j, part) in parts.iter().enumerate() {
+            self.copy(scalar_acc_unsigned[j], part.scalar);
+        }
+
+        CurveMsmEndoResult { msm_result: acc, actual_scalars: scalar_acc_signed }
     }
 
     /// Adds a gate to the circuit, without doing any routing.
