@@ -397,13 +397,12 @@ impl<C: Curve> Gate<C::BaseField> for CurveAddGate<C> {
         let inverse = local_wire_values[Self::WIRE_INVERSE];
 
         let x1_minus_x2 = builder.sub(x1, x2);
-        let x1_plus_x2 = builder.sub(x1, x2);
+        let x1_plus_x2 = builder.add(x1, x2);
         let x1_minus_x3 = builder.sub(x1, x3);
         let y1_minus_y2 = builder.sub(y1, y2);
 
         let lambda = builder.mul(y1_minus_y2, inverse);
-        let lambda_squared = builder.square(lambda);
-        let computed_x3 = builder.sub(lambda_squared, x1_plus_x2);
+        let computed_x3 = builder.mul_sub(lambda, lambda, x1_plus_x2);
         let computed_y3 = builder.mul_sub(lambda, x1_minus_x3, y1);
 
         let double_scalar_acc_old = builder.double(scalar_acc_old);
@@ -633,7 +632,44 @@ impl<C: HaloEndomorphismCurve> Gate<C::BaseField> for CurveEndoGate<C> {
         right_wire_values: &[C::BaseField],
         below_wire_values: &[C::BaseField],
     ) -> Vec<C::BaseField> {
-        unimplemented!()
+        let one = C::BaseField::ONE;
+
+        let x1 = local_wire_values[Self::WIRE_GROUP_ACC_X];
+        let y1 = local_wire_values[Self::WIRE_GROUP_ACC_Y];
+        let x_in = local_wire_values[Self::WIRE_ADDEND_X];
+        let y_in = local_wire_values[Self::WIRE_ADDEND_Y];
+        let x3 = right_wire_values[Self::WIRE_GROUP_ACC_X];
+        let y3 = right_wire_values[Self::WIRE_GROUP_ACC_Y];
+        let scalar_acc_unsigned_old = local_wire_values[Self::WIRE_SCALAR_ACC_UNSIGNED];
+        let scalar_acc_unsigned_new = below_wire_values[Self::WIRE_SCALAR_ACC_UNSIGNED];
+        let scalar_acc_signed_old = local_wire_values[Self::WIRE_SCALAR_ACC_SIGNED];
+        let scalar_acc_signed_new = below_wire_values[Self::WIRE_SCALAR_ACC_SIGNED];
+        let scalar_bit_0 = local_wire_values[Self::WIRE_SCALAR_BIT_0];
+        let scalar_bit_1 = local_wire_values[Self::WIRE_SCALAR_BIT_1];
+        let inverse = local_wire_values[Self::WIRE_INVERSE];
+
+        // Conditionally apply the endo and conditionally negate in order to get (x2, y2), which is
+        // the actual point we want to add to the accumulator.
+        let x2 = ((C::ZETA - one) * scalar_bit_1 + one) * x_in;
+        let y2 = (scalar_bit_0.double() - one) * y_in;
+
+        let lambda = (y1 - y2) * inverse;
+        let computed_x3 = lambda.square() - x1 - x2;
+        let computed_y3 = lambda * (x1 - x3) - y1;
+
+        // This is based on Algorithm 2 in the Halo paper.
+        let signed_limb_multiplier = (C::ZETA - one) * scalar_bit_1 + one;
+        let signed_limb = (scalar_bit_0.double() - one) * signed_limb_multiplier;
+
+        vec![
+            computed_x3 - x3,
+            computed_y3 - y3,
+            scalar_acc_unsigned_new - scalar_acc_unsigned_old.quadruple() + scalar_bit_1.double() + scalar_bit_0,
+            scalar_acc_signed_new - scalar_acc_signed_old.double() + signed_limb,
+            scalar_bit_0 * (scalar_bit_0 - one),
+            scalar_bit_1 * (scalar_bit_1 - one),
+            inverse * (x1 - x2) - one,
+        ]
     }
 
     fn evaluate_unfiltered_recursively(
@@ -643,8 +679,60 @@ impl<C: HaloEndomorphismCurve> Gate<C::BaseField> for CurveEndoGate<C> {
         right_wire_values: &[Target],
         below_wire_values: &[Target],
     ) -> Vec<Target> {
-        // TODO: Implement this.
-        vec![builder.zero_wire()]
+        let one = builder.one_wire();
+        let two = builder.two_wire();
+        let four = builder.constant_wire_u32(4);
+        let zeta = builder.constant_wire(C::ZETA);
+
+        let x1 = local_wire_values[Self::WIRE_GROUP_ACC_X];
+        let y1 = local_wire_values[Self::WIRE_GROUP_ACC_Y];
+        let x_in = local_wire_values[Self::WIRE_ADDEND_X];
+        let y_in = local_wire_values[Self::WIRE_ADDEND_Y];
+        let x3 = right_wire_values[Self::WIRE_GROUP_ACC_X];
+        let y3 = right_wire_values[Self::WIRE_GROUP_ACC_Y];
+        let scalar_acc_unsigned_old = local_wire_values[Self::WIRE_SCALAR_ACC_UNSIGNED];
+        let scalar_acc_unsigned_new = below_wire_values[Self::WIRE_SCALAR_ACC_UNSIGNED];
+        let scalar_acc_signed_old = local_wire_values[Self::WIRE_SCALAR_ACC_SIGNED];
+        let scalar_acc_signed_new = below_wire_values[Self::WIRE_SCALAR_ACC_SIGNED];
+        let scalar_bit_0 = local_wire_values[Self::WIRE_SCALAR_BIT_0];
+        let scalar_bit_1 = local_wire_values[Self::WIRE_SCALAR_BIT_1];
+        let inverse = local_wire_values[Self::WIRE_INVERSE];
+
+        // Conditionally apply the endo and conditionally negate in order to get (x2, y2), which is
+        // the actual point we want to add to the accumulator.
+        let zeta_minus_one = builder.sub(zeta, one);
+        let x_in_multiplier = builder.mul_add(zeta_minus_one, scalar_bit_1, one);
+        let x2 = builder.mul(x_in_multiplier, x_in);
+        let y_in_multiplier = builder.mul_sub(scalar_bit_0, two, one);
+        let y2 = builder.mul(y_in_multiplier, y_in);
+
+        let x1_minus_x2 = builder.sub(x1, x2);
+        let x1_plus_x2 = builder.add(x1, x2);
+        let x1_minus_x3 = builder.sub(x1, x3);
+        let y1_minus_y2 = builder.sub(y1, y2);
+
+        let lambda = builder.mul(y1_minus_y2, inverse);
+        let computed_x3 = builder.mul_sub(lambda, lambda, x1_plus_x2);
+        let computed_y3 = builder.mul_sub(lambda, x1_minus_x3, y1);
+
+        let unsigned_limb = builder.mul_add(scalar_bit_1, two, scalar_bit_0);
+        let computed_scalar_acc_unsigned_new = builder.mul_add(scalar_acc_unsigned_old, four, unsigned_limb);
+
+        // This is based on Algorithm 2 in the Halo paper.
+        let signed_limb_multiplier = builder.mul_add(zeta_minus_one, scalar_bit_1, one);
+        let signed_limb_sign = builder.mul_sub(scalar_bit_0, two, one);
+        let signed_limb = builder.mul(signed_limb_sign, signed_limb_multiplier);
+        let computed_scalar_acc_signed_new = builder.mul_add(scalar_acc_signed_old, two, signed_limb);
+
+        vec![
+            builder.sub(computed_x3, x3),
+            builder.sub(computed_y3, y3),
+            builder.sub(computed_scalar_acc_unsigned_new, scalar_acc_unsigned_new),
+            builder.sub(computed_scalar_acc_signed_new, scalar_acc_signed_new),
+            assert_binary_recursively(builder, scalar_bit_0),
+            assert_binary_recursively(builder, scalar_bit_1),
+            assert_inverses_recursively(builder, inverse, x1_minus_x2),
+        ]
     }
 }
 

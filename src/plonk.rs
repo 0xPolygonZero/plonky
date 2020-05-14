@@ -222,6 +222,10 @@ impl<F: Field> CircuitBuilder<F> {
         self.constant_wire(F::ONE)
     }
 
+    pub fn two_wire(&mut self) -> Target {
+        self.constant_wire(F::TWO)
+    }
+
     pub fn neg_one_wire(&mut self) -> Target {
         self.constant_wire(F::NEG_ONE)
     }
