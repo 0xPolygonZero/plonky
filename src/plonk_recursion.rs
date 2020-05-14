@@ -133,7 +133,7 @@ pub fn recursive_verification_circuit<C: HaloEndomorphismCurve>(
         alpha: builder.stage_public_input(),
         zeta: builder.stage_public_input(),
         o_constants: builder.stage_public_inputs(NUM_CONSTANTS),
-        o_plonk_sigmas: builder.stage_public_inputs(NUM_WIRES),
+        o_plonk_sigmas: builder.stage_public_inputs(NUM_ROUTED_WIRES),
         o_local_wires: builder.stage_public_inputs(NUM_WIRES),
         o_right_wires: builder.stage_public_inputs(NUM_WIRES),
         o_below_wires: builder.stage_public_inputs(NUM_WIRES),
@@ -202,8 +202,10 @@ pub fn recursive_verification_circuit<C: HaloEndomorphismCurve>(
     for i in 0..NUM_CONSTANTS {
         builder.copy(public_inputs.o_constants[i].routable_target(), proof.o_local.o_constants[i]);
     }
-    for i in 0..NUM_WIRES {
+    for i in 0..NUM_ROUTED_WIRES {
         builder.copy(public_inputs.o_plonk_sigmas[i].routable_target(), proof.o_local.o_plonk_sigmas[i]);
+    }
+    for i in 0..NUM_WIRES {
         builder.copy(public_inputs.o_local_wires[i].routable_target(), proof.o_local.o_wires[i]);
         builder.copy(public_inputs.o_right_wires[i].routable_target(), proof.o_right.o_wires[i]);
         builder.copy(public_inputs.o_below_wires[i].routable_target(), proof.o_below.o_wires[i]);
@@ -323,7 +325,7 @@ fn verify_ipa<C: HaloEndomorphismCurve>(
 fn make_opening_set<F: Field>(builder: &mut CircuitBuilder<F>) -> OpeningSetTarget {
     OpeningSetTarget {
         o_constants: builder.add_virtual_targets(NUM_CONSTANTS),
-        o_plonk_sigmas: builder.add_virtual_targets(NUM_WIRES),
+        o_plonk_sigmas: builder.add_virtual_targets(NUM_ROUTED_WIRES),
         o_wires: builder.add_virtual_targets(NUM_WIRES),
         o_plonk_z: builder.add_virtual_target(),
         o_plonk_t: builder.add_virtual_targets(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
@@ -382,8 +384,8 @@ fn verify_assumptions<C: HaloEndomorphismCurve>(
     // Compute Z(zeta) f'(zeta) - Z(g * zeta) g'(zeta), which should vanish on H.
     let mut f_prime = one;
     let mut g_prime = one;
-    let quadratic_nonresidues = C::BaseField::generate_quadratic_nonresidues(NUM_WIRES - 1);
-    for i in 0..NUM_WIRES {
+    let quadratic_nonresidues = C::BaseField::generate_quadratic_nonresidues(NUM_ROUTED_WIRES - 1);
+    for i in 0..NUM_ROUTED_WIRES {
         let s_id = if i == 0 {
             zeta
         } else {
