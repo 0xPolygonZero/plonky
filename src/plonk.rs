@@ -32,6 +32,10 @@ impl<F: Field> PartialWitness<F> {
         self.wire_values.contains_key(&target)
     }
 
+    pub fn contains_wire(&self, wire: Wire) -> bool {
+        self.contains_target(Target::Wire(wire))
+    }
+
     pub fn contains_all_targets(&self, targets: &[Target]) -> bool {
         targets.iter().all(|&t| self.contains_target(t))
     }
@@ -151,8 +155,24 @@ impl<F: Field> Circuit<F> {
             }
         }
 
+        debug_assert_eq!(completed_generator_indices.len(), self.generators.len(),
+                         "Only {} of {} generators could be run",
+                         completed_generator_indices.len(), self.generators.len());
+
+        let mut wire_values: Vec<Vec<F>> = Vec::new();
+        for i in 0..self.num_gates() {
+            let mut gate_i_wires = Vec::new();
+            for j in 0..NUM_WIRES {
+                let wire = Wire { gate: i, input: j };
+                debug_assert!(witness.contains_wire(wire), "Wire was not populated: {:?}", wire);
+                let value = witness.get_wire(wire);
+                gate_i_wires.push(value);
+            }
+            wire_values.push(gate_i_wires);
+        }
+
         println!("Witness generation took {}s", start.elapsed().as_secs_f32());
-        Witness { wire_values: todo!() }
+        Witness { wire_values }
     }
 
     /// For the given set of targets, find any copy constraints involving those targets and populate
