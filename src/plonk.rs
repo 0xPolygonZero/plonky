@@ -95,8 +95,7 @@ impl<F: Field> Circuit<F> {
         let mut generator_indices_by_deps: HashMap<Target, Vec<usize>> = HashMap::new();
         for (i, generator) in self.generators.iter().enumerate() {
             for dep in generator.dependencies() {
-                let indices = generator_indices_by_deps.entry(dep).or_insert_with(|| Vec::new());
-                (*indices).push(i);
+                generator_indices_by_deps.entry(dep).or_insert_with(|| Vec::new()).push(i);
             }
         }
 
