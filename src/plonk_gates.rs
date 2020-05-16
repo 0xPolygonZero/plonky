@@ -233,7 +233,7 @@ impl<F: Field> WitnessGenerator<F> for PublicInputGate {
             .collect()
     }
 
-    fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
+    fn generate(&self, circuit: &Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
         let self_as_generator: &dyn WitnessGenerator<F> = self;
         let targets: Vec<Target> = self_as_generator.dependencies();
 
@@ -307,7 +307,7 @@ impl<F: Field> WitnessGenerator<F> for BufferGate {
         Vec::new()
     }
 
-    fn generate(&self, circuit: Circuit<F>, _witness: &PartialWitness<F>) -> PartialWitness<F> {
+    fn generate(&self, circuit: &Circuit<F>, _witness: &PartialWitness<F>) -> PartialWitness<F> {
         let buffer_const_target = Wire { gate: self.index, input: Self::WIRE_BUFFER_CONST };
 
         let mut witness = PartialWitness::new();
@@ -430,7 +430,7 @@ impl<C: Curve> WitnessGenerator<C::BaseField> for CurveAddGate<C> {
         ]
     }
 
-    fn generate(&self, circuit: Circuit<C::BaseField>, witness: &PartialWitness<C::BaseField>) -> PartialWitness<C::BaseField> {
+    fn generate(&self, circuit: &Circuit<C::BaseField>, witness: &PartialWitness<C::BaseField>) -> PartialWitness<C::BaseField> {
         let group_acc_old_x_target = Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_X };
         let group_acc_new_x_target = Wire { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_X };
         let group_acc_old_y_target = Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
@@ -574,7 +574,7 @@ impl<C: Curve> WitnessGenerator<C::BaseField> for CurveDblGate<C> {
         ]
     }
 
-    fn generate(&self, circuit: Circuit<C::BaseField>, witness: &PartialWitness<C::BaseField>) -> PartialWitness<C::BaseField> {
+    fn generate(&self, circuit: &Circuit<C::BaseField>, witness: &PartialWitness<C::BaseField>) -> PartialWitness<C::BaseField> {
         let x_old_target = Wire { gate: self.index, input: Self::WIRE_X_OLD };
         let y_old_target = Wire { gate: self.index, input: Self::WIRE_Y_OLD };
         let x_new_target = Wire { gate: self.index, input: Self::WIRE_X_NEW };
@@ -750,7 +750,7 @@ impl<C: HaloEndomorphismCurve> WitnessGenerator<C::BaseField> for CurveEndoGate<
         ]
     }
 
-    fn generate(&self, circuit: Circuit<C::BaseField>, witness: &PartialWitness<C::BaseField>) -> PartialWitness<C::BaseField> {
+    fn generate(&self, circuit: &Circuit<C::BaseField>, witness: &PartialWitness<C::BaseField>) -> PartialWitness<C::BaseField> {
         let group_acc_old_x_target = Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_X };
         let group_acc_new_x_target = Wire { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_X };
         let group_acc_old_y_target = Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
@@ -945,7 +945,7 @@ impl<F: Field> WitnessGenerator<F> for RescueStepAGate<F> {
         ]
     }
 
-    fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
+    fn generate(&self, circuit: &Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
         let constants = &circuit.gate_constants[self.index];
 
         let in_0_target = Wire { gate: self.index, input: Self::WIRE_INPUT_0 };
@@ -1094,7 +1094,7 @@ impl<F: Field> WitnessGenerator<F> for RescueStepBGate<F> {
         ]
     }
 
-    fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
+    fn generate(&self, circuit: &Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
         let constants = &circuit.gate_constants[self.index];
 
         let in_0_target = Wire { gate: self.index, input: Self::WIRE_INPUT_0 };
@@ -1216,7 +1216,7 @@ impl<F: Field> WitnessGenerator<F> for Base4SumGate {
         Vec::new()
     }
 
-    fn generate(&self, circuit: Circuit<F>, _witness: &PartialWitness<F>) -> PartialWitness<F> {
+    fn generate(&self, circuit: &Circuit<F>, _witness: &PartialWitness<F>) -> PartialWitness<F> {
         // For base 4 decompositions, we don't do any witness generation on a per-gate level.
         // Instead, we have a single generator which generates values for an entire decomposition.
         PartialWitness::new()
@@ -1297,7 +1297,7 @@ impl<F: Field> WitnessGenerator<F> for ArithmeticGate<F> {
         ]
     }
 
-    fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
+    fn generate(&self, circuit: &Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
         let multiplicand_0_target = Wire { gate: self.index, input: Self::WIRE_MULTIPLICAND_0 };
         let multiplicand_1_target = Wire { gate: self.index, input: Self::WIRE_MULTIPLICAND_1 };
         let addend_target = Wire { gate: self.index, input: Self::WIRE_ADDEND };
