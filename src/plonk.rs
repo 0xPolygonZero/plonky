@@ -1,8 +1,9 @@
-use std::collections::HashMap;
+use std::borrow::Borrow;
+use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use crate::{AffinePoint, Curve, Field, generate_rescue_constants, HaloEndomorphismCurve};
-use crate::plonk_gates::{ArithmeticGate, BufferGate, CurveAddGate, CurveDblGate, Gate, PublicInputGate, RescueStepAGate, RescueStepBGate, Base4SumGate, CurveEndoGate};
+use crate::plonk_gates::{ArithmeticGate, Base4SumGate, BufferGate, CurveAddGate, CurveDblGate, CurveEndoGate, Gate, PublicInputGate, RescueStepAGate, RescueStepBGate};
 use crate::util::ceil_div_usize;
 
 pub(crate) const NUM_WIRES: usize = 9;
@@ -23,21 +24,49 @@ impl<F: Field> PartialWitness<F> {
         PartialWitness { wire_values: HashMap::new() }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.wire_values.is_empty()
+    }
+
+    pub fn contains_target(&self, target: Target) -> bool {
+        self.wire_values.contains_key(&target)
+    }
+
+    pub fn contains_wire(&self, wire: Wire) -> bool {
+        self.contains_target(Target::Wire(wire))
+    }
+
+    pub fn contains_all_targets(&self, targets: &[Target]) -> bool {
+        targets.iter().all(|&t| self.contains_target(t))
+    }
+
+    pub fn all_populated_targets(&self) -> Vec<Target> {
+        self.wire_values.keys().cloned().collect()
+    }
+
     pub fn get_target(&self, target: Target) -> F {
         self.wire_values[&target]
     }
 
+    pub fn get_wire(&self, wire: Wire) -> F {
+        self.get_target(Target::Wire(wire))
+    }
+
     pub fn set_target(&mut self, target: Target, value: F) {
-        let old_value = self.wire_values.insert(target, value);
-        debug_assert!(old_value.is_none(), "Target was set twice");
+        let opt_old_value = self.wire_values.insert(target, value);
+        if let Some(old_value) = opt_old_value {
+            debug_assert_eq!(old_value, value, "Target was set twice with different values");
+        }
     }
 
     pub fn set_wire(&mut self, wire: Wire, value: F) {
         self.set_target(Target::Wire(wire), value);
     }
 
-    pub fn get_wire(&self, wire: Wire) -> F {
-        self.get_target(Target::Wire(wire))
+    pub fn extend(&mut self, other: PartialWitness<F>) {
+        for (target, value) in other.wire_values {
+            self.set_target(target, value);
+        }
     }
 }
 
@@ -49,12 +78,12 @@ pub trait WitnessGenerator<F: Field>: 'static {
     fn dependencies(&self) -> Vec<Target>;
 
     /// Given a partial witness, return any newly generated values. The caller will merge them in.
-    fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F>;
+    fn generate(&self, circuit: &Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F>;
 }
 
 pub struct Circuit<F: Field> {
     pub gate_constants: Vec<Vec<F>>,
-    pub routing_target_partitions: RoutingTargetPartitions,
+    pub routing_target_partitions: TargetPartitions,
     pub generators: Vec<Box<dyn WitnessGenerator<F>>>,
 }
 
@@ -63,10 +92,109 @@ impl<F: Field> Circuit<F> {
         self.gate_constants.len()
     }
 
-    pub fn generate_witness(&self) {
+    pub fn generate_witness(&self, inputs: PartialWitness<F>) -> Witness<F> {
         let start = Instant::now();
+
+        // Index generator indices by their dependencies.
+        let mut generator_indices_by_deps: HashMap<Target, Vec<usize>> = HashMap::new();
+        for (i, generator) in self.generators.iter().enumerate() {
+            for dep in generator.dependencies() {
+                generator_indices_by_deps.entry(dep).or_insert_with(|| Vec::new()).push(i);
+            }
+        }
+
+        // We start with the inputs as our witness, and execute any copy constraints.
+        let mut witness = inputs;
+        witness.extend(self.generate_copies(&witness, &witness.all_populated_targets()));
+
+        // Build a list of "pending" generators which are ready to run.
+        let mut pending_generator_indices = HashSet::new();
+        for (i, generator) in self.generators.iter().enumerate() {
+            let generator: &dyn WitnessGenerator<F> = generator.borrow();
+            if witness.contains_all_targets(&generator.dependencies()) {
+                pending_generator_indices.insert(i);
+            }
+        }
+
+        // We will also keep track of which generators have already run.
+        let mut completed_generator_indices = HashSet::new();
+
+        // Now we repeat the following:
+        // - Run all pending generators, keeping track of any targets that were just populated.
+        // - For any newly-set targets, execute any relevant copy constraints, again tracking any
+        //   newly-populated targets.
+        // - Generate a new set of pending generators based on the newly-populated targets.
+        while !pending_generator_indices.is_empty() {
+            let mut populated_targets: Vec<Target> = Vec::new();
+
+            for &generator_idx in &pending_generator_indices {
+                let generator: &dyn WitnessGenerator<F> = self.generators[generator_idx].borrow();
+                let result = generator.generate(self, &witness);
+                populated_targets.extend(result.all_populated_targets());
+                witness.extend(result);
+                completed_generator_indices.insert(generator_idx);
+            }
+
+            let copy_result = self.generate_copies(&witness, &populated_targets);
+            populated_targets.extend(copy_result.all_populated_targets());
+            witness.extend(copy_result);
+
+            // Refresh the set of pending generators.
+            pending_generator_indices.clear();
+            for target in populated_targets {
+                for &generator_idx in &generator_indices_by_deps[&target] {
+                    // If this generator is not already pending or completed, and its dependencies
+                    // are all satisfied, then add it as a pending generator.
+                    let generator: &dyn WitnessGenerator<F> = self.generators[generator_idx].borrow();
+                    if !pending_generator_indices.contains(&generator_idx)
+                        && !completed_generator_indices.contains(&generator_idx)
+                        && witness.contains_all_targets(&generator.dependencies()) {
+                        pending_generator_indices.insert(generator_idx);
+                    }
+                }
+            }
+        }
+
+        debug_assert_eq!(completed_generator_indices.len(), self.generators.len(),
+                         "Only {} of {} generators could be run",
+                         completed_generator_indices.len(), self.generators.len());
+
+        let mut wire_values: Vec<Vec<F>> = Vec::new();
+        for i in 0..self.num_gates() {
+            let mut gate_i_wires = Vec::new();
+            for j in 0..NUM_WIRES {
+                let wire = Wire { gate: i, input: j };
+                debug_assert!(witness.contains_wire(wire), "Wire was not populated: {:?}", wire);
+                let value = witness.get_wire(wire);
+                gate_i_wires.push(value);
+            }
+            wire_values.push(gate_i_wires);
+        }
+
         println!("Witness generation took {}s", start.elapsed().as_secs_f32());
-        todo!()
+        Witness { wire_values }
+    }
+
+    /// For the given set of targets, find any copy constraints involving those targets and populate
+    /// the witness with copies as needed.
+    fn generate_copies(&self, witness: &PartialWitness<F>, targets: &[Target]) -> PartialWitness<F> {
+        let mut result = PartialWitness::new();
+
+        for &target in targets {
+            let value = witness.get_target(target);
+            let partition = self.routing_target_partitions.get_partition(target);
+
+            for &sibling in partition {
+                if witness.contains_target(sibling) {
+                    // This sibling's value was already set; make sure it has the same value.
+                    debug_assert_eq!(witness.get_target(sibling), value);
+                } else {
+                    result.set_target(sibling, value);
+                }
+            }
+        }
+
+        result
     }
 }
 
@@ -365,7 +493,7 @@ impl<F: Field> CircuitBuilder<F> {
                 vec![self.x]
             }
 
-            fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
+            fn generate(&self, circuit: &Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
                 let x_value = witness.get_target(self.x);
                 let mut x_sqrt_value = x_value.square_root().expect("Not square");
 
@@ -457,7 +585,7 @@ impl<F: Field> CircuitBuilder<F> {
                 vec![self.x]
             }
 
-            fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
+            fn generate(&self, circuit: &Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
                 let x_value = witness.get_target(self.x);
                 let x_inv_value = x_value.multiplicative_inverse().expect("x = 0");
 
@@ -536,7 +664,7 @@ impl<F: Field> CircuitBuilder<F> {
                 vec![self.x]
             }
 
-            fn generate(&self, circuit: Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
+            fn generate(&self, circuit: &Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
                 let x = witness.wire_values[&self.x];
                 let x_bits = x.to_canonical_bool_vec();
 
@@ -980,8 +1108,8 @@ impl<F: Field> CircuitBuilder<F> {
         Circuit { gate_constants, routing_target_partitions, generators }
     }
 
-    fn get_routing_partitions(&self) -> RoutingTargetPartitions {
-        let mut partitions = RoutingTargetPartitions::new();
+    fn get_routing_partitions(&self) -> TargetPartitions {
+        let mut partitions = TargetPartitions::new();
 
         for i in 0..self.virtual_target_index {
             partitions.add_partition(Target::VirtualTarget(VirtualTarget { index: i }));
@@ -1001,14 +1129,18 @@ impl<F: Field> CircuitBuilder<F> {
     }
 }
 
-pub struct RoutingTargetPartitions {
+pub struct TargetPartitions {
     partitions: Vec<Vec<Target>>,
     indices: HashMap<Target, usize>,
 }
 
-impl RoutingTargetPartitions {
+impl TargetPartitions {
     fn new() -> Self {
         Self { partitions: Vec::new(), indices: HashMap::new() }
+    }
+
+    fn get_partition(&self, target: Target) -> &[Target] {
+        &self.partitions[self.indices[&target]]
     }
 
     /// Add a new partition with a single member.
@@ -1036,7 +1168,7 @@ impl RoutingTargetPartitions {
         }
     }
 
-    fn to_gate_inputs(&self) -> GateInputPartitions {
+    fn to_gate_inputs(&self) -> WirePartitions {
         // Here we just drop all CircuitInputs, leaving all GateInputs.
         let mut partitions = Vec::new();
         let mut indices = HashMap::new();
@@ -1057,11 +1189,11 @@ impl RoutingTargetPartitions {
             }
         }
 
-        GateInputPartitions { partitions, indices }
+        WirePartitions { partitions, indices }
     }
 }
 
-struct GateInputPartitions {
+struct WirePartitions {
     partitions: Vec<Vec<Wire>>,
     indices: HashMap<Wire, usize>,
 }
