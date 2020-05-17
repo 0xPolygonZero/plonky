@@ -5,6 +5,12 @@ pub fn hash_u32_to_curve<C: Curve>(seed: u32, security_bits: usize) -> AffinePoi
     hash_base_field_to_curve(seed_f, security_bits)
 }
 
+pub fn hash_usize_to_curve<C: Curve>(seed: usize, security_bits: usize) -> AffinePoint<C> {
+    let seed_f = C::BaseField::from_canonical_usize(seed);
+    hash_base_field_to_curve(seed_f, security_bits)
+}
+
+// TODO: This is rather slow! Should use ChaCha20 or something instead of Rescue.
 pub fn hash_base_field_to_curve<C: Curve>(
     mut seed: C::BaseField,
     security_bits: usize,
