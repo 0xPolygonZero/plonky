@@ -320,8 +320,7 @@ mod tests {
         let small = TweedledeeBase::ONE.to_canonical_u64_vec();
         assert!(TweedledeeBase::is_valid_canonical_u64(small));
 
-        let mut big = Vec::new();
-        big.extend(TweedledeeBase::ORDER_X2.iter().copied());
+        let big = TweedledeeBase::ORDER_X2.to_vec();
         assert_eq!(TweedledeeBase::is_valid_canonical_u64(big), false);
 
         let limbs = vec![1, 2, 3, 4, 5];
