@@ -15,7 +15,7 @@ impl Curve for Tweedledum {
             11556519044732520811,
             18446744073709551615,
             4611686018427387903,
-        ]
+        ],
     };
 
     const GENERATOR_AFFINE: AffinePoint<Self> = AffinePoint {
@@ -26,7 +26,7 @@ impl Curve for Tweedledum {
                 12442237869110527732,
                 9256472484777506843,
                 1114242145010923164,
-            ]
+            ],
         },
         zero: false,
     };
@@ -39,7 +39,7 @@ impl HaloEndomorphismCurve for Tweedledum {
             3132214451552427455,
             3308921103222877309,
             2709928666517121162,
-        ]
+        ],
     };
     const ZETA_SCALAR: Self::ScalarField = TweedledeeBase {
         limbs: [
@@ -47,7 +47,7 @@ impl HaloEndomorphismCurve for Tweedledum {
             16421485501699768486,
             18374227564572127422,
             3902997619921080662,
-        ]
+        ],
     };
 }
 

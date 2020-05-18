@@ -1,8 +1,8 @@
 use std::cmp::Ordering;
 use std::cmp::Ordering::{Equal, Greater, Less};
 
-use rand::Rng;
 use rand::rngs::OsRng;
+use rand::Rng;
 use unroll::unroll_for_loops;
 
 /// This module provides functions for big integer arithmetic using little-endian encoded u64
@@ -282,16 +282,31 @@ pub(crate) fn rand_range_4_from_rng<R: Rng>(limit_exclusive: [u64; 4], rng: &mut
 
 #[cfg(test)]
 mod tests {
-    use crate::{div2_6, mul_6_6};
     use crate::conversions::u64_slice_to_biguint;
+    use crate::{div2_6, mul_6_6};
 
     #[test]
     fn test_mul_6_6() {
-        let a = [11111111u64, 22222222, 33333333, 44444444, 55555555, 66666666];
-        let b = [77777777u64, 88888888, 99999999, 11111111, 22222222, 33333333];
+        let a = [
+            11111111u64,
+            22222222,
+            33333333,
+            44444444,
+            55555555,
+            66666666,
+        ];
+        let b = [
+            77777777u64,
+            88888888,
+            99999999,
+            11111111,
+            22222222,
+            33333333,
+        ];
         assert_eq!(
             u64_slice_to_biguint(&mul_6_6(a, b)),
-            u64_slice_to_biguint(&a) * u64_slice_to_biguint(&b));
+            u64_slice_to_biguint(&a) * u64_slice_to_biguint(&b)
+        );
     }
 
     #[test]
@@ -299,8 +314,22 @@ mod tests {
         assert_eq!(div2_6([40, 0, 0, 0, 0, 0]), [20, 0, 0, 0, 0, 0]);
 
         assert_eq!(
-            div2_6(
-                [15668009436471190370, 3102040391300197453, 4166322749169705801, 3518225024268476800, 11231577158546850254, 226224965816356276]),
-            [17057376755090370993, 10774392232504874534, 2083161374584852900, 1759112512134238400, 5615788579273425127, 113112482908178138]);
+            div2_6([
+                15668009436471190370,
+                3102040391300197453,
+                4166322749169705801,
+                3518225024268476800,
+                11231577158546850254,
+                226224965816356276
+            ]),
+            [
+                17057376755090370993,
+                10774392232504874534,
+                2083161374584852900,
+                1759112512134238400,
+                5615788579273425127,
+                113112482908178138
+            ]
+        );
     }
 }

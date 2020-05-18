@@ -1,12 +1,15 @@
+use rand::Rng;
 use std::cmp::Ordering::Less;
 use std::convert::TryInto;
 use std::ops::{Add, Div, Mul, Neg, Sub};
-use rand::Rng;
 
 use unroll::unroll_for_loops;
 
 use crate::bigint_inverse::nonzero_multiplicative_inverse_4;
-use crate::{add_4_4_no_overflow, cmp_4_4, field_to_biguint, rand_range_4, rand_range_4_from_rng, sub_4_4, Field};
+use crate::{
+    add_4_4_no_overflow, cmp_4_4, field_to_biguint, rand_range_4, rand_range_4_from_rng, sub_4_4,
+    Field,
+};
 use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -259,7 +262,6 @@ impl Field for TweedledumBase {
         v.len() == 4 && cmp_4_4(v[..].try_into().unwrap(), Self::ORDER) == Less
     }
 
-
     fn multiplicative_inverse_assuming_nonzero(&self) -> Self {
         // Let x R = self. We compute M((x R)^-1, R^3) = x^-1 R^-1 R^3 R^-1 = x^-1 R.
         let self_r_inv = nonzero_multiplicative_inverse_4(self.limbs, Self::ORDER);
@@ -299,11 +301,10 @@ impl Display for TweedledumBase {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use crate::{Field, TweedledumBase};
     use crate::test_square_root;
+    use crate::{Field, TweedledumBase};
 
     #[test]
     fn primitive_root_order() {

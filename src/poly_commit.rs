@@ -6,7 +6,10 @@ impl KZG10 {
     /// Taken from the scipr-lab implementation here: https://github.com/scipr-lab/poly-commit/blob/master/src/kzg10/mod.rs
     ///
     /// For now, only produces G1 points, for a polynomial of degree max_degree
-    pub fn setup<C: Curve>(generator: ProjectivePoint<C>, max_degree: u64) -> Vec<ProjectivePoint<C>> {
+    pub fn setup<C: Curve>(
+        generator: ProjectivePoint<C>,
+        max_degree: u64,
+    ) -> Vec<ProjectivePoint<C>> {
         let alpha = C::ScalarField::rand();
 
         let mut powers_of_alpha = vec![C::ScalarField::ONE];

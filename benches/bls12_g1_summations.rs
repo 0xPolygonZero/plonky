@@ -1,8 +1,10 @@
-use criterion::{black_box, Criterion};
 use criterion::criterion_group;
 use criterion::criterion_main;
+use criterion::{black_box, Criterion};
 
-use plonky::{affine_summation_batch_inversion, affine_summation_pairwise, Bls12377, Curve, ProjectivePoint};
+use plonky::{
+    affine_summation_batch_inversion, affine_summation_pairwise, Bls12377, Curve, ProjectivePoint,
+};
 
 fn criterion_benchmark(c: &mut Criterion) {
     let n = 150;
@@ -19,16 +21,16 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     {
         let summands = summands.clone();
-        c.bench_function("G1 pairwise affine summation", move |b| b.iter(|| {
-            affine_summation_pairwise(black_box(summands.clone()))
-        }));
+        c.bench_function("G1 pairwise affine summation", move |b| {
+            b.iter(|| affine_summation_pairwise(black_box(summands.clone())))
+        });
     }
 
     {
         let summands = summands.clone();
-        c.bench_function("G1 pairwise affine summation (batch inversion)", move |b| b.iter(|| {
-            affine_summation_batch_inversion(black_box(summands.clone()))
-        }));
+        c.bench_function("G1 pairwise affine summation (batch inversion)", move |b| {
+            b.iter(|| affine_summation_batch_inversion(black_box(summands.clone())))
+        });
     }
 }
 

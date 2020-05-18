@@ -1,6 +1,9 @@
 use std::cmp::Ordering::Less;
 
-use crate::{add_4_4_no_overflow, add_6_6_no_overflow, cmp_4_4, cmp_6_6, div2_4, div2_6, is_even_4, is_even_6, is_odd_4, is_odd_6, sub_4_4, sub_6_6};
+use crate::{
+    add_4_4_no_overflow, add_6_6_no_overflow, cmp_4_4, cmp_6_6, div2_4, div2_6, is_even_4,
+    is_even_6, is_odd_4, is_odd_6, sub_4_4, sub_6_6,
+};
 
 pub(crate) fn nonzero_multiplicative_inverse_4(a: [u64; 4], order: [u64; 4]) -> [u64; 4] {
     // Based on Algorithm 16 of "Efficient Software-Implementation of Finite Fields with

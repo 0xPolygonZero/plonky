@@ -14,8 +14,11 @@
 
 use std::marker::PhantomData;
 
-use crate::{AffinePoint, Circuit, CircuitBuilder, Curve, Field, GRID_WIDTH, HaloEndomorphismCurve, NUM_ADVICE_WIRES, NUM_ROUTED_WIRES, NUM_WIRES, PartialWitness, Target, Wire, WitnessGenerator};
 use crate::mds::mds;
+use crate::{
+    AffinePoint, Circuit, CircuitBuilder, Curve, Field, HaloEndomorphismCurve, PartialWitness,
+    Target, Wire, WitnessGenerator, GRID_WIDTH, NUM_ADVICE_WIRES, NUM_ROUTED_WIRES, NUM_WIRES,
+};
 
 pub(crate) fn evaluate_all_constraints<C: HaloEndomorphismCurve>(
     local_constant_values: &[C::BaseField],
@@ -24,15 +27,60 @@ pub(crate) fn evaluate_all_constraints<C: HaloEndomorphismCurve>(
     below_wire_values: &[C::BaseField],
 ) -> Vec<C::BaseField> {
     let constraint_sets_per_gate = vec![
-        CurveAddGate::<C>::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
-        CurveDblGate::<C>::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
-        CurveEndoGate::<C>::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
-        Base4SumGate::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
-        PublicInputGate::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
-        BufferGate::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
-        ArithmeticGate::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
-        RescueStepAGate::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
-        RescueStepBGate::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
+        CurveAddGate::<C>::evaluate_filtered(
+            local_constant_values,
+            local_wire_values,
+            right_wire_values,
+            below_wire_values,
+        ),
+        CurveDblGate::<C>::evaluate_filtered(
+            local_constant_values,
+            local_wire_values,
+            right_wire_values,
+            below_wire_values,
+        ),
+        CurveEndoGate::<C>::evaluate_filtered(
+            local_constant_values,
+            local_wire_values,
+            right_wire_values,
+            below_wire_values,
+        ),
+        Base4SumGate::evaluate_filtered(
+            local_constant_values,
+            local_wire_values,
+            right_wire_values,
+            below_wire_values,
+        ),
+        PublicInputGate::evaluate_filtered(
+            local_constant_values,
+            local_wire_values,
+            right_wire_values,
+            below_wire_values,
+        ),
+        BufferGate::evaluate_filtered(
+            local_constant_values,
+            local_wire_values,
+            right_wire_values,
+            below_wire_values,
+        ),
+        ArithmeticGate::evaluate_filtered(
+            local_constant_values,
+            local_wire_values,
+            right_wire_values,
+            below_wire_values,
+        ),
+        RescueStepAGate::evaluate_filtered(
+            local_constant_values,
+            local_wire_values,
+            right_wire_values,
+            below_wire_values,
+        ),
+        RescueStepBGate::evaluate_filtered(
+            local_constant_values,
+            local_wire_values,
+            right_wire_values,
+            below_wire_values,
+        ),
     ];
 
     let mut unified_constraint_set = vec![];
@@ -55,15 +103,69 @@ pub(crate) fn evaluate_all_constraints_recursively<C: HaloEndomorphismCurve>(
     below_wire_values: &[Target],
 ) -> Vec<Target> {
     let constraint_sets_per_gate = vec![
-        CurveAddGate::<C>::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
-        CurveDblGate::<C>::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
-        CurveEndoGate::<C>::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
-        Base4SumGate::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
-        PublicInputGate::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
-        BufferGate::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
-        ArithmeticGate::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
-        RescueStepAGate::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
-        RescueStepBGate::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
+        CurveAddGate::<C>::evaluate_filtered_recursively(
+            builder,
+            local_constant_values,
+            local_wire_values,
+            right_wire_values,
+            below_wire_values,
+        ),
+        CurveDblGate::<C>::evaluate_filtered_recursively(
+            builder,
+            local_constant_values,
+            local_wire_values,
+            right_wire_values,
+            below_wire_values,
+        ),
+        CurveEndoGate::<C>::evaluate_filtered_recursively(
+            builder,
+            local_constant_values,
+            local_wire_values,
+            right_wire_values,
+            below_wire_values,
+        ),
+        Base4SumGate::evaluate_filtered_recursively(
+            builder,
+            local_constant_values,
+            local_wire_values,
+            right_wire_values,
+            below_wire_values,
+        ),
+        PublicInputGate::evaluate_filtered_recursively(
+            builder,
+            local_constant_values,
+            local_wire_values,
+            right_wire_values,
+            below_wire_values,
+        ),
+        BufferGate::evaluate_filtered_recursively(
+            builder,
+            local_constant_values,
+            local_wire_values,
+            right_wire_values,
+            below_wire_values,
+        ),
+        ArithmeticGate::evaluate_filtered_recursively(
+            builder,
+            local_constant_values,
+            local_wire_values,
+            right_wire_values,
+            below_wire_values,
+        ),
+        RescueStepAGate::evaluate_filtered_recursively(
+            builder,
+            local_constant_values,
+            local_wire_values,
+            right_wire_values,
+            below_wire_values,
+        ),
+        RescueStepBGate::evaluate_filtered_recursively(
+            builder,
+            local_constant_values,
+            local_wire_values,
+            right_wire_values,
+            below_wire_values,
+        ),
     ];
 
     let mut unified_constraint_set = vec![];
@@ -103,27 +205,41 @@ pub trait Gate<F: Field>: WitnessGenerator<F> {
     /// assign each gate type a binary prefix such that no two prefixes overlap.
     const PREFIX: &'static [bool];
 
-    fn evaluate_filtered(local_constant_values: &[F],
-                         local_wire_values: &[F],
-                         right_wire_values: &[F],
-                         below_wire_values: &[F],
+    fn evaluate_filtered(
+        local_constant_values: &[F],
+        local_wire_values: &[F],
+        right_wire_values: &[F],
+        below_wire_values: &[F],
     ) -> Vec<F> {
         let filter = Self::evaluate_prefix_filter(local_constant_values);
         let unfiltered = Self::evaluate_unfiltered(
-            local_constant_values, local_wire_values, right_wire_values, below_wire_values);
+            local_constant_values,
+            local_wire_values,
+            right_wire_values,
+            below_wire_values,
+        );
         unfiltered.into_iter().map(|u| filter * u).collect()
     }
 
-    fn evaluate_filtered_recursively(builder: &mut CircuitBuilder<F>,
-                                     local_constant_values: &[Target],
-                                     local_wire_values: &[Target],
-                                     right_wire_values: &[Target],
-                                     below_wire_values: &[Target],
+    fn evaluate_filtered_recursively(
+        builder: &mut CircuitBuilder<F>,
+        local_constant_values: &[Target],
+        local_wire_values: &[Target],
+        right_wire_values: &[Target],
+        below_wire_values: &[Target],
     ) -> Vec<Target> {
         let filter = Self::evaluate_prefix_filter_recursively(builder, local_constant_values);
         let unfiltered = Self::evaluate_unfiltered_recursively(
-            builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values);
-        unfiltered.into_iter().map(|u| builder.mul(filter, u)).collect()
+            builder,
+            local_constant_values,
+            local_wire_values,
+            right_wire_values,
+            below_wire_values,
+        );
+        unfiltered
+            .into_iter()
+            .map(|u| builder.mul(filter, u))
+            .collect()
     }
 
     fn evaluate_prefix_filter(local_constant_values: &[F]) -> F {
@@ -147,11 +263,7 @@ pub trait Gate<F: Field>: WitnessGenerator<F> {
         let mut product = one;
         for (i, &bit) in Self::PREFIX.iter().enumerate() {
             let c = local_constant_values[i];
-            let term = if bit {
-                c
-            } else {
-                builder.sub(one, c)
-            };
+            let term = if bit { c } else { builder.sub(one, c) };
             product = builder.mul(product, term);
         }
         product
@@ -161,17 +273,21 @@ pub trait Gate<F: Field>: WitnessGenerator<F> {
     ///
     /// For example, if the gate computes `c = a * b`, this should return `[c(x) - a(x) * b(x)]`,
     /// where `x` is the challenge point.
-    fn evaluate_unfiltered(local_constant_values: &[F],
-                           local_wire_values: &[F],
-                           right_wire_values: &[F],
-                           below_wire_values: &[F]) -> Vec<F>;
+    fn evaluate_unfiltered(
+        local_constant_values: &[F],
+        local_wire_values: &[F],
+        right_wire_values: &[F],
+        below_wire_values: &[F],
+    ) -> Vec<F>;
 
     /// Like the other `evaluate` method, but in the context of a recursive circuit.
-    fn evaluate_unfiltered_recursively(builder: &mut CircuitBuilder<F>,
-                                       local_constant_values: &[Target],
-                                       local_wire_values: &[Target],
-                                       right_wire_values: &[Target],
-                                       below_wire_values: &[Target]) -> Vec<Target>;
+    fn evaluate_unfiltered_recursively(
+        builder: &mut CircuitBuilder<F>,
+        local_constant_values: &[Target],
+        local_wire_values: &[Target],
+        right_wire_values: &[Target],
+        below_wire_values: &[Target],
+    ) -> Vec<Target>;
 }
 
 /// A gate for receiving public inputs. These gates will be placed at static indices and the wire
@@ -189,7 +305,10 @@ pub(crate) struct PublicInputGate {
 
 impl PublicInputGate {
     pub fn new(index: usize) -> Self {
-        PublicInputGate { index, _private: () }
+        PublicInputGate {
+            index,
+            _private: (),
+        }
     }
 }
 
@@ -206,9 +325,9 @@ impl<F: Field> Gate<F> for PublicInputGate {
     ) -> Vec<F> {
         // This ensures that advice wires' values are copied to the following buffer gate.
         // TODO: Consider enforcing this via copy constraints, in which case there would be nothing to do here.
-        (0..NUM_ADVICE_WIRES).map(|i| {
-            local_wire_values[NUM_ROUTED_WIRES + i] - right_wire_values[i]
-        }).collect()
+        (0..NUM_ADVICE_WIRES)
+            .map(|i| local_wire_values[NUM_ROUTED_WIRES + i] - right_wire_values[i])
+            .collect()
     }
 
     fn evaluate_unfiltered_recursively(
@@ -220,16 +339,26 @@ impl<F: Field> Gate<F> for PublicInputGate {
     ) -> Vec<Target> {
         // This ensures that advice wires' values are copied to the following buffer gate.
         // TODO: Consider enforcing this via copy constraints, in which case there would be nothing to do here.
-        (0..NUM_ADVICE_WIRES).map(|i| {
-            builder.sub(local_wire_values[NUM_ROUTED_WIRES + i], right_wire_values[i])
-        }).collect()
+        (0..NUM_ADVICE_WIRES)
+            .map(|i| {
+                builder.sub(
+                    local_wire_values[NUM_ROUTED_WIRES + i],
+                    right_wire_values[i],
+                )
+            })
+            .collect()
     }
 }
 
 impl<F: Field> WitnessGenerator<F> for PublicInputGate {
     fn dependencies(&self) -> Vec<Target> {
         (0..NUM_WIRES)
-            .map(|i| Target::Wire(Wire { gate: self.index, input: i }))
+            .map(|i| {
+                Target::Wire(Wire {
+                    gate: self.index,
+                    input: i,
+                })
+            })
             .collect()
     }
 
@@ -241,7 +370,13 @@ impl<F: Field> WitnessGenerator<F> for PublicInputGate {
         for i_advice in 0..NUM_ADVICE_WIRES {
             let i_wire = NUM_ROUTED_WIRES + i_advice;
             let value = witness.get_target(targets[i_wire]);
-            result.set_wire(Wire { gate: self.index + 1, input: i_advice }, value);
+            result.set_wire(
+                Wire {
+                    gate: self.index + 1,
+                    input: i_advice,
+                },
+                value,
+            );
         }
         result
     }
@@ -262,7 +397,10 @@ pub(crate) struct BufferGate {
 
 impl BufferGate {
     pub fn new(index: usize) -> Self {
-        BufferGate { index, _private: () }
+        BufferGate {
+            index,
+            _private: (),
+        }
     }
 
     pub const WIRE_BUFFER_0: usize = 0;
@@ -308,7 +446,10 @@ impl<F: Field> WitnessGenerator<F> for BufferGate {
     }
 
     fn generate(&self, circuit: &Circuit<F>, _witness: &PartialWitness<F>) -> PartialWitness<F> {
-        let buffer_const_target = Wire { gate: self.index, input: Self::WIRE_BUFFER_CONST };
+        let buffer_const_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_BUFFER_CONST,
+        };
 
         let mut witness = PartialWitness::new();
         let const_value = circuit.gate_constants[self.index][<Self as Gate<F>>::PREFIX.len()];
@@ -328,7 +469,10 @@ pub(crate) struct CurveAddGate<C: Curve> {
 
 impl<C: Curve> CurveAddGate<C> {
     pub fn new(index: usize) -> Self {
-        CurveAddGate { index, _phantom: PhantomData }
+        CurveAddGate {
+            index,
+            _phantom: PhantomData,
+        }
     }
 
     pub const WIRE_GROUP_ACC_X: usize = 0;
@@ -421,26 +565,78 @@ impl<C: Curve> Gate<C::BaseField> for CurveAddGate<C> {
 impl<C: Curve> WitnessGenerator<C::BaseField> for CurveAddGate<C> {
     fn dependencies(&self) -> Vec<Target> {
         vec![
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_X }),
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_Y }),
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_SCALAR_ACC_OLD }),
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_ADDEND_X }),
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_ADDEND_Y }),
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_SCALAR_BIT }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_GROUP_ACC_X,
+            }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_GROUP_ACC_Y,
+            }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_SCALAR_ACC_OLD,
+            }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_ADDEND_X,
+            }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_ADDEND_Y,
+            }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_SCALAR_BIT,
+            }),
         ]
     }
 
-    fn generate(&self, circuit: &Circuit<C::BaseField>, witness: &PartialWitness<C::BaseField>) -> PartialWitness<C::BaseField> {
-        let group_acc_old_x_target = Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_X };
-        let group_acc_new_x_target = Wire { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_X };
-        let group_acc_old_y_target = Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
-        let group_acc_new_y_target = Wire { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_Y };
-        let scalar_acc_old_target = Wire { gate: self.index, input: Self::WIRE_SCALAR_ACC_OLD };
-        let scalar_acc_new_target = Wire { gate: self.index, input: Self::WIRE_SCALAR_ACC_NEW };
-        let addend_x_target = Wire { gate: self.index, input: Self::WIRE_ADDEND_X };
-        let addend_y_target = Wire { gate: self.index, input: Self::WIRE_ADDEND_Y };
-        let scalar_bit_target = Wire { gate: self.index, input: Self::WIRE_SCALAR_BIT };
-        let inverse_target = Wire { gate: self.index, input: Self::WIRE_INVERSE };
+    fn generate(
+        &self,
+        circuit: &Circuit<C::BaseField>,
+        witness: &PartialWitness<C::BaseField>,
+    ) -> PartialWitness<C::BaseField> {
+        let group_acc_old_x_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_GROUP_ACC_X,
+        };
+        let group_acc_new_x_target = Wire {
+            gate: self.index + 1,
+            input: Self::WIRE_GROUP_ACC_X,
+        };
+        let group_acc_old_y_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_GROUP_ACC_Y,
+        };
+        let group_acc_new_y_target = Wire {
+            gate: self.index + 1,
+            input: Self::WIRE_GROUP_ACC_Y,
+        };
+        let scalar_acc_old_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_SCALAR_ACC_OLD,
+        };
+        let scalar_acc_new_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_SCALAR_ACC_NEW,
+        };
+        let addend_x_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_ADDEND_X,
+        };
+        let addend_y_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_ADDEND_Y,
+        };
+        let scalar_bit_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_SCALAR_BIT,
+        };
+        let inverse_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_INVERSE,
+        };
 
         let group_acc_old_x = witness.get_wire(group_acc_old_x_target);
         let group_acc_old_y = witness.get_wire(group_acc_old_y_target);
@@ -484,7 +680,10 @@ pub(crate) struct CurveDblGate<C: Curve> {
 
 impl<C: Curve> CurveDblGate<C> {
     pub fn new(index: usize) -> Self {
-        CurveDblGate { index, _phantom: PhantomData }
+        CurveDblGate {
+            index,
+            _phantom: PhantomData,
+        }
     }
 
     pub const WIRE_X_OLD: usize = 0;
@@ -569,17 +768,42 @@ impl<C: Curve> Gate<C::BaseField> for CurveDblGate<C> {
 impl<C: Curve> WitnessGenerator<C::BaseField> for CurveDblGate<C> {
     fn dependencies(&self) -> Vec<Target> {
         vec![
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_X_OLD }),
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_Y_OLD }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_X_OLD,
+            }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_Y_OLD,
+            }),
         ]
     }
 
-    fn generate(&self, circuit: &Circuit<C::BaseField>, witness: &PartialWitness<C::BaseField>) -> PartialWitness<C::BaseField> {
-        let x_old_target = Wire { gate: self.index, input: Self::WIRE_X_OLD };
-        let y_old_target = Wire { gate: self.index, input: Self::WIRE_Y_OLD };
-        let x_new_target = Wire { gate: self.index, input: Self::WIRE_X_NEW };
-        let y_new_target = Wire { gate: self.index, input: Self::WIRE_Y_NEW };
-        let inverse_target = Wire { gate: self.index, input: Self::WIRE_INVERSE };
+    fn generate(
+        &self,
+        circuit: &Circuit<C::BaseField>,
+        witness: &PartialWitness<C::BaseField>,
+    ) -> PartialWitness<C::BaseField> {
+        let x_old_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_X_OLD,
+        };
+        let y_old_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_Y_OLD,
+        };
+        let x_new_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_X_NEW,
+        };
+        let y_new_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_Y_NEW,
+        };
+        let inverse_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_INVERSE,
+        };
 
         let x_old = witness.get_wire(x_old_target);
         let y_old = witness.get_wire(y_old_target);
@@ -607,7 +831,10 @@ pub(crate) struct CurveEndoGate<C: HaloEndomorphismCurve> {
 
 impl<C: HaloEndomorphismCurve> CurveEndoGate<C> {
     pub fn new(index: usize) -> Self {
-        CurveEndoGate { index, _phantom: PhantomData }
+        CurveEndoGate {
+            index,
+            _phantom: PhantomData,
+        }
     }
 
     pub const WIRE_GROUP_ACC_X: usize = 0;
@@ -664,7 +891,9 @@ impl<C: HaloEndomorphismCurve> Gate<C::BaseField> for CurveEndoGate<C> {
         vec![
             computed_x3 - x3,
             computed_y3 - y3,
-            scalar_acc_unsigned_new - scalar_acc_unsigned_old.quadruple() + scalar_bit_1.double() + scalar_bit_0,
+            scalar_acc_unsigned_new - scalar_acc_unsigned_old.quadruple()
+                + scalar_bit_1.double()
+                + scalar_bit_0,
             scalar_acc_signed_new - scalar_acc_signed_old.double() + signed_limb,
             scalar_bit_0 * (scalar_bit_0 - one),
             scalar_bit_1 * (scalar_bit_1 - one),
@@ -716,13 +945,15 @@ impl<C: HaloEndomorphismCurve> Gate<C::BaseField> for CurveEndoGate<C> {
         let computed_y3 = builder.mul_sub(lambda, x1_minus_x3, y1);
 
         let unsigned_limb = builder.mul_add(scalar_bit_1, two, scalar_bit_0);
-        let computed_scalar_acc_unsigned_new = builder.mul_add(scalar_acc_unsigned_old, four, unsigned_limb);
+        let computed_scalar_acc_unsigned_new =
+            builder.mul_add(scalar_acc_unsigned_old, four, unsigned_limb);
 
         // This is based on Algorithm 2 in the Halo paper.
         let signed_limb_multiplier = builder.mul_add(zeta_minus_one, scalar_bit_1, one);
         let signed_limb_sign = builder.mul_sub(scalar_bit_0, two, one);
         let signed_limb = builder.mul(signed_limb_sign, signed_limb_multiplier);
-        let computed_scalar_acc_signed_new = builder.mul_add(scalar_acc_signed_old, two, signed_limb);
+        let computed_scalar_acc_signed_new =
+            builder.mul_add(scalar_acc_signed_old, two, signed_limb);
 
         vec![
             builder.sub(computed_x3, x3),
@@ -739,33 +970,100 @@ impl<C: HaloEndomorphismCurve> Gate<C::BaseField> for CurveEndoGate<C> {
 impl<C: HaloEndomorphismCurve> WitnessGenerator<C::BaseField> for CurveEndoGate<C> {
     fn dependencies(&self) -> Vec<Target> {
         vec![
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_X }),
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_Y }),
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_SCALAR_ACC_UNSIGNED }),
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_SCALAR_ACC_SIGNED }),
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_ADDEND_X }),
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_ADDEND_Y }),
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_SCALAR_BIT_0 }),
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_SCALAR_BIT_1 }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_GROUP_ACC_X,
+            }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_GROUP_ACC_Y,
+            }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_SCALAR_ACC_UNSIGNED,
+            }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_SCALAR_ACC_SIGNED,
+            }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_ADDEND_X,
+            }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_ADDEND_Y,
+            }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_SCALAR_BIT_0,
+            }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_SCALAR_BIT_1,
+            }),
         ]
     }
 
-    fn generate(&self, circuit: &Circuit<C::BaseField>, witness: &PartialWitness<C::BaseField>) -> PartialWitness<C::BaseField> {
-        let group_acc_old_x_target = Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_X };
-        let group_acc_new_x_target = Wire { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_X };
-        let group_acc_old_y_target = Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
-        let group_acc_new_y_target = Wire { gate: self.index + 1, input: Self::WIRE_GROUP_ACC_Y };
+    fn generate(
+        &self,
+        circuit: &Circuit<C::BaseField>,
+        witness: &PartialWitness<C::BaseField>,
+    ) -> PartialWitness<C::BaseField> {
+        let group_acc_old_x_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_GROUP_ACC_X,
+        };
+        let group_acc_new_x_target = Wire {
+            gate: self.index + 1,
+            input: Self::WIRE_GROUP_ACC_X,
+        };
+        let group_acc_old_y_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_GROUP_ACC_Y,
+        };
+        let group_acc_new_y_target = Wire {
+            gate: self.index + 1,
+            input: Self::WIRE_GROUP_ACC_Y,
+        };
 
-        let scalar_acc_unsigned_old_target = Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
-        let scalar_acc_unsigned_new_target = Wire { gate: self.index + GRID_WIDTH, input: Self::WIRE_GROUP_ACC_Y };
-        let scalar_acc_signed_old_target = Wire { gate: self.index, input: Self::WIRE_GROUP_ACC_Y };
-        let scalar_acc_signed_new_target = Wire { gate: self.index + GRID_WIDTH, input: Self::WIRE_GROUP_ACC_Y };
+        let scalar_acc_unsigned_old_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_GROUP_ACC_Y,
+        };
+        let scalar_acc_unsigned_new_target = Wire {
+            gate: self.index + GRID_WIDTH,
+            input: Self::WIRE_GROUP_ACC_Y,
+        };
+        let scalar_acc_signed_old_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_GROUP_ACC_Y,
+        };
+        let scalar_acc_signed_new_target = Wire {
+            gate: self.index + GRID_WIDTH,
+            input: Self::WIRE_GROUP_ACC_Y,
+        };
 
-        let addend_x_target = Wire { gate: self.index, input: Self::WIRE_ADDEND_X };
-        let addend_y_target = Wire { gate: self.index, input: Self::WIRE_ADDEND_Y };
-        let scalar_bit_0_target = Wire { gate: self.index, input: Self::WIRE_SCALAR_BIT_0 };
-        let scalar_bit_1_target = Wire { gate: self.index, input: Self::WIRE_SCALAR_BIT_1 };
-        let inverse_target = Wire { gate: self.index, input: Self::WIRE_INVERSE };
+        let addend_x_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_ADDEND_X,
+        };
+        let addend_y_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_ADDEND_Y,
+        };
+        let scalar_bit_0_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_SCALAR_BIT_0,
+        };
+        let scalar_bit_1_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_SCALAR_BIT_1,
+        };
+        let inverse_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_INVERSE,
+        };
 
         let group_acc_old_x = witness.get_wire(group_acc_old_x_target);
         let group_acc_old_y = witness.get_wire(group_acc_old_y_target);
@@ -793,8 +1091,8 @@ impl<C: HaloEndomorphismCurve> WitnessGenerator<C::BaseField> for CurveEndoGate<
         let s_i = AffinePoint::nonzero(s_i_x, s_i_y);
         let group_acc_new = group_acc_old + s_i;
 
-        let scalar_acc_unsigned_new = scalar_acc_unsigned_old.quadruple()
-            + scalar_bit_0 + scalar_bit_1.double();
+        let scalar_acc_unsigned_new =
+            scalar_acc_unsigned_old.quadruple() + scalar_bit_0 + scalar_bit_1.double();
 
         // This is based on Algorithm 2 in the Halo paper.
         let mut scalar_acc_signed_limb = if scalar_bit_0 == C::BaseField::ONE {
@@ -832,7 +1130,10 @@ pub(crate) struct RescueStepAGate<F: Field> {
 
 impl<F: Field> RescueStepAGate<F> {
     pub fn new(index: usize) -> Self {
-        RescueStepAGate { index, _phantom: PhantomData }
+        RescueStepAGate {
+            index,
+            _phantom: PhantomData,
+        }
     }
 
     pub const WIRE_INPUT_0: usize = 0;
@@ -867,9 +1168,18 @@ impl<F: Field> Gate<F> for RescueStepAGate<F> {
         let root_1 = local_wire_values[Self::WIRE_ROOT_1];
         let root_2 = local_wire_values[Self::WIRE_ROOT_2];
 
-        let computed_out_0 = mds::<F>(3, 0, 0) * root_0 + mds::<F>(3, 0, 1) * root_1 + mds::<F>(3, 0, 2) * root_2 + local_constant_values[Self::PREFIX.len()];
-        let computed_out_1 = mds::<F>(3, 1, 0) * root_0 + mds::<F>(3, 1, 1) * root_1 + mds::<F>(3, 1, 2) * root_2 + local_constant_values[Self::PREFIX.len() + 1];
-        let computed_out_2 = mds::<F>(3, 2, 0) * root_0 + mds::<F>(3, 2, 1) * root_1 + mds::<F>(3, 2, 2) * root_2 + local_constant_values[Self::PREFIX.len() + 2];
+        let computed_out_0 = mds::<F>(3, 0, 0) * root_0
+            + mds::<F>(3, 0, 1) * root_1
+            + mds::<F>(3, 0, 2) * root_2
+            + local_constant_values[Self::PREFIX.len()];
+        let computed_out_1 = mds::<F>(3, 1, 0) * root_0
+            + mds::<F>(3, 1, 1) * root_1
+            + mds::<F>(3, 1, 2) * root_2
+            + local_constant_values[Self::PREFIX.len() + 1];
+        let computed_out_2 = mds::<F>(3, 2, 0) * root_0
+            + mds::<F>(3, 2, 1) * root_1
+            + mds::<F>(3, 2, 2) * root_2
+            + local_constant_values[Self::PREFIX.len() + 2];
 
         vec![
             root_0.exp_u32(5) - in_0,
@@ -922,9 +1232,24 @@ impl<F: Field> Gate<F> for RescueStepAGate<F> {
         let mds_21_root_1 = builder.mul(mds_21, root_1);
         let mds_22_root_2 = builder.mul(mds_22, root_2);
 
-        let computed_out_0 = builder.add_many(&[mds_00_root_0, mds_01_root_1, mds_02_root_2, local_constant_values[Self::PREFIX.len()]]);
-        let computed_out_1 = builder.add_many(&[mds_10_root_0, mds_11_root_1, mds_12_root_2, local_constant_values[Self::PREFIX.len() + 1]]);
-        let computed_out_2 = builder.add_many(&[mds_20_root_0, mds_21_root_1, mds_22_root_2, local_constant_values[Self::PREFIX.len() + 2]]);
+        let computed_out_0 = builder.add_many(&[
+            mds_00_root_0,
+            mds_01_root_1,
+            mds_02_root_2,
+            local_constant_values[Self::PREFIX.len()],
+        ]);
+        let computed_out_1 = builder.add_many(&[
+            mds_10_root_0,
+            mds_11_root_1,
+            mds_12_root_2,
+            local_constant_values[Self::PREFIX.len() + 1],
+        ]);
+        let computed_out_2 = builder.add_many(&[
+            mds_20_root_0,
+            mds_21_root_1,
+            mds_22_root_2,
+            local_constant_values[Self::PREFIX.len() + 2],
+        ]);
 
         vec![
             builder.sub(computed_in_0, in_0),
@@ -940,25 +1265,58 @@ impl<F: Field> Gate<F> for RescueStepAGate<F> {
 impl<F: Field> WitnessGenerator<F> for RescueStepAGate<F> {
     fn dependencies(&self) -> Vec<Target> {
         vec![
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_INPUT_0 }),
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_INPUT_1 }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_INPUT_0,
+            }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_INPUT_1,
+            }),
         ]
     }
 
     fn generate(&self, circuit: &Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
         let constants = &circuit.gate_constants[self.index];
 
-        let in_0_target = Wire { gate: self.index, input: Self::WIRE_INPUT_0 };
-        let in_1_target = Wire { gate: self.index, input: Self::WIRE_INPUT_1 };
-        let in_2_target = Wire { gate: self.index, input: Self::WIRE_INPUT_2 };
+        let in_0_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_INPUT_0,
+        };
+        let in_1_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_INPUT_1,
+        };
+        let in_2_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_INPUT_2,
+        };
 
-        let root_0_target = Wire { gate: self.index, input: Self::WIRE_ROOT_0 };
-        let root_1_target = Wire { gate: self.index, input: Self::WIRE_ROOT_1 };
-        let root_2_target = Wire { gate: self.index, input: Self::WIRE_ROOT_2 };
+        let root_0_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_ROOT_0,
+        };
+        let root_1_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_ROOT_1,
+        };
+        let root_2_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_ROOT_2,
+        };
 
-        let out_0_target = Wire { gate: self.index + 1, input: Self::WIRE_INPUT_0 };
-        let out_1_target = Wire { gate: self.index + 1, input: Self::WIRE_INPUT_1 };
-        let out_2_target = Wire { gate: self.index + 1, input: Self::WIRE_INPUT_2 };
+        let out_0_target = Wire {
+            gate: self.index + 1,
+            input: Self::WIRE_INPUT_0,
+        };
+        let out_1_target = Wire {
+            gate: self.index + 1,
+            input: Self::WIRE_INPUT_1,
+        };
+        let out_2_target = Wire {
+            gate: self.index + 1,
+            input: Self::WIRE_INPUT_2,
+        };
 
         let in_0 = witness.get_wire(in_0_target);
         let in_1 = witness.get_wire(in_1_target);
@@ -968,9 +1326,18 @@ impl<F: Field> WitnessGenerator<F> for RescueStepAGate<F> {
         let root_1 = in_1.kth_root_u32(5);
         let root_2 = in_2.kth_root_u32(5);
 
-        let out_0 = mds::<F>(3, 0, 0) * root_0 + mds::<F>(3, 0, 1) * root_1 + mds::<F>(3, 0, 2) * root_2 + constants[Self::PREFIX.len()];
-        let out_1 = mds::<F>(3, 1, 0) * root_0 + mds::<F>(3, 1, 1) * root_1 + mds::<F>(3, 1, 2) * root_2 + constants[Self::PREFIX.len() + 1];
-        let out_2 = mds::<F>(3, 2, 0) * root_0 + mds::<F>(3, 2, 1) * root_1 + mds::<F>(3, 2, 2) * root_2 + constants[Self::PREFIX.len() + 2];
+        let out_0 = mds::<F>(3, 0, 0) * root_0
+            + mds::<F>(3, 0, 1) * root_1
+            + mds::<F>(3, 0, 2) * root_2
+            + constants[Self::PREFIX.len()];
+        let out_1 = mds::<F>(3, 1, 0) * root_0
+            + mds::<F>(3, 1, 1) * root_1
+            + mds::<F>(3, 1, 2) * root_2
+            + constants[Self::PREFIX.len() + 1];
+        let out_2 = mds::<F>(3, 2, 0) * root_0
+            + mds::<F>(3, 2, 1) * root_1
+            + mds::<F>(3, 2, 2) * root_2
+            + constants[Self::PREFIX.len() + 2];
 
         let mut result = PartialWitness::new();
         result.set_wire(root_0_target, root_0);
@@ -991,7 +1358,10 @@ pub(crate) struct RescueStepBGate<F: Field> {
 
 impl<F: Field> RescueStepBGate<F> {
     pub fn new(index: usize) -> Self {
-        RescueStepBGate { index, _phantom: PhantomData }
+        RescueStepBGate {
+            index,
+            _phantom: PhantomData,
+        }
     }
 
     pub const WIRE_INPUT_0: usize = 0;
@@ -1024,9 +1394,18 @@ impl<F: Field> Gate<F> for RescueStepBGate<F> {
         let in_1_exp_5 = in_1.exp_u32(5);
         let in_2_exp_5 = in_2.exp_u32(5);
 
-        let computed_out_0 = mds::<F>(3, 0, 0) * in_0_exp_5 + mds::<F>(3, 0, 1) * in_1_exp_5 + mds::<F>(3, 0, 2) * in_2_exp_5 + local_constant_values[Self::PREFIX.len()];
-        let computed_out_1 = mds::<F>(3, 1, 0) * in_0_exp_5 + mds::<F>(3, 1, 1) * in_1_exp_5 + mds::<F>(3, 1, 2) * in_2_exp_5 + local_constant_values[Self::PREFIX.len() + 1];
-        let computed_out_2 = mds::<F>(3, 2, 0) * in_0_exp_5 + mds::<F>(3, 2, 1) * in_1_exp_5 + mds::<F>(3, 2, 2) * in_2_exp_5 + local_constant_values[Self::PREFIX.len() + 2];
+        let computed_out_0 = mds::<F>(3, 0, 0) * in_0_exp_5
+            + mds::<F>(3, 0, 1) * in_1_exp_5
+            + mds::<F>(3, 0, 2) * in_2_exp_5
+            + local_constant_values[Self::PREFIX.len()];
+        let computed_out_1 = mds::<F>(3, 1, 0) * in_0_exp_5
+            + mds::<F>(3, 1, 1) * in_1_exp_5
+            + mds::<F>(3, 1, 2) * in_2_exp_5
+            + local_constant_values[Self::PREFIX.len() + 1];
+        let computed_out_2 = mds::<F>(3, 2, 0) * in_0_exp_5
+            + mds::<F>(3, 2, 1) * in_1_exp_5
+            + mds::<F>(3, 2, 2) * in_2_exp_5
+            + local_constant_values[Self::PREFIX.len() + 2];
 
         vec![
             computed_out_0 - out_0,
@@ -1073,9 +1452,24 @@ impl<F: Field> Gate<F> for RescueStepBGate<F> {
         let mds_21_in_1_exp_5 = builder.mul(mds_21, in_1_exp_5);
         let mds_22_in_2_exp_5 = builder.mul(mds_22, in_2_exp_5);
 
-        let computed_out_0 = builder.add_many(&[mds_00_in_0_exp_5, mds_01_in_1_exp_5, mds_02_in_2_exp_5, local_constant_values[Self::PREFIX.len()]]);
-        let computed_out_1 = builder.add_many(&[mds_10_in_0_exp_5, mds_11_in_1_exp_5, mds_12_in_2_exp_5, local_constant_values[Self::PREFIX.len() + 1]]);
-        let computed_out_2 = builder.add_many(&[mds_20_in_0_exp_5, mds_21_in_1_exp_5, mds_22_in_2_exp_5, local_constant_values[Self::PREFIX.len() + 2]]);
+        let computed_out_0 = builder.add_many(&[
+            mds_00_in_0_exp_5,
+            mds_01_in_1_exp_5,
+            mds_02_in_2_exp_5,
+            local_constant_values[Self::PREFIX.len()],
+        ]);
+        let computed_out_1 = builder.add_many(&[
+            mds_10_in_0_exp_5,
+            mds_11_in_1_exp_5,
+            mds_12_in_2_exp_5,
+            local_constant_values[Self::PREFIX.len() + 1],
+        ]);
+        let computed_out_2 = builder.add_many(&[
+            mds_20_in_0_exp_5,
+            mds_21_in_1_exp_5,
+            mds_22_in_2_exp_5,
+            local_constant_values[Self::PREFIX.len() + 2],
+        ]);
 
         vec![
             builder.sub(computed_out_0, out_0),
@@ -1088,22 +1482,49 @@ impl<F: Field> Gate<F> for RescueStepBGate<F> {
 impl<F: Field> WitnessGenerator<F> for RescueStepBGate<F> {
     fn dependencies(&self) -> Vec<Target> {
         vec![
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_INPUT_0 }),
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_INPUT_1 }),
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_INPUT_2 }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_INPUT_0,
+            }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_INPUT_1,
+            }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_INPUT_2,
+            }),
         ]
     }
 
     fn generate(&self, circuit: &Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
         let constants = &circuit.gate_constants[self.index];
 
-        let in_0_target = Wire { gate: self.index, input: Self::WIRE_INPUT_0 };
-        let in_1_target = Wire { gate: self.index, input: Self::WIRE_INPUT_1 };
-        let in_2_target = Wire { gate: self.index, input: Self::WIRE_INPUT_2 };
+        let in_0_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_INPUT_0,
+        };
+        let in_1_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_INPUT_1,
+        };
+        let in_2_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_INPUT_2,
+        };
 
-        let out_0_target = Wire { gate: self.index + 1, input: Self::WIRE_INPUT_0 };
-        let out_1_target = Wire { gate: self.index + 1, input: Self::WIRE_INPUT_1 };
-        let out_2_target = Wire { gate: self.index + 1, input: Self::WIRE_INPUT_2 };
+        let out_0_target = Wire {
+            gate: self.index + 1,
+            input: Self::WIRE_INPUT_0,
+        };
+        let out_1_target = Wire {
+            gate: self.index + 1,
+            input: Self::WIRE_INPUT_1,
+        };
+        let out_2_target = Wire {
+            gate: self.index + 1,
+            input: Self::WIRE_INPUT_2,
+        };
 
         let in_0 = witness.get_wire(in_0_target);
         let in_1 = witness.get_wire(in_1_target);
@@ -1113,9 +1534,18 @@ impl<F: Field> WitnessGenerator<F> for RescueStepBGate<F> {
         let exp_1 = in_1.exp_u32(5);
         let exp_2 = in_2.exp_u32(5);
 
-        let out_0 = mds::<F>(3, 0, 0) * exp_0 + mds::<F>(3, 0, 1) * exp_1 + mds::<F>(3, 0, 2) * exp_2 + constants[Self::PREFIX.len()];
-        let out_1 = mds::<F>(3, 1, 0) * exp_0 + mds::<F>(3, 1, 1) * exp_1 + mds::<F>(3, 1, 2) * exp_2 + constants[Self::PREFIX.len() + 1];
-        let out_2 = mds::<F>(3, 2, 0) * exp_0 + mds::<F>(3, 2, 1) * exp_1 + mds::<F>(3, 2, 2) * exp_2 + constants[Self::PREFIX.len() + 2];
+        let out_0 = mds::<F>(3, 0, 0) * exp_0
+            + mds::<F>(3, 0, 1) * exp_1
+            + mds::<F>(3, 0, 2) * exp_2
+            + constants[Self::PREFIX.len()];
+        let out_1 = mds::<F>(3, 1, 0) * exp_0
+            + mds::<F>(3, 1, 1) * exp_1
+            + mds::<F>(3, 1, 2) * exp_2
+            + constants[Self::PREFIX.len() + 1];
+        let out_2 = mds::<F>(3, 2, 0) * exp_0
+            + mds::<F>(3, 2, 1) * exp_1
+            + mds::<F>(3, 2, 2) * exp_2
+            + constants[Self::PREFIX.len() + 2];
 
         let mut result = PartialWitness::new();
         result.set_wire(out_0_target, out_0);
@@ -1134,7 +1564,10 @@ pub(crate) struct Base4SumGate {
 
 impl Base4SumGate {
     pub fn new(index: usize) -> Self {
-        Base4SumGate { index, _private: () }
+        Base4SumGate {
+            index,
+            _private: (),
+        }
     }
 
     pub const WIRE_ACC_OLD: usize = 0;
@@ -1156,9 +1589,9 @@ impl<F: Field> Gate<F> for Base4SumGate {
     ) -> Vec<F> {
         let acc_old = local_wire_values[Self::WIRE_ACC_OLD];
         let acc_new = local_wire_values[Self::WIRE_ACC_NEW];
-        let limbs: Vec<F> = (0..Self::NUM_LIMBS).map(
-            |i| local_wire_values[Self::WIRE_LIMB_0 + i]
-        ).collect();
+        let limbs: Vec<F> = (0..Self::NUM_LIMBS)
+            .map(|i| local_wire_values[Self::WIRE_LIMB_0 + i])
+            .collect();
 
         let mut computed_acc_new = acc_old;
         for &limb in &limbs {
@@ -1187,9 +1620,9 @@ impl<F: Field> Gate<F> for Base4SumGate {
 
         let acc_old = local_wire_values[Self::WIRE_ACC_OLD];
         let acc_new = local_wire_values[Self::WIRE_ACC_NEW];
-        let limbs: Vec<Target> = (0..Self::NUM_LIMBS).map(
-            |i| local_wire_values[Self::WIRE_LIMB_0 + i]
-        ).collect();
+        let limbs: Vec<Target> = (0..Self::NUM_LIMBS)
+            .map(|i| local_wire_values[Self::WIRE_LIMB_0 + i])
+            .collect();
 
         let mut computed_acc_new = acc_old;
         for &limb in &limbs {
@@ -1235,7 +1668,10 @@ pub(crate) struct ArithmeticGate<F: Field> {
 
 impl<F: Field> ArithmeticGate<F> {
     pub fn new(index: usize) -> Self {
-        ArithmeticGate { index, _phantom: PhantomData }
+        ArithmeticGate {
+            index,
+            _phantom: PhantomData,
+        }
     }
 
     pub const WIRE_MULTIPLICAND_0: usize = 0;
@@ -1262,7 +1698,8 @@ impl<F: Field> Gate<F> for ArithmeticGate<F> {
         let multiplicand_1 = local_wire_values[Self::WIRE_MULTIPLICAND_1];
         let addend = local_wire_values[Self::WIRE_ADDEND];
         let output = local_wire_values[Self::WIRE_OUTPUT];
-        let computed_output = const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend + const_2;
+        let computed_output =
+            const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend + const_2;
         vec![computed_output - output]
     }
 
@@ -1291,17 +1728,38 @@ impl<F: Field> Gate<F> for ArithmeticGate<F> {
 impl<F: Field> WitnessGenerator<F> for ArithmeticGate<F> {
     fn dependencies(&self) -> Vec<Target> {
         vec![
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_MULTIPLICAND_0 }),
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_MULTIPLICAND_1 }),
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_ADDEND }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_MULTIPLICAND_0,
+            }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_MULTIPLICAND_1,
+            }),
+            Target::Wire(Wire {
+                gate: self.index,
+                input: Self::WIRE_ADDEND,
+            }),
         ]
     }
 
     fn generate(&self, circuit: &Circuit<F>, witness: &PartialWitness<F>) -> PartialWitness<F> {
-        let multiplicand_0_target = Wire { gate: self.index, input: Self::WIRE_MULTIPLICAND_0 };
-        let multiplicand_1_target = Wire { gate: self.index, input: Self::WIRE_MULTIPLICAND_1 };
-        let addend_target = Wire { gate: self.index, input: Self::WIRE_ADDEND };
-        let output_target = Wire { gate: self.index, input: Self::WIRE_OUTPUT };
+        let multiplicand_0_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_MULTIPLICAND_0,
+        };
+        let multiplicand_1_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_MULTIPLICAND_1,
+        };
+        let addend_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_ADDEND,
+        };
+        let output_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_OUTPUT,
+        };
 
         let const_0 = circuit.gate_constants[self.index][Self::PREFIX.len()];
         let const_1 = circuit.gate_constants[self.index][Self::PREFIX.len() + 1];

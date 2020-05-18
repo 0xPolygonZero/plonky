@@ -1,5 +1,5 @@
-use crate::{AffinePoint, Bls12377Base, Bls12377Scalar, Curve};
 use crate::field::Field;
+use crate::{AffinePoint, Bls12377Base, Bls12377Scalar, Curve};
 
 // Parameters taken from the implementation of Bls12-377 in Zexe found here:
 // https://github.com/scipr-lab/zexe/blob/master/algebra/src/curves/bls12_377/g1.rs
@@ -22,14 +22,26 @@ impl Curve for Bls12377 {
 
 /// 81937999373150964239938255573465948239988671502647976594219695644855304257327692006745978603320413799295628339695
 const BLS12_377_GENERATOR_X: Bls12377Base = Bls12377Base {
-    limbs: [2742467569752756724, 14217256487979144792, 6635299530028159197, 8509097278468658840,
-        14518893593143693938, 46181716169194829]
+    limbs: [
+        2742467569752756724,
+        14217256487979144792,
+        6635299530028159197,
+        8509097278468658840,
+        14518893593143693938,
+        46181716169194829,
+    ],
 };
 
 /// 241266749859715473739788878240585681733927191168601896383759122102112907357779751001206799952863815012735208165030
 const BLS12_377_GENERATOR_Y: Bls12377Base = Bls12377Base {
-    limbs: [9336971515457667571, 28021381849722296, 18085035374859187530, 14013031479170682136,
-        3369780711397861396, 35370409237953649]
+    limbs: [
+        9336971515457667571,
+        28021381849722296,
+        18085035374859187530,
+        14013031479170682136,
+        3369780711397861396,
+        35370409237953649,
+    ],
 };
 
 #[cfg(test)]
@@ -48,7 +60,10 @@ mod tests {
     #[test]
     fn test_g1_multiplication() {
         let lhs = Bls12377Scalar::from_canonical([11111111, 22222222, 33333333, 44444444]);
-        assert_eq!(lhs * Bls12377::GENERATOR_PROJECTIVE, mul_naive(lhs, Bls12377::GENERATOR_PROJECTIVE));
+        assert_eq!(
+            lhs * Bls12377::GENERATOR_PROJECTIVE,
+            mul_naive(lhs, Bls12377::GENERATOR_PROJECTIVE)
+        );
     }
 
     /// A simple, somewhat inefficient implementation of multiplication which is used as a reference

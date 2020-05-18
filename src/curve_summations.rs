@@ -3,14 +3,14 @@ use std::iter::Sum;
 use crate::{AffinePoint, Curve, Field, ProjectivePoint};
 
 impl<C: Curve> Sum<AffinePoint<C>> for ProjectivePoint<C> {
-    fn sum<I: Iterator<Item=AffinePoint<C>>>(iter: I) -> ProjectivePoint<C> {
+    fn sum<I: Iterator<Item = AffinePoint<C>>>(iter: I) -> ProjectivePoint<C> {
         let points: Vec<_> = iter.collect();
         affine_summation_best(points)
     }
 }
 
 impl<C: Curve> Sum for ProjectivePoint<C> {
-    fn sum<I: Iterator<Item=ProjectivePoint<C>>>(iter: I) -> ProjectivePoint<C> {
+    fn sum<I: Iterator<Item = ProjectivePoint<C>>>(iter: I) -> ProjectivePoint<C> {
         iter.fold(ProjectivePoint::ZERO, |acc, x| acc + x)
     }
 }
@@ -21,10 +21,10 @@ pub fn affine_summation_best<C: Curve>(summation: Vec<AffinePoint<C>>) -> Projec
     result[0]
 }
 
-pub fn affine_multisummation_best<C: Curve>(summations: Vec<Vec<AffinePoint<C>>>) -> Vec<ProjectivePoint<C>> {
-    let pairwise_sums: usize = summations.iter()
-        .map(|summation| summation.len() / 2)
-        .sum();
+pub fn affine_multisummation_best<C: Curve>(
+    summations: Vec<Vec<AffinePoint<C>>>,
+) -> Vec<ProjectivePoint<C>> {
+    let pairwise_sums: usize = summations.iter().map(|summation| summation.len() / 2).sum();
 
     // This threshold is chosen based on data from the summation benchmarks.
     if pairwise_sums < 70 {
@@ -36,8 +36,11 @@ pub fn affine_multisummation_best<C: Curve>(summations: Vec<Vec<AffinePoint<C>>>
 
 /// Adds each pair of points using an affine + affine = projective formula, then adds up the
 /// intermediate sums using a projective formula.
-pub fn affine_multisummation_pairwise<C: Curve>(summations: Vec<Vec<AffinePoint<C>>>) -> Vec<ProjectivePoint<C>> {
-    summations.into_iter()
+pub fn affine_multisummation_pairwise<C: Curve>(
+    summations: Vec<Vec<AffinePoint<C>>>,
+) -> Vec<ProjectivePoint<C>> {
+    summations
+        .into_iter()
         .map(affine_summation_pairwise)
         .collect()
 }
@@ -54,12 +57,16 @@ pub fn affine_summation_pairwise<C: Curve>(points: Vec<AffinePoint<C>>) -> Proje
         }
     }
     // TODO: Avoid copying (deref)
-    reduced_points.iter().fold(ProjectivePoint::ZERO, |sum, x| sum + *x)
+    reduced_points
+        .iter()
+        .fold(ProjectivePoint::ZERO, |sum, x| sum + *x)
 }
 
 /// Computes several summations of affine points by applying an affine group law, except that the
 /// divisions are batched via Montgomery's trick.
-pub fn affine_summation_batch_inversion<C: Curve>(summation: Vec<AffinePoint<C>>) -> ProjectivePoint<C> {
+pub fn affine_summation_batch_inversion<C: Curve>(
+    summation: Vec<AffinePoint<C>>,
+) -> ProjectivePoint<C> {
     let result = affine_multisummation_batch_inversion(vec![summation]);
     debug_assert_eq!(result.len(), 1);
     result[0]
@@ -67,7 +74,9 @@ pub fn affine_summation_batch_inversion<C: Curve>(summation: Vec<AffinePoint<C>>
 
 /// Computes several summations of affine points by applying an affine group law, except that the
 /// divisions are batched via Montgomery's trick.
-pub fn affine_multisummation_batch_inversion<C: Curve>(summations: Vec<Vec<AffinePoint<C>>>) -> Vec<ProjectivePoint<C>> {
+pub fn affine_multisummation_batch_inversion<C: Curve>(
+    summations: Vec<Vec<AffinePoint<C>>>,
+) -> Vec<ProjectivePoint<C>> {
     let mut elements_to_invert = Vec::new();
 
     // For each pair of points, (x1, y1) and (x2, y2), that we're going to add later, we want to
@@ -80,8 +89,16 @@ pub fn affine_multisummation_batch_inversion<C: Curve>(summations: Vec<Vec<Affin
         for i in (0..range_end).step_by(2) {
             let p1 = summation[i];
             let p2 = summation[i + 1];
-            let AffinePoint { x: x1, y: y1, zero: zero1 } = p1;
-            let AffinePoint { x: x2, y: _y2, zero: zero2 } = p2;
+            let AffinePoint {
+                x: x1,
+                y: y1,
+                zero: zero1,
+            } = p1;
+            let AffinePoint {
+                x: x2,
+                y: _y2,
+                zero: zero2,
+            } = p2;
 
             if zero1 || zero2 || p1 == -p2 {
                 // These are trivial cases where we won't need any inverse.
@@ -93,7 +110,8 @@ pub fn affine_multisummation_batch_inversion<C: Curve>(summations: Vec<Vec<Affin
         }
     }
 
-    let inverses: Vec<C::BaseField> = C::BaseField::batch_multiplicative_inverse(&elements_to_invert);
+    let inverses: Vec<C::BaseField> =
+        C::BaseField::batch_multiplicative_inverse(&elements_to_invert);
 
     let mut all_reduced_points = Vec::with_capacity(summations.len());
     let mut inverse_index = 0;
@@ -107,8 +125,16 @@ pub fn affine_multisummation_batch_inversion<C: Curve>(summations: Vec<Vec<Affin
         for i in (0..range_end).step_by(2) {
             let p1 = summation[i];
             let p2 = summation[i + 1];
-            let AffinePoint { x: x1, y: y1, zero: zero1 } = p1;
-            let AffinePoint { x: x2, y: y2, zero: zero2 } = p2;
+            let AffinePoint {
+                x: x1,
+                y: y1,
+                zero: zero1,
+            } = p1;
+            let AffinePoint {
+                x: x2,
+                y: y2,
+                zero: zero2,
+            } = p2;
 
             let sum = if zero1 {
                 p2
@@ -159,7 +185,10 @@ pub fn affine_multisummation_batch_inversion<C: Curve>(summations: Vec<Vec<Affin
 
 #[cfg(test)]
 mod tests {
-    use crate::{affine_summation_batch_inversion, affine_summation_pairwise, Bls12377, Curve, ProjectivePoint};
+    use crate::{
+        affine_summation_batch_inversion, affine_summation_pairwise, Bls12377, Curve,
+        ProjectivePoint,
+    };
 
     #[test]
     fn test_pairwise_affine_summation() {
@@ -168,18 +197,39 @@ mod tests {
         let g3_affine = (g_affine + g_affine + g_affine).to_affine();
         let g2_proj = g2_affine.to_projective();
         let g3_proj = g3_affine.to_projective();
-        assert_eq!(affine_summation_pairwise::<Bls12377>(vec![g_affine, g_affine]), g2_proj);
-        assert_eq!(affine_summation_pairwise::<Bls12377>(vec![g_affine, g2_affine]), g3_proj);
-        assert_eq!(affine_summation_pairwise::<Bls12377>(vec![g_affine, g_affine, g_affine]), g3_proj);
-        assert_eq!(affine_summation_pairwise::<Bls12377>(vec![]), ProjectivePoint::ZERO);
+        assert_eq!(
+            affine_summation_pairwise::<Bls12377>(vec![g_affine, g_affine]),
+            g2_proj
+        );
+        assert_eq!(
+            affine_summation_pairwise::<Bls12377>(vec![g_affine, g2_affine]),
+            g3_proj
+        );
+        assert_eq!(
+            affine_summation_pairwise::<Bls12377>(vec![g_affine, g_affine, g_affine]),
+            g3_proj
+        );
+        assert_eq!(
+            affine_summation_pairwise::<Bls12377>(vec![]),
+            ProjectivePoint::ZERO
+        );
     }
 
     #[test]
     fn test_pairwise_affine_summation_batch_inversion() {
         let g = Bls12377::GENERATOR_AFFINE;
         let g_proj = g.to_projective();
-        assert_eq!(affine_summation_batch_inversion::<Bls12377>(vec![g, g]), g_proj + g_proj);
-        assert_eq!(affine_summation_batch_inversion::<Bls12377>(vec![g, g, g]), g_proj + g_proj + g_proj);
-        assert_eq!(affine_summation_batch_inversion::<Bls12377>(vec![]), ProjectivePoint::ZERO);
+        assert_eq!(
+            affine_summation_batch_inversion::<Bls12377>(vec![g, g]),
+            g_proj + g_proj
+        );
+        assert_eq!(
+            affine_summation_batch_inversion::<Bls12377>(vec![g, g, g]),
+            g_proj + g_proj + g_proj
+        );
+        assert_eq!(
+            affine_summation_batch_inversion::<Bls12377>(vec![]),
+            ProjectivePoint::ZERO
+        );
     }
 }

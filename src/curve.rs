@@ -55,7 +55,12 @@ impl<C: Curve> AffinePoint<C> {
 
     pub fn to_projective(&self) -> ProjectivePoint<C> {
         let Self { x, y, zero } = *self;
-        ProjectivePoint { x, y, z: C::BaseField::ONE, zero }
+        ProjectivePoint {
+            x,
+            y,
+            z: C::BaseField::ONE,
+            zero,
+        }
     }
 
     pub fn double(&self) -> Self {
@@ -66,8 +71,16 @@ impl<C: Curve> AffinePoint<C> {
 
 impl<C: Curve> PartialEq for AffinePoint<C> {
     fn eq(&self, other: &Self) -> bool {
-        let AffinePoint { x: x1, y: y1, zero: zero1 } = *self;
-        let AffinePoint { x: x2, y: y2, zero: zero2 } = *other;
+        let AffinePoint {
+            x: x1,
+            y: y1,
+            zero: zero1,
+        } = *self;
+        let AffinePoint {
+            x: x2,
+            y: y2,
+            zero: zero2,
+        } = *other;
         if zero1 || zero2 {
             return zero1 == zero2;
         }
@@ -95,7 +108,12 @@ impl<C: Curve> ProjectivePoint<C> {
     };
 
     pub fn nonzero(x: C::BaseField, y: C::BaseField, z: C::BaseField) -> Self {
-        let point = Self { x, y, z, zero: false };
+        let point = Self {
+            x,
+            y,
+            z,
+            zero: false,
+        };
         debug_assert!(point.is_valid());
         point
     }
@@ -152,14 +170,29 @@ impl<C: Curve> ProjectivePoint<C> {
         let x3 = h * s;
         let y3 = w * (b - h) - rr.double();
         let z3 = s.cube();
-        Self { x: x3, y: y3, z: z3, zero: false }
+        Self {
+            x: x3,
+            y: y3,
+            z: z3,
+            zero: false,
+        }
     }
 }
 
 impl<C: Curve> PartialEq for ProjectivePoint<C> {
     fn eq(&self, other: &Self) -> bool {
-        let ProjectivePoint { x: x1, y: y1, z: z1, zero: zero1 } = *self;
-        let ProjectivePoint { x: x2, y: y2, z: z2, zero: zero2 } = *other;
+        let ProjectivePoint {
+            x: x1,
+            y: y1,
+            z: z1,
+            zero: zero1,
+        } = *self;
+        let ProjectivePoint {
+            x: x2,
+            y: y2,
+            z: z2,
+            zero: zero2,
+        } = *other;
         if zero1 || zero2 {
             return zero1 == zero2;
         }

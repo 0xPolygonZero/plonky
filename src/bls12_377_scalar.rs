@@ -1,14 +1,17 @@
 //! This module implements field arithmetic for BLS12-377's scalar field.
 
+use rand::Rng;
 use std::cmp::Ordering::Less;
 use std::convert::TryInto;
 use std::ops::{Add, Div, Mul, Neg, Sub};
-use rand::Rng;
 
 use unroll::unroll_for_loops;
 
-use crate::{add_4_4_no_overflow, cmp_4_4, Field, sub_4_4, field_to_biguint, rand_range_4, rand_range_4_from_rng};
 use crate::bigint_inverse::nonzero_multiplicative_inverse_4;
+use crate::{
+    add_4_4_no_overflow, cmp_4_4, field_to_biguint, rand_range_4, rand_range_4_from_rng, sub_4_4,
+    Field,
+};
 use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -23,33 +26,51 @@ pub struct Bls12377Scalar {
 impl Bls12377Scalar {
     /// The order of the field:
     /// 8444461749428370424248824938781546531375899335154063827935233455917409239041
-    pub const ORDER: [u64; 4] = [725501752471715841, 6461107452199829505, 6968279316240510977, 1345280370688173398];
+    pub const ORDER: [u64; 4] = [
+        725501752471715841,
+        6461107452199829505,
+        6968279316240510977,
+        1345280370688173398,
+    ];
 
     /// R in the context of the Montgomery reduction, i.e. 2^256 % |F|.
-    pub(crate) const R: [u64; 4] =
-        [9015221291577245683, 8239323489949974514, 1646089257421115374, 958099254763297437];
+    pub(crate) const R: [u64; 4] = [
+        9015221291577245683,
+        8239323489949974514,
+        1646089257421115374,
+        958099254763297437,
+    ];
 
     /// R^2 in the context of the Montgomery reduction, i.e. 2^256^2 % |F|.
-    pub(crate) const R2: [u64; 4] =
-        [2726216793283724667, 14712177743343147295, 12091039717619697043, 81024008013859129];
+    pub(crate) const R2: [u64; 4] = [
+        2726216793283724667,
+        14712177743343147295,
+        12091039717619697043,
+        81024008013859129,
+    ];
 
     /// R^3 in the context of the Montgomery reduction, i.e. 2^256^3 % |F|.
-    pub(crate) const R3: [u64; 4] =
-        [7656847007262524748, 7083357369969088153, 12818756329091487507, 432872940405820890];
+    pub(crate) const R3: [u64; 4] = [
+        7656847007262524748,
+        7083357369969088153,
+        12818756329091487507,
+        432872940405820890,
+    ];
 
     /// In the context of Montgomery multiplication, µ = -|F|^-1 mod 2^64.
     const MU: u64 = 725501752471715839;
 
     pub fn from_canonical(c: [u64; 4]) -> Self {
         // We compute M(c, R^2) = c * R^2 * R^-1 = c * R.
-        Self { limbs: Self::montgomery_multiply(c, Self::R2) }
+        Self {
+            limbs: Self::montgomery_multiply(c, Self::R2),
+        }
     }
 
     pub fn to_canonical(&self) -> [u64; 4] {
         // Let x * R = self. We compute M(x * R, 1) = x * R * R^-1 = x.
         Self::montgomery_multiply(self.limbs, [1, 0, 0, 0])
     }
-
 
     #[unroll_for_loops]
     fn montgomery_multiply(a: [u64; 4], b: [u64; 4]) -> [u64; 4] {
@@ -76,7 +97,8 @@ impl Bls12377Scalar {
             // C += N q
             carry = 0;
             for j in 0..4 {
-                let result = c[(i + j) % 5] as u128 + q as u128 * Self::ORDER[j] as u128 + carry as u128;
+                let result =
+                    c[(i + j) % 5] as u128 + q as u128 * Self::ORDER[j] as u128 + carry as u128;
                 c[(i + j) % 5] = result as u64;
                 carry = (result >> 64) as u64;
             }
@@ -128,7 +150,9 @@ impl Mul<Self> for Bls12377Scalar {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self {
-        Self { limbs: Self::montgomery_multiply(self.limbs, rhs.limbs) }
+        Self {
+            limbs: Self::montgomery_multiply(self.limbs, rhs.limbs),
+        }
     }
 }
 
@@ -147,7 +171,9 @@ impl Neg for Bls12377Scalar {
         if self == Self::ZERO {
             Self::ZERO
         } else {
-            Self { limbs: sub_4_4(Self::ORDER, self.limbs) }
+            Self {
+                limbs: sub_4_4(Self::ORDER, self.limbs),
+            }
         }
     }
 }
@@ -156,22 +182,85 @@ impl Field for Bls12377Scalar {
     const BITS: usize = 253;
 
     const ZERO: Self = Self { limbs: [0; 4] };
-    const ONE: Self = Self { limbs: [9015221291577245683, 8239323489949974514, 1646089257421115374, 958099254763297437] };
-    const TWO: Self = Self { limbs: [17304940830682775525, 10017539527700119523, 14770643272311271387, 570918138838421475] };
-    const THREE: Self = Self { limbs: [7147916296078753751, 11795755565450264533, 9448453213491875784, 183737022913545514] };
-    const FOUR: Self = Self { limbs: [16163137587655999434, 1588334981690687431, 11094542470912991159, 1141836277676842951] };
-    const FIVE: Self = Self { limbs: [6006113053051977660, 3366551019440832441, 5772352412093595556, 754655161751966990] };
-    const NEG_ONE: Self = Self { limbs: [10157024534604021774, 16668528035959406606, 5322190058819395602, 387181115924875961] };
+    const ONE: Self = Self {
+        limbs: [
+            9015221291577245683,
+            8239323489949974514,
+            1646089257421115374,
+            958099254763297437,
+        ],
+    };
+    const TWO: Self = Self {
+        limbs: [
+            17304940830682775525,
+            10017539527700119523,
+            14770643272311271387,
+            570918138838421475,
+        ],
+    };
+    const THREE: Self = Self {
+        limbs: [
+            7147916296078753751,
+            11795755565450264533,
+            9448453213491875784,
+            183737022913545514,
+        ],
+    };
+    const FOUR: Self = Self {
+        limbs: [
+            16163137587655999434,
+            1588334981690687431,
+            11094542470912991159,
+            1141836277676842951,
+        ],
+    };
+    const FIVE: Self = Self {
+        limbs: [
+            6006113053051977660,
+            3366551019440832441,
+            5772352412093595556,
+            754655161751966990,
+        ],
+    };
+    const NEG_ONE: Self = Self {
+        limbs: [
+            10157024534604021774,
+            16668528035959406606,
+            5322190058819395602,
+            387181115924875961,
+        ],
+    };
 
-    const MULTIPLICATIVE_SUBGROUP_GENERATOR: Self = Self { limbs: [1855201571499933546, 8511318076631809892, 6222514765367795509, 1122129207579058019] };
+    const MULTIPLICATIVE_SUBGROUP_GENERATOR: Self = Self {
+        limbs: [
+            1855201571499933546,
+            8511318076631809892,
+            6222514765367795509,
+            1122129207579058019,
+        ],
+    };
 
     /// x^11 is a permutation in this field.
-    const ALPHA: Self = Self { limbs: [1855201571499933546, 8511318076631809892, 6222514765367795509, 1122129207579058019] };
+    const ALPHA: Self = Self {
+        limbs: [
+            1855201571499933546,
+            8511318076631809892,
+            6222514765367795509,
+            1122129207579058019,
+        ],
+    };
 
     const TWO_ADICITY: usize = 47;
 
     /// 60001509534603559531609739528203892656505753216962260608619555
-    const T: Self = Self { limbs: [725501752471715841, 6461107452199829505, 6968279316240510977, 1345280370688042326] };
+    const T: Self = Self {
+        limbs: [
+            725501752471715841,
+            6461107452199829505,
+            6968279316240510977,
+            1345280370688042326,
+        ],
+    };
 
     fn to_canonical_u64_vec(&self) -> Vec<u64> {
         self.to_canonical().to_vec()
@@ -192,7 +281,9 @@ impl Field for Bls12377Scalar {
     fn multiplicative_inverse_assuming_nonzero(&self) -> Self {
         // Let x R = self. We compute M((x R)^-1, R^3) = x^-1 R^-1 R^3 R^-1 = x^-1 R.
         let self_r_inv = nonzero_multiplicative_inverse_4(self.limbs, Self::ORDER);
-        Self { limbs: Self::montgomery_multiply(self_r_inv, Self::R3) }
+        Self {
+            limbs: Self::montgomery_multiply(self_r_inv, Self::R3),
+        }
     }
 
     fn rand() -> Self {
@@ -206,8 +297,6 @@ impl Field for Bls12377Scalar {
             limbs: rand_range_4_from_rng(Self::ORDER, rng),
         }
     }
-
-
 }
 
 impl Ord for Bls12377Scalar {
@@ -228,12 +317,11 @@ impl Display for Bls12377Scalar {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12377Scalar, Field};
     use crate::conversions::u64_slice_to_biguint;
     use crate::test_square_root;
+    use crate::{Bls12377Scalar, Field};
 
     #[test]
     fn bls12scalar_to_and_from_canonical() {
@@ -243,9 +331,14 @@ mod tests {
         let r_biguint = u64_slice_to_biguint(&Bls12377Scalar::R);
 
         let a_bls12scalar = Bls12377Scalar::from_canonical(a);
-        assert_eq!(u64_slice_to_biguint(&a_bls12scalar.limbs),
-                   &a_biguint * &r_biguint % &order_biguint);
-        assert_eq!(u64_slice_to_biguint(&a_bls12scalar.to_canonical()), a_biguint);
+        assert_eq!(
+            u64_slice_to_biguint(&a_bls12scalar.limbs),
+            &a_biguint * &r_biguint % &order_biguint
+        );
+        assert_eq!(
+            u64_slice_to_biguint(&a_bls12scalar.to_canonical()),
+            a_biguint
+        );
     }
 
     #[test]
@@ -262,7 +355,8 @@ mod tests {
 
         assert_eq!(
             u64_slice_to_biguint(&(a_blsbase * b_blsbase).to_canonical()),
-            a_biguint * b_biguint % order_biguint);
+            a_biguint * b_biguint % order_biguint
+        );
     }
 
     #[test]
@@ -276,10 +370,22 @@ mod tests {
 
     #[test]
     fn exp() {
-        assert_eq!(Bls12377Scalar::THREE.exp(Bls12377Scalar::ZERO), Bls12377Scalar::ONE);
-        assert_eq!(Bls12377Scalar::THREE.exp(Bls12377Scalar::ONE), Bls12377Scalar::THREE);
-        assert_eq!(Bls12377Scalar::THREE.exp(Bls12377Scalar::from_canonical_u64(2)), Bls12377Scalar::from_canonical_u64(9));
-        assert_eq!(Bls12377Scalar::THREE.exp(Bls12377Scalar::from_canonical_u64(3)), Bls12377Scalar::from_canonical_u64(27));
+        assert_eq!(
+            Bls12377Scalar::THREE.exp(Bls12377Scalar::ZERO),
+            Bls12377Scalar::ONE
+        );
+        assert_eq!(
+            Bls12377Scalar::THREE.exp(Bls12377Scalar::ONE),
+            Bls12377Scalar::THREE
+        );
+        assert_eq!(
+            Bls12377Scalar::THREE.exp(Bls12377Scalar::from_canonical_u64(2)),
+            Bls12377Scalar::from_canonical_u64(9)
+        );
+        assert_eq!(
+            Bls12377Scalar::THREE.exp(Bls12377Scalar::from_canonical_u64(3)),
+            Bls12377Scalar::from_canonical_u64(27)
+        );
     }
 
     #[test]
@@ -321,10 +427,22 @@ mod tests {
     #[test]
     fn num_bits() {
         assert_eq!(Bls12377Scalar::from_canonical_u64(0b10101).num_bits(), 5);
-        assert_eq!(Bls12377Scalar::from_canonical_u64(u64::max_value()).num_bits(), 64);
-        assert_eq!(Bls12377Scalar::from_canonical([0, 1, 0, 0]).num_bits(), 64 + 1);
-        assert_eq!(Bls12377Scalar::from_canonical([0, 0, 0, 1]).num_bits(), 64 * 3 + 1);
-        assert_eq!(Bls12377Scalar::from_canonical([0, 0, 0, 0b10101]).num_bits(), 64 * 3 + 5)
+        assert_eq!(
+            Bls12377Scalar::from_canonical_u64(u64::max_value()).num_bits(),
+            64
+        );
+        assert_eq!(
+            Bls12377Scalar::from_canonical([0, 1, 0, 0]).num_bits(),
+            64 + 1
+        );
+        assert_eq!(
+            Bls12377Scalar::from_canonical([0, 0, 0, 1]).num_bits(),
+            64 * 3 + 1
+        );
+        assert_eq!(
+            Bls12377Scalar::from_canonical([0, 0, 0, 0b10101]).num_bits(),
+            64 * 3 + 5
+        )
     }
 
     #[test]
@@ -333,10 +451,16 @@ mod tests {
             let n = 1 << n_power as u64;
             let root = Bls12377Scalar::primitive_root_of_unity(n_power);
 
-            assert_eq!(root.exp(Bls12377Scalar::from_canonical_u64(n)), Bls12377Scalar::ONE);
+            assert_eq!(
+                root.exp(Bls12377Scalar::from_canonical_u64(n)),
+                Bls12377Scalar::ONE
+            );
 
             if n > 1 {
-                assert_ne!(root.exp(Bls12377Scalar::from_canonical_u64(n - 1)), Bls12377Scalar::ONE)
+                assert_ne!(
+                    root.exp(Bls12377Scalar::from_canonical_u64(n - 1)),
+                    Bls12377Scalar::ONE
+                )
             }
         }
     }

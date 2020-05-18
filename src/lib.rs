@@ -1,7 +1,6 @@
 // Since we work with elliptic curve groups etc., nearly all the operations are suspicious to
 // Clippy.
 #![allow(clippy::suspicious_arithmetic_impl)]
-
 // We have tons of bigint literals in Montgomery form, which won't be readable with or without underscores.
 #![allow(clippy::unreadable_literal)]
 
@@ -16,9 +15,9 @@ pub use curve_adds::*;
 pub use curve_msm::*;
 pub use curve_multiplication::*;
 pub use curve_summations::*;
-pub use hash_to_curve::*;
 pub use fft::*;
 pub use field::*;
+pub use hash_to_curve::*;
 pub use mds::*;
 pub use plonk::*;
 pub use plonk_recursion::*;
@@ -32,17 +31,17 @@ pub use tweedledum_curve::*;
 
 mod bigint_arithmetic;
 mod bigint_inverse;
-mod conversions;
-mod curve_adds;
 mod bls12_377_base;
 mod bls12_377_curve;
 mod bls12_377_scalar;
+mod conversions;
+mod curve;
+mod curve_adds;
+mod curve_msm;
+mod curve_multiplication;
 mod curve_summations;
 mod fft;
 mod field;
-mod curve;
-mod curve_msm;
-mod curve_multiplication;
 mod hash_to_curve;
 mod mds;
 mod plonk;
