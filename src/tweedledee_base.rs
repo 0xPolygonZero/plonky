@@ -255,6 +255,10 @@ impl Field for TweedledeeBase {
         Self::from_canonical([n, 0, 0, 0])
     }
 
+    fn is_valid_canonical_u64(v: Vec<u64>) -> bool {
+        v.len() == 4 && cmp_4_4(v[..].try_into().unwrap(), Self::ORDER) == Less
+    }
+
     fn multiplicative_inverse_assuming_nonzero(&self) -> Self {
         // Let x R = self. We compute M((x R)^-1, R^3) = x^-1 R^-1 R^3 R^-1 = x^-1 R.
         let self_r_inv = nonzero_multiplicative_inverse_4(self.limbs, Self::ORDER);
@@ -307,6 +311,20 @@ mod tests {
             let order = TweedledeeBase::generator_order(root);
             assert_eq!(order, 1 << n_power, "2^{}'th primitive root", n_power);
         }
+    }
+
+    #[test]
+    fn valid_canonical_vec() {
+        let small = TweedledeeBase::ONE.to_canonical_u64_vec();
+        assert!(TweedledeeBase::is_valid_canonical_u64(small));
+
+
+        let mut big = Vec::new();
+        big.extend(TweedledeeBase::ORDER_X2.iter().copied());
+        assert_eq!(TweedledeeBase::is_valid_canonical_u64(big), false);
+
+        let limbs = vec![1,2,3,4,5];
+        assert_eq!(TweedledeeBase::is_valid_canonical_u64(limbs), false);
     }
 
     test_square_root!(TweedledeeBase);

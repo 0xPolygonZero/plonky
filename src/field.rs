@@ -83,6 +83,8 @@ pub trait Field: 'static + Sized + Copy + Ord + Hash + Send + Sync + Debug + Dis
         Self::from_canonical_u64(if b { 1 } else { 0 })
     }
 
+    fn is_valid_canonical_u64(v: Vec<u64>) -> bool;
+
     #[inline(always)]
     fn is_zero(&self) -> bool {
         *self == Self::ZERO

@@ -255,6 +255,11 @@ impl Field for TweedledumBase {
         Self::from_canonical([n, 0, 0, 0])
     }
 
+    fn is_valid_canonical_u64(v: Vec<u64>) -> bool {
+        v.len() == 4 && cmp_4_4(v[..].try_into().unwrap(), Self::ORDER) == Less
+    }
+
+
     fn multiplicative_inverse_assuming_nonzero(&self) -> Self {
         // Let x R = self. We compute M((x R)^-1, R^3) = x^-1 R^-1 R^3 R^-1 = x^-1 R.
         let self_r_inv = nonzero_multiplicative_inverse_4(self.limbs, Self::ORDER);
