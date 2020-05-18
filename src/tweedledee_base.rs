@@ -255,7 +255,7 @@ impl Field for TweedledeeBase {
         Self::from_canonical([n, 0, 0, 0])
     }
 
-    fn is_valid_canonical_u64(v: Vec<u64>) -> bool {
+    fn is_valid_canonical_u64(v: &Vec<u64>) -> bool {
         v.len() == 4 && cmp_4_4(v[..].try_into().unwrap(), Self::ORDER) == Less
     }
 
@@ -316,15 +316,13 @@ mod tests {
     #[test]
     fn valid_canonical_vec() {
         let small = TweedledeeBase::ONE.to_canonical_u64_vec();
-        assert!(TweedledeeBase::is_valid_canonical_u64(small));
+        assert!(TweedledeeBase::is_valid_canonical_u64(&small));
 
-
-        let mut big = Vec::new();
-        big.extend(TweedledeeBase::ORDER_X2.iter().copied());
-        assert_eq!(TweedledeeBase::is_valid_canonical_u64(big), false);
+        let big = TweedledeeBase::ORDER_X2.to_vec();
+        assert_eq!(TweedledeeBase::is_valid_canonical_u64(&big), false);
 
         let limbs = vec![1,2,3,4,5];
-        assert_eq!(TweedledeeBase::is_valid_canonical_u64(limbs), false);
+        assert_eq!(TweedledeeBase::is_valid_canonical_u64(&limbs), false);
     }
 
     test_square_root!(TweedledeeBase);

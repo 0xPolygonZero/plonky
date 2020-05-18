@@ -255,7 +255,7 @@ impl Field for TweedledumBase {
         Self::from_canonical([n, 0, 0, 0])
     }
 
-    fn is_valid_canonical_u64(v: Vec<u64>) -> bool {
+    fn is_valid_canonical_u64(v: &Vec<u64>) -> bool {
         v.len() == 4 && cmp_4_4(v[..].try_into().unwrap(), Self::ORDER) == Less
     }
 
