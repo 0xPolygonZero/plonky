@@ -1,6 +1,7 @@
 use rayon::prelude::*;
 
 use crate::Field;
+use crate::util::{log2_ceil, log2_strict};
 
 /// Permutes `arr` such that each index is mapped to its reverse in binary.
 fn reverse_index_bits<T: Copy>(arr: Vec<T>) -> Vec<T> {
@@ -21,22 +22,6 @@ fn reverse_bits(n: usize, num_bits: usize) -> usize {
         result |= (n >> i & 1) << i_rev;
     }
     result
-}
-
-/// Computes `ceil(log_2(n))`.
-fn log2_ceil(n: usize) -> usize {
-    let mut exp = 0;
-    while 1 << exp < n {
-        exp += 1;
-    }
-    exp
-}
-
-/// Computes `log_2(n)`, panicking if `n` is not a power of two.
-fn log2_strict(n: usize) -> usize {
-    let exp = log2_ceil(n);
-    assert_eq!(1 << exp, n, "Input not a power of 2");
-    exp
 }
 
 pub struct FftPrecomputation<F: Field> {
@@ -91,7 +76,7 @@ pub fn ifft_with_precomputation_power_of_2<F: Field>(
 ) -> Vec<F> {
     let n = points.len();
     let n_inv = F::from_canonical_usize(n).multiplicative_inverse().unwrap();
-    let result = fft_with_precomputation(points, precomputation);
+    let result = fft_with_precomputation_power_of_2(points, precomputation);
     // TODO: Could do this in-place with swaps.
     let mut coefficients = Vec::with_capacity(n);
     coefficients.push(result[0] * n_inv);
@@ -150,7 +135,8 @@ pub fn fft_with_precomputation_power_of_2<F: Field>(
 #[cfg(test)]
 mod tests {
     use crate::{Bls12377Scalar, fft_precompute, fft_with_precomputation, Field, ifft_with_precomputation_power_of_2};
-    use crate::fft::{log2_ceil, log2_strict, reverse_bits, reverse_index_bits};
+    use crate::fft::{log2_strict, reverse_bits, reverse_index_bits};
+    use crate::util::log2_ceil;
 
     #[test]
     fn fft_and_ifft() {

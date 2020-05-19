@@ -17,13 +17,17 @@ pub struct MsmPrecomputation<C: Curve> {
     /// of powers, i.e. [(2^w)^i] for i < DIGITS.
     // TODO: Use compressed coordinates here.
     powers_per_generator: Vec<Vec<AffinePoint<C>>>,
+
+    /// The window size.
+    w: usize,
 }
 
 pub fn msm_precompute<C: Curve>(generators: &[ProjectivePoint<C>], w: usize) -> MsmPrecomputation<C> {
     MsmPrecomputation {
         powers_per_generator: generators.into_par_iter()
             .map(|&g| precompute_single_generator(g, w))
-            .collect()
+            .collect(),
+        w,
     }
 }
 
@@ -44,9 +48,9 @@ fn precompute_single_generator<C: Curve>(g: ProjectivePoint<C>, w: usize) -> Vec
 pub fn msm_execute<C: Curve>(
     precomputation: &MsmPrecomputation<C>,
     scalars: &[C::ScalarField],
-    w: usize,
 ) -> ProjectivePoint<C> {
     assert_eq!(precomputation.powers_per_generator.len(), scalars.len());
+    let w = precomputation.w;
     let digits = (C::ScalarField::BITS + w - 1) / w;
     let base = 1 << w;
 
@@ -203,7 +207,7 @@ mod tests {
         let scalars = vec![scalar_1, scalar_2, scalar_3];
 
         let precomputation = msm_precompute(&generators, w);
-        let result_msm = msm_execute(&precomputation, &scalars, w);
+        let result_msm = msm_execute(&precomputation, &scalars);
 
         let result_naive = scalar_1 * generator_1 + scalar_2 * generator_2 + scalar_3 * generator_3;
         assert_eq!(result_msm, result_naive);
