@@ -49,11 +49,11 @@ fn num_public_input_gates(num_public_inputs: usize) -> usize {
     ceil_div_usize(num_public_inputs, NUM_WIRES)
 }
 
-pub fn recursive_verification_circuit<OuterC: Curve, InnerC: HaloEndomorphismCurve<BaseField=OuterC::ScalarField>>(
+pub fn recursive_verification_circuit<C: Curve, InnerC: HaloEndomorphismCurve<BaseField=C::ScalarField>>(
     degree_pow: usize,
     security_bits: usize,
-) -> RecursiveCircuit<OuterC> {
-    let mut builder = CircuitBuilder::<OuterC>::new(security_bits);
+) -> RecursiveCircuit<C> {
+    let mut builder = CircuitBuilder::<C>::new(security_bits);
     let public_inputs = RecursionPublicInputs {
         beta: builder.stage_public_input(),
         gamma: builder.stage_public_input(),
@@ -93,7 +93,7 @@ pub fn recursive_verification_circuit<OuterC: Curve, InnerC: HaloEndomorphismCur
         .flat_map(|opening_set| opening_set.o_wires)
         .collect();
 
-    verify_assumptions::<OuterC, InnerC>(&mut builder, degree_pow, &public_inputs, &o_public_inputs);
+    verify_assumptions::<C, InnerC>(&mut builder, degree_pow, &public_inputs, &o_public_inputs);
 
     // TODO: Verify that each prover polynomial commitment is on the curve.
     // Can call curve_assert_valid.
@@ -120,7 +120,7 @@ pub fn recursive_verification_circuit<OuterC: Curve, InnerC: HaloEndomorphismCur
         transcript_state = u_i;
     }
 
-    let (u_l, u_r) = verify_all_ipas::<OuterC, InnerC>(&mut builder, &proof, u, v, x, ipa_challenges);
+    let (u_l, u_r) = verify_all_ipas::<C, InnerC>(&mut builder, &proof, u, v, x, ipa_challenges);
 
     // "Outputs" data relating to assumption which still need to be verified by the next proof.
     builder.copy(public_inputs.beta.routable_target(), beta);
@@ -158,8 +158,8 @@ fn flatten_points(points: &[AffinePointTarget]) -> Vec<Target> {
 
 /// Verify all IPAs in the given proof. Return `(u_l, u_r)`, which roughly correspond to `u` and
 /// `u^{-1}` in the Halo paper, respectively.
-fn verify_all_ipas<OuterC: Curve, InnerC: HaloEndomorphismCurve<BaseField=OuterC::ScalarField>>(
-    builder: &mut CircuitBuilder<OuterC>,
+fn verify_all_ipas<C: Curve, InnerC: HaloEndomorphismCurve<BaseField=C::ScalarField>>(
+    builder: &mut CircuitBuilder<C>,
     proof: &ProofTarget,
     u: Target,
     v: Target,
@@ -198,13 +198,13 @@ fn verify_all_ipas<OuterC: Curve, InnerC: HaloEndomorphismCurve<BaseField=OuterC
     // Then, we reduce the above opening set reductions to a single value.
     let reduced_opening = reduce_with_powers(builder, &opening_set_reductions, v);
 
-    verify_ipa::<OuterC, InnerC>(builder, proof, c_reduction, reduced_opening, x, ipa_challenges)
+    verify_ipa::<C, InnerC>(builder, proof, c_reduction, reduced_opening, x, ipa_challenges)
 }
 
 /// Verify the final IPA. Return `(u_l, u_r)`, which roughly correspond to `u` and `u^{-1}` in the
 /// Halo paper, respectively.
-fn verify_ipa<OuterC: Curve, InnerC: HaloEndomorphismCurve<BaseField=OuterC::ScalarField>>(
-    builder: &mut CircuitBuilder<OuterC>,
+fn verify_ipa<C: Curve, InnerC: HaloEndomorphismCurve<BaseField=C::ScalarField>>(
+    builder: &mut CircuitBuilder<C>,
     proof: &ProofTarget,
     p: AffinePointTarget,
     c: Target,
