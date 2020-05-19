@@ -842,7 +842,14 @@ impl<C: Curve> CircuitBuilder<C> {
 
     /// Assert that a given coordinate pair is on the curve `C`.
     pub fn curve_assert_valid<InnerC: Curve<BaseField=C::ScalarField>>(&mut self, p: AffinePointTarget) {
-        todo!()
+        // Recall the short Weierstrass equation: y^2 = x^3 + a*x + b.
+        let a = self.constant_wire(InnerC::A);
+        let b = self.constant_wire(InnerC::B);
+        let y_squared = self.square(p.y);
+        let x_cubed = self.exp_constant_usize(p.x, 3);
+        let a_x_plus_b = self.mul_add(a, p.x, b);
+        let rhs = self.add(x_cubed, a_x_plus_b);
+        self.copy(y_squared, rhs);
     }
 
     pub fn curve_neg<InnerC: Curve<BaseField=C::ScalarField>>(
