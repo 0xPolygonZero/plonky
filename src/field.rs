@@ -49,6 +49,21 @@ pub trait Field: 'static + Sized + Copy + Ord + Hash + Send + Sync + Debug + Dis
         limbs
     }
 
+    fn to_canonical_u8_vec(&self) -> Vec<u8> {
+        let mut limbs = Vec::new();
+        for u64_limb in self.to_canonical_u64_vec() {
+            limbs.push(u64_limb as u8);
+            limbs.push(u64_limb.overflowing_shr(8).0 as u8);
+            limbs.push(u64_limb.overflowing_shr(16).0 as u8);
+            limbs.push(u64_limb.overflowing_shr(24).0 as u8);
+            limbs.push(u64_limb.overflowing_shr(32).0 as u8);
+            limbs.push(u64_limb.overflowing_shr(40).0 as u8);
+            limbs.push(u64_limb.overflowing_shr(48).0 as u8);
+            limbs.push(u64_limb.overflowing_shr(56).0 as u8);
+        }
+        limbs
+    }
+
     fn to_canonical_bool_vec(&self) -> Vec<bool> {
         let mut limbs = Vec::new();
         for u64_limb in self.to_canonical_u64_vec() {
