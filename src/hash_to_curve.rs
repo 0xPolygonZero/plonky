@@ -50,6 +50,10 @@ pub fn blake_field<F: Field>(iter: u8, seed: F) -> (F, bool) {
     }
 }
 
+pub fn blake_hash_usize_to_curve<C: Curve>(seed: usize) -> AffinePoint<C> {
+    blake_hash_base_field_to_curve(C::BaseField::from_canonical_usize(seed))
+}
+
 pub fn blake_hash_base_field_to_curve<C: Curve>(seed: C::BaseField) -> AffinePoint<C> {
     // Based on the MapToGroup method of BLS.
     let mut i = 0;

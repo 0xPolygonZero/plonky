@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 use std::collections::{HashMap, HashSet, BTreeMap};
 use std::time::Instant;
 
-use crate::{AffinePoint, Curve, Field, generate_rescue_constants, HaloEndomorphismCurve, Proof, FftPrecomputation, ifft_with_precomputation_power_of_2, hash_u32_to_curve, MsmPrecomputation, hash_usize_to_curve, msm_execute, ProjectivePoint};
+use crate::{AffinePoint, Curve, Field, generate_rescue_constants, HaloEndomorphismCurve, Proof, FftPrecomputation, ifft_with_precomputation_power_of_2, hash_u32_to_curve, MsmPrecomputation, hash_usize_to_curve, msm_execute, ProjectivePoint, blake_hash_usize_to_curve};
 use crate::plonk_gates::{ArithmeticGate, Base4SumGate, BufferGate, CurveAddGate, CurveDblGate, CurveEndoGate, Gate, PublicInputGate, RescueStepAGate, RescueStepBGate};
 use crate::util::{ceil_div_usize, log2_strict};
 
@@ -1179,8 +1179,8 @@ impl<C: Curve> CircuitBuilder<C> {
         let routing_target_partitions = self.get_routing_partitions();
         let CircuitBuilder { security_bits, gate_constants, generators, .. } = self;
 
-        let pedersen_g = (0..degree).map(|i| hash_usize_to_curve::<C>(i, security_bits)).collect();
-        let pedersen_h = hash_usize_to_curve::<C>(degree, security_bits);
+        let pedersen_g = (0..degree).map(|i| blake_hash_usize_to_curve::<C>(i)).collect();
+        let pedersen_h = blake_hash_usize_to_curve::<C>(degree);
         let constants_8n = todo!();
         let fft_precomputation = todo!();
         let msm_precomputation = todo!();
