@@ -47,6 +47,10 @@ harness = false
 name = "bls12_g1_summations"
 harness = false
 
+[[bench]]
+name = "hash_to_curve"
+harness = false
+
 [profile.release]
 opt-level = 3
 
