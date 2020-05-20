@@ -29,6 +29,16 @@ pub fn rescue_hash_n_to_1<F: Field>(inputs: Vec<F>, security_bits: usize) -> F {
     rescue_sponge(inputs, 1, security_bits)[0]
 }
 
+pub fn rescue_hash_n_to_2<F: Field>(inputs: Vec<F>, security_bits: usize) -> (F, F) {
+    let outputs = rescue_sponge(inputs, 2, security_bits);
+    (outputs[0], outputs[1])
+}
+
+pub fn rescue_hash_n_to_3<F: Field>(inputs: Vec<F>, security_bits: usize) -> (F, F, F) {
+    let outputs = rescue_sponge(inputs, 3, security_bits);
+    (outputs[0], outputs[1], outputs[2])
+}
+
 pub fn rescue_sponge<F: Field>(
     inputs: Vec<F>,
     num_outputs: usize,

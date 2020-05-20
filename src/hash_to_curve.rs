@@ -40,7 +40,7 @@ pub fn blake_field<F: Field>(iter: u8, seed: F) -> (F, bool) {
             .fill(&mut hash_container);
         // Try to convert the hash to a field element.
         let x = F::from_canonical_u8_vec(hash_container[..byte_length].to_vec());
-        if let Ok(good) = x {
+        if let Some(good) = x {
             // Use the extra-byte in `hash_container` to deduce `y_neg`.
             let y_neg = hash_container.last().unwrap() & 1 == 1;
             return (good, y_neg);

@@ -76,7 +76,7 @@ pub trait Field:
         limbs
     }
 
-    fn from_canonical_u8_vec(u8_limbs: Vec<u8>) -> Result<Self> {
+    fn from_canonical_u8_vec(u8_limbs: Vec<u8>) -> Option<Self> {
         let mut u64_chunks = Vec::new();
         for u8_chunk in u8_limbs.chunks(8) {
             u64_chunks.push(
@@ -90,10 +90,11 @@ pub trait Field:
                     | (u8_chunk[0] as u64),
             );
         }
+
         if Self::is_valid_canonical_u64(&u64_chunks) {
-            Ok(Self::from_canonical_u64_vec(u64_chunks))
+            Some(Self::from_canonical_u64_vec(u64_chunks))
         } else {
-            Err(Error::msg("lol"))
+            None
         }
     }
 
@@ -182,6 +183,10 @@ pub trait Field:
     #[inline(always)]
     fn quadruple(&self) -> Self {
         *self * Self::FOUR
+    }
+
+    fn inner_product(a: &[Self], b: &[Self]) -> Self {
+        todo!()
     }
 
     fn batch_multiplicative_inverse_opt<F: Field>(x: &[F]) -> Vec<Option<F>> {
@@ -297,6 +302,10 @@ pub trait Field:
 
     fn exp_u32(&self, power: u32) -> Self {
         self.exp(Self::from_canonical_u32(power))
+    }
+
+    fn exp_usize(&self, power: usize) -> Self {
+        self.exp(Self::from_canonical_usize(power))
     }
 
     fn kth_root_u32(&self, k: u32) -> Self {
@@ -432,6 +441,11 @@ pub trait Field:
         } else {
             None
         }
+    }
+
+    /// Return this field element re-encoded as an element of `F` if it fits, otherwise `None`.
+    fn try_convert<F: Field>(&self) -> Option<F> {
+        F::from_canonical_u8_vec(self.to_canonical_u8_vec())
     }
 }
 

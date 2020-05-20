@@ -1,4 +1,4 @@
-use crate::{AffinePointTarget, Circuit, CircuitBuilder, CurveMulOp, Field, HaloEndomorphismCurve, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, OpeningSetTarget, ProofTarget, PublicInput, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, Target, Curve};
+use crate::{AffinePointTarget, Circuit, CircuitBuilder, CurveMulOp, Field, HaloEndomorphismCurve, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, OpeningSetTarget, ProofTarget, PublicInput, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, Target, Curve, flatten_point_targets};
 use crate::plonk_gates::evaluate_all_constraints_recursively;
 use crate::util::ceil_div_usize;
 
@@ -99,9 +99,9 @@ pub fn recursive_verification_circuit<C: Curve, InnerC: HaloEndomorphismCurve<Ba
     // Can call curve_assert_valid.
 
     // Compute random challenges.
-    let (beta, gamma) = builder.rescue_hash_n_to_2(&flatten_points(&proof.c_wires));
-    let alpha = builder.rescue_hash_n_to_1(&[vec![beta], proof.c_plonk_z.to_vec()].concat());
-    let zeta = builder.rescue_hash_n_to_1(&[vec![alpha], flatten_points(&proof.c_plonk_t)].concat());
+    let (beta, gamma) = builder.rescue_hash_n_to_2(&flatten_point_targets(&proof.c_wires));
+    let alpha = builder.rescue_hash_n_to_1(&[beta, proof.c_plonk_z.x, proof.c_plonk_z.y]);
+    let zeta = builder.rescue_hash_n_to_1(&[vec![alpha], flatten_point_targets(&proof.c_plonk_t)].concat());
     let (v, u, x) = builder.rescue_hash_n_to_3(&[
         vec![zeta],
         proof.all_opening_targets(),
@@ -147,13 +147,6 @@ pub fn recursive_verification_circuit<C: Curve, InnerC: HaloEndomorphismCurve<Ba
 
     let circuit = builder.build();
     RecursiveCircuit { circuit, proof }
-}
-
-fn flatten_points(points: &[AffinePointTarget]) -> Vec<Target> {
-    let coordinate_pairs: Vec<Vec<Target>> = points.iter()
-        .map(|p| p.to_vec())
-        .collect();
-    coordinate_pairs.concat()
 }
 
 /// Verify all IPAs in the given proof. Return `(u_l, u_r)`, which roughly correspond to `u` and

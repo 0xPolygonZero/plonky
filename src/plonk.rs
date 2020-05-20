@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 use std::collections::{HashMap, HashSet, BTreeMap};
 use std::time::Instant;
 
-use crate::{AffinePoint, Curve, Field, generate_rescue_constants, HaloEndomorphismCurve, Proof, FftPrecomputation, ifft_with_precomputation_power_of_2, hash_u32_to_curve, MsmPrecomputation, hash_usize_to_curve, msm_execute, ProjectivePoint, blake_hash_usize_to_curve};
+use crate::{AffinePoint, Curve, Field, generate_rescue_constants, HaloEndomorphismCurve, Proof, FftPrecomputation, ifft_with_precomputation_power_of_2, MsmPrecomputation, msm_execute, ProjectivePoint, blake_hash_usize_to_curve, rescue_hash_n_to_1, rescue_hash_n_to_2, rescue_hash_n_to_3, msm_parallel, OpeningSet, fft_with_precomputation_power_of_2, fft_precompute};
 use crate::plonk_gates::{ArithmeticGate, Base4SumGate, BufferGate, CurveAddGate, CurveDblGate, CurveEndoGate, Gate, PublicInputGate, RescueStepAGate, RescueStepBGate};
 use crate::util::{ceil_div_usize, log2_strict};
 
@@ -74,6 +74,12 @@ pub struct Witness<F: Field> {
     wire_values: Vec<Vec<F>>,
 }
 
+impl<F: Field> Witness<F> {
+    pub fn get(&self, wire: Wire) -> F {
+        self.wire_values[wire.gate][wire.input]
+    }
+}
+
 pub trait WitnessGenerator<F: Field>: 'static {
     fn dependencies(&self) -> Vec<Target>;
 
@@ -84,17 +90,25 @@ pub trait WitnessGenerator<F: Field>: 'static {
 /// Contains all data needed to generate and/or verify proofs.
 pub struct Circuit<C: Curve> {
     pub security_bits: usize,
+    pub num_public_inputs: usize,
     pub gate_constants: Vec<Vec<C::ScalarField>>,
     pub routing_target_partitions: TargetPartitions,
     pub generators: Vec<Box<dyn WitnessGenerator<C::ScalarField>>>,
+    /// The generator of the subgroup H onto which the witness is mapped.
+    pub subgroup_generator: C::ScalarField,
     /// The generators used for binding elements in a Pedersen commitment.
     pub pedersen_g: Vec<AffinePoint<C>>,
     /// The generator used for blinding Pedersen commitments.
     pub pedersen_h: AffinePoint<C>,
+    /// The generator U used in Halo.
+    pub u: AffinePoint<C>,
+    pub constants_coeffs: Vec<Vec<C::ScalarField>>,
+    pub plonk_sigmas_coeffs: Vec<Vec<C::ScalarField>>,
     /// The constant polynomials in point-value form, low-degree extended to be degree 8n.
     pub constants_8n: Vec<Vec<C::ScalarField>>,
     pub msm_precomputation: MsmPrecomputation<C>,
-    pub fft_precomputation: FftPrecomputation<C::ScalarField>,
+    pub fft_precomputation_n: FftPrecomputation<C::ScalarField>,
+    pub fft_precomputation_8n: FftPrecomputation<C::ScalarField>,
 }
 
 impl<C: Curve> Circuit<C> {
@@ -104,6 +118,184 @@ impl<C: Curve> Circuit<C> {
 
     pub fn degree_pow(&self) -> usize {
         log2_strict(self.degree())
+    }
+
+    pub fn generate_proof(
+        &self,
+        inputs: PartialWitness<C::ScalarField>,
+    ) -> Proof<C> {
+        // Generate the witness, and convert both to coefficient form and a degree-8n LDE.
+        let witness = self.generate_witness(inputs);
+        let wires_coeffs: Vec<Vec<C::ScalarField>> = witness.wire_values.iter()
+            .map(|values| ifft_with_precomputation_power_of_2(values, &self.fft_precomputation_n))
+            .collect();
+        let wires_coeffs_8n: Vec<_> = wires_coeffs.iter()
+            .map(|coeffs| self.pad_to_8n(coeffs))
+            .collect();
+        let wire_values_8n: Vec<_> = wires_coeffs_8n.iter()
+            .map(|coeffs| fft_with_precomputation_power_of_2(coeffs, &self.fft_precomputation_8n))
+            .collect();
+
+        // Commit to the wire polynomials.
+        let c_wires: Vec<ProjectivePoint<C>> = wires_coeffs.iter()
+            .map(|coeffs| pedersen_hash(coeffs, &self.msm_precomputation))
+            .collect();
+        let c_wires = ProjectivePoint::batch_to_affine(&c_wires);
+
+        // Generate a random beta and gamma from the transcript.
+        let (beta, gamma) = rescue_hash_n_to_2::<C::BaseField>(flatten_points(&c_wires), self.security_bits);
+
+        // Generate Z, which is used in Plonk's permutation argument.
+        let mut plonk_z_points = vec![C::ScalarField::ONE];
+        for i in 1..self.degree() {
+            let mut numerator = C::ScalarField::ONE;
+            let mut denominator = C::ScalarField::ONE;
+            for j in 0..NUM_ROUTED_WIRES {
+                numerator = numerator * todo!();
+                denominator = denominator * todo!();
+            }
+            let last = *plonk_z_points.last().unwrap();
+            plonk_z_points.push(last * numerator / denominator);
+        }
+
+        // Commit to Z.
+        let plonk_z_coeffs = ifft_with_precomputation_power_of_2(&plonk_z_points, &self.fft_precomputation_n);
+        let c_plonk_z = pedersen_hash::<C>(&plonk_z_coeffs, &self.msm_precomputation).to_affine();
+
+        // Generate a random alpha from the transcript.
+        let alpha = rescue_hash_n_to_1::<C::BaseField>(vec![beta, c_plonk_z.x, c_plonk_z.y], self.security_bits);
+
+        // Generate the quotient polynomial, t.
+        let plonk_t_points: Vec<C::ScalarField> = todo!();
+        let plonk_t_coeffs = ifft_with_precomputation_power_of_2(&plonk_t_points, &self.fft_precomputation_n);
+        let plonk_t_coeff_chunks: Vec<Vec<C::ScalarField>> = plonk_t_coeffs.chunks(self.degree())
+            .map(|chunk| chunk.to_vec()).collect();
+        let c_plonk_t: Vec<ProjectivePoint<C>> = plonk_t_coeff_chunks.iter()
+            .map(|coeffs| pedersen_hash::<C>(&plonk_t_coeffs, &self.msm_precomputation))
+            .collect();
+        let c_plonk_t = ProjectivePoint::batch_to_affine(&c_plonk_t);
+
+        // Generate a random zeta from the transcript.
+        let zeta_bf = rescue_hash_n_to_1::<C::BaseField>([vec![alpha], flatten_points(&c_plonk_t)].concat(), self.security_bits);
+        let zeta_sf = C::try_convert_b2s(zeta_bf).expect("should fit in both fields with high probability");
+
+        // Open all polynomials at each PublicInputGate index.
+        let num_public_input_gates = ceil_div_usize(self.num_public_inputs, NUM_WIRES);
+        let o_public_inputs = (0..num_public_input_gates)
+            // We place PublicInputGates at indices 0, 2, 4, ...
+            .map(|i| i * 2)
+            .map(|i| self.open_all_polynomials(
+                &wires_coeffs, &plonk_z_coeffs, &plonk_t_coeff_chunks,
+                C::ScalarField::from_canonical_usize(i)))
+            .collect();
+
+        // Open all polynomials at zeta, zeta * g, and zeta * g^65.
+        let o_local = self.open_all_polynomials(&wires_coeffs, &plonk_z_coeffs, &plonk_t_coeff_chunks,
+                                                zeta_sf);
+        let o_right = self.open_all_polynomials(&wires_coeffs, &plonk_z_coeffs, &plonk_t_coeff_chunks,
+                                                zeta_sf * self.subgroup_generator);
+        let o_below = self.open_all_polynomials(&wires_coeffs, &plonk_z_coeffs, &plonk_t_coeff_chunks,
+                                                zeta_sf * self.subgroup_generator.exp_usize(GRID_WIDTH));
+
+        // Get a list of all opened values, to append to the transcript.
+        let all_opening_sets: Vec<OpeningSet<C::ScalarField>> = [
+            o_public_inputs,
+            vec![o_local, o_right, o_below],
+        ].concat();
+        let all_opened_values_sf: Vec<C::ScalarField> = all_opening_sets.into_iter()
+            .map(|os| os.to_vec()).collect::<Vec<_>>()
+            .concat();
+        let all_opened_values_bf: Vec<_> = all_opened_values_sf.into_iter()
+            .map(|f| C::try_convert_s2b(f)
+                .expect("For now, we assume that all opened values fit in both fields"))
+            .collect();
+
+        // Generate random v, u, and x from the transcript.
+        let (v, u, x) = rescue_hash_n_to_3::<C::BaseField>(
+            [vec![zeta_bf], all_opened_values_bf].concat(),
+            self.security_bits);
+
+        // Reduce all IPAs to a single one with random weights.
+        let combined_commit = todo!();
+        let combined_coeffs = todo!();
+        let combined_opening = todo!();
+
+        // Final IPA proof.
+        let mut transcript_state = v;
+        for i in 0..self.degree_pow() {
+            let a_lo = todo!();
+            let a_hi = todo!();
+            let b_lo = todo!();
+            let b_hi = todo!();
+            let g_lo = todo!();
+            let g_hi = todo!();
+
+            let l_j_blinding_factor = todo!();
+            let r_j_blinding_factor = todo!();
+
+            let window_size = 8;
+
+            // L_i = <a_lo, G_hi> + [l_j] H + [<a_lo, b_hi>] U.
+            let halo_l_j = msm_parallel(a_lo, g_hi, window_size)
+                + C::convert(l_j_blinding_factor) * self.pedersen_h.to_projective()
+                + C::convert(C::ScalarField::inner_product(a_lo, b_hi)) * self.u.to_projective();
+            // R_i = <a_hi, G_lo> + [r_j] H + [<a_hi, b_lo>] U.
+            let halo_r_j = msm_parallel(a_hi, g_lo, window_size)
+                + C::convert(r_j_blinding_factor) * self.pedersen_h.to_projective()
+                + C::convert(C::ScalarField::inner_product(a_hi, b_lo)) * self.u.to_projective();
+
+            let l_challenge = rescue_hash_n_to_1::<C::BaseField>(
+                vec![transcript_state, halo_l_j.x, halo_l_j.y, halo_r_j.x, halo_r_j.y],
+                self.security_bits);
+            let r_challenge = l_challenge.multiplicative_inverse();
+            transcript_state = l_challenge;
+        }
+
+        Proof {
+            c_wires,
+            c_plonk_z,
+            c_plonk_t,
+            o_public_inputs,
+            o_local,
+            o_right,
+            o_below,
+            halo_l_i: todo!(),
+            halo_r_i: todo!(),
+            halo_g: todo!(),
+        }
+    }
+
+    /// Zero-pad a list of polynomial coefficients to a length of 8n, which is the degree at which
+    /// we do most polynomial arithmetic.
+    fn pad_to_8n(&self, coeffs: &[C::ScalarField]) -> Vec<C::ScalarField> {
+        let eight_n = 8 * self.degree();
+        let mut result = coeffs.to_vec();
+        while result.len() < eight_n {
+            result.push(C::ScalarField::ZERO);
+        }
+        result
+    }
+
+    /// Open each polynomial at the given point, `zeta`.
+    fn open_all_polynomials(
+        &self,
+        wire_coeffs: &Vec<Vec<C::ScalarField>>,
+        plonk_z_coeffs: &Vec<C::ScalarField>,
+        plonk_t_coeffs: &Vec<Vec<C::ScalarField>>,
+        zeta: C::ScalarField,
+    ) -> OpeningSet<C::ScalarField> {
+        let mut powers_of_zeta = vec![C::ScalarField::ONE];
+        for _i in 1..self.degree() {
+            powers_of_zeta.push(*powers_of_zeta.last().unwrap() * zeta);
+        }
+
+        OpeningSet {
+            o_constants: self.constants_coeffs.iter().map(|c| C::ScalarField::inner_product(c, &powers_of_zeta)).collect(),
+            o_plonk_sigmas: self.plonk_sigmas_coeffs.iter().map(|c| C::ScalarField::inner_product(c, &powers_of_zeta)).collect(),
+            o_wires: wire_coeffs.iter().map(|c| C::ScalarField::inner_product(c, &powers_of_zeta)).collect(),
+            o_plonk_z: C::ScalarField::inner_product(&plonk_z_coeffs, &powers_of_zeta),
+            o_plonk_t: plonk_t_coeffs.iter().map(|c| C::ScalarField::inner_product(c, &powers_of_zeta)).collect(),
+        }
     }
 
     pub fn generate_witness(&self, inputs: PartialWitness<C::ScalarField>) -> Witness<C::ScalarField> {
@@ -216,21 +408,6 @@ impl<C: Curve> Circuit<C> {
     }
 }
 
-fn generate_proof<C: Curve>(
-    circuit: Circuit<C>,
-    witness: &Witness<C::ScalarField>,
-) -> Proof<C> {
-    let wire_coeffs: Vec<Vec<C::ScalarField>> = witness.wire_values.iter()
-        .map(|values| ifft_with_precomputation_power_of_2(values, &circuit.fft_precomputation))
-        .collect();
-    let wire_blinding_factors: Vec<C::ScalarField> = todo!();
-    let wire_commits: Vec<ProjectivePoint<C>> = wire_coeffs.iter().zip(wire_blinding_factors.iter())
-        .map(|(coeffs, &blinding_factor)| pedersen_commit(
-            coeffs, blinding_factor, circuit.pedersen_h, &circuit.msm_precomputation))
-        .collect();
-    todo!()
-}
-
 /// Like `pedersen_commit`, but with no blinding factor.
 fn pedersen_hash<C: Curve>(
     xs: &[C::ScalarField],
@@ -302,14 +479,31 @@ impl PublicInput {
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct AffinePointTarget {
-    x: Target,
-    y: Target,
+    pub x: Target,
+    pub y: Target,
 }
 
 impl AffinePointTarget {
     pub fn to_vec(&self) -> Vec<Target> {
         vec![self.x, self.y]
     }
+}
+
+pub(crate) fn flatten_points<C: Curve>(points: &[AffinePoint<C>]) -> Vec<C::BaseField> {
+    let coordinate_pairs: Vec<_> = points.iter()
+        .map(|p| {
+            debug_assert!(!p.zero);
+            vec![p.x, p.y]
+        })
+        .collect();
+    coordinate_pairs.concat()
+}
+
+pub(crate) fn flatten_point_targets(points: &[AffinePointTarget]) -> Vec<Target> {
+    let coordinate_pairs: Vec<_> = points.iter()
+        .map(|p| p.to_vec())
+        .collect();
+    coordinate_pairs.concat()
 }
 
 /// Represents a scalar * point multiplication operation.
@@ -1159,7 +1353,39 @@ impl<C: Curve> CircuitBuilder<C> {
         self.copy_constraints.push((target_1, target_2));
     }
 
+    /// Adds a gate with random wire values. By adding `k` of these gates, we can ensure that
+    /// nothing is learned by opening the wire polynomials at `k` points outside of H.
+    fn add_blinding_gate(&mut self) {
+        let gate = self.num_gates();
+        self.add_gate_no_constants(BufferGate::new(gate));
+        for input in 0..NUM_WIRES {
+            self.add_generator(RandomGenerator { target: Target::Wire(Wire { gate, input }) });
+        }
+
+        struct RandomGenerator {
+            target: Target,
+        }
+
+        impl<F: Field> WitnessGenerator<F> for RandomGenerator {
+            fn dependencies(&self) -> Vec<Target> {
+                vec![]
+            }
+
+            fn generate(&self, constants: &Vec<Vec<F>>, witness: &PartialWitness<F>) -> PartialWitness<F> {
+                let mut result = PartialWitness::new();
+                result.set_target(self.target, F::rand());
+                result
+            }
+        }
+    }
+
     pub fn build(mut self) -> Circuit<C> {
+        // Since we will open each polynomial at three points outside of H, we need three random
+        // values to ensure nothing is learned from the out-of-H openings.
+        for _i in 0..3 {
+            self.add_blinding_gate();
+        }
+
         // Print gate counts.
         println!("Gate counts:");
         for (gate, count) in &self.gate_counts {
@@ -1176,16 +1402,45 @@ impl<C: Curve> CircuitBuilder<C> {
         println!("Total gates after padding: {}", self.num_gates());
 
         let degree = self.num_gates();
+        let degree_pow = log2_strict(degree);
         let routing_target_partitions = self.get_routing_partitions();
-        let CircuitBuilder { security_bits, gate_constants, generators, .. } = self;
 
+        let CircuitBuilder {
+            security_bits,
+            public_input_index: num_public_inputs,
+            gate_constants,
+            generators,
+            ..
+        } = self;
+
+        let subgroup_generator = C::ScalarField::primitive_root_of_unity(degree_pow);
         let pedersen_g = (0..degree).map(|i| blake_hash_usize_to_curve::<C>(i)).collect();
         let pedersen_h = blake_hash_usize_to_curve::<C>(degree);
+        let u = blake_hash_usize_to_curve::<C>(degree + 1);
+        let plonk_sigmas_coeffs = todo!();
+        let constants_coeffs = todo!();
         let constants_8n = todo!();
-        let fft_precomputation = todo!();
+        let fft_precomputation_n = fft_precompute(degree);
+        let fft_precomputation_8n = fft_precompute(degree * 8);
         let msm_precomputation = todo!();
 
-        Circuit { security_bits, gate_constants, routing_target_partitions, generators, pedersen_g, pedersen_h, constants_8n, msm_precomputation, fft_precomputation }
+        Circuit {
+            security_bits,
+            num_public_inputs,
+            gate_constants,
+            routing_target_partitions,
+            generators,
+            subgroup_generator,
+            pedersen_g,
+            pedersen_h,
+            u,
+            constants_coeffs,
+            plonk_sigmas_coeffs,
+            constants_8n,
+            msm_precomputation,
+            fft_precomputation_n,
+            fft_precomputation_8n,
+        }
     }
 
     fn get_routing_partitions(&self) -> TargetPartitions {
