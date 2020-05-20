@@ -15,13 +15,12 @@ pub fn blake_field<F: Field>(iter: u8, seed: F) -> (F, bool) {
     let mut hasher = blake3::Hasher::new();
     // Number of bytes required to make a field element.
     let byte_length = ceil_div_usize(F::BITS, 8);
-    // // Number of Blake hashes necessary to get `byte_length` bytes.
-    // let n = ceil_div_usize(byte_length, blake3::OUT_LEN);
     // Bytes version of the field element.
     let mut bytes = seed.to_canonical_u8_vec();
     (0..2).for_each(|_| bytes.push(0));
     // Add the `iter` value to get a different result at each iteration.
     bytes[byte_length] = iter;
+    // One extra-byte for `y_neg`.
     let mut hash_container = vec![0; byte_length + 1];
     // Loop index.
     let mut j = 0;
@@ -126,26 +125,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_hash_rescue_bench() {
-        let n = 10000;
-        let points: Vec<_> = (0..n).map(|_| TweedledeeBase::rand()).collect();
-        let now = Instant::now();
-        for &p in points.iter() {
-            hash_base_field_to_curve::<Tweedledee>(p, 128);
-        }
-        println!("Elapsed: {:.2?}", now.elapsed());
-    }
-    #[test]
-    fn test_hash_blake_bench() {
-        let n = 16000;
-        let points: Vec<_> = (0..n).map(|_| TweedledeeBase::rand()).collect();
-        let now = Instant::now();
-        for &p in points.iter() {
-            blake_hash_base_field_to_curve::<Tweedledee>(p);
-        }
-        println!("Elapsed: {:.2?}", now.elapsed());
-    }
     #[test]
     fn test_hash_blake_deterministic() {
         let n = 10000;
