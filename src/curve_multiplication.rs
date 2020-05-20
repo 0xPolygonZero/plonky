@@ -1,6 +1,6 @@
 use std::ops::Mul;
 
-use crate::{affine_summation_batch_inversion, AffinePoint, Curve, Field, ProjectivePoint};
+use crate::{affine_summation_batch_inversion, AffinePoint, Curve, Field, ProjectivePoint, CurveScalar};
 
 const WINDOW_BITS: usize = 4;
 const BASE: usize = 1 << WINDOW_BITS;
@@ -60,12 +60,12 @@ impl<C: Curve> ProjectivePoint<C> {
     }
 }
 
-impl<C: Curve> Mul<ProjectivePoint<C>> for C::ScalarField {
+impl<C: Curve> Mul<ProjectivePoint<C>> for CurveScalar<C> {
     type Output = ProjectivePoint<C>;
 
     fn mul(self, rhs: ProjectivePoint<C>) -> Self::Output {
         let precomputation = rhs.mul_precompute();
-        rhs.mul_with_precomputation(self, precomputation)
+        rhs.mul_with_precomputation(self.0, precomputation)
     }
 }
 
