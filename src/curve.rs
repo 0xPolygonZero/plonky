@@ -2,6 +2,10 @@ use std::ops::Neg;
 
 use crate::Field;
 
+// To avoid implementation conflicts from associated types,
+// see https://github.com/rust-lang/rust/issues/20400
+pub struct CurveScalar<C: Curve>(pub <C as Curve>::ScalarField);
+
 /// A short Weierstrass curve.
 pub trait Curve: 'static + Sized + Copy {
     type BaseField: Field;
@@ -18,6 +22,10 @@ pub trait Curve: 'static + Sized + Copy {
         z: Self::BaseField::ONE,
         zero: false,
     };
+
+    fn convert(x: Self::ScalarField) -> CurveScalar<Self> {
+        CurveScalar(x)
+    }
 }
 
 /// A curve with the endomorphism described in the Halo paper, i.e. `phi((x, y)) = (zeta_p x, y)`,

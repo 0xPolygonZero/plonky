@@ -33,7 +33,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     }));
 
     c.bench_function("BLS12 G1 projective multiplication", move |b| b.iter(|| {
-        black_box(s) * black_box(p1_projective)
+        black_box(Bls12377::convert(s)) * black_box(p1_projective)
     }));
 }
 

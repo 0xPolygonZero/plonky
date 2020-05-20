@@ -1,21 +1,33 @@
+use rand::Rng;
 use std::collections::HashSet;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::{Add, Div, Mul, Neg, Sub};
-use rand::Rng;
 
 use num::{BigUint, Integer, One};
+use anyhow::{Result, Error};
 
 use crate::{biguint_to_field, field_to_biguint};
 use std::cmp::Ordering;
 use std::cmp::Ordering::Equal;
 
-pub trait Field: 'static + Sized + Copy + Ord + Hash + Send + Sync + Debug + Display + Default
-+ Neg<Output=Self>
-+ Add<Self, Output=Self>
-+ Sub<Self, Output=Self>
-+ Mul<Self, Output=Self>
-+ Div<Self, Output=Self> {
+pub trait Field:
+    'static
+    + Sized
+    + Copy
+    + Ord
+    + Hash
+    + Send
+    + Sync
+    + Debug
+    + Display
+    + Default
+    + Neg<Output = Self>
+    + Add<Self, Output = Self>
+    + Sub<Self, Output = Self>
+    + Mul<Self, Output = Self>
+    + Div<Self, Output = Self>
+{
     const BITS: usize;
 
     const ZERO: Self;
@@ -62,6 +74,27 @@ pub trait Field: 'static + Sized + Copy + Ord + Hash + Send + Sync + Debug + Dis
             limbs.push(u64_limb.overflowing_shr(56).0 as u8);
         }
         limbs
+    }
+
+    fn from_canonical_u8_vec(u8_limbs: Vec<u8>) -> Result<Self> {
+        let mut u64_chunks = Vec::new();
+        for u8_chunk in u8_limbs.chunks(8) {
+            u64_chunks.push(
+                (u8_chunk[7] as u64) << 56
+                    | (u8_chunk[6] as u64) << 48
+                    | (u8_chunk[5] as u64) << 40
+                    | (u8_chunk[4] as u64) << 32
+                    | (u8_chunk[3] as u64) << 24
+                    | (u8_chunk[2] as u64) << 16
+                    | (u8_chunk[1] as u64) << 8
+                    | (u8_chunk[0] as u64),
+            );
+        }
+        if Self::is_valid_canonical_u64(&u64_chunks) {
+            Ok(Self::from_canonical_u64_vec(u64_chunks))
+        } else {
+            Err(Error::msg("lol"))
+        }
     }
 
     fn to_canonical_bool_vec(&self) -> Vec<bool> {
@@ -232,7 +265,10 @@ pub trait Field: 'static + Sized + Copy + Ord + Hash + Send + Sync + Debug + Dis
         subgroup
     }
 
-    fn generator_order(generator: Self) -> usize where Self: Hash {
+    fn generator_order(generator: Self) -> usize
+    where
+        Self: Hash,
+    {
         Self::cyclic_subgroup_unknown_order(generator).len()
     }
 
@@ -288,7 +324,10 @@ pub trait Field: 'static + Sized + Copy + Ord + Hash + Send + Sync + Debug + Dis
             }
             n = n + Self::ONE;
         }
-        panic!("x^{} and x^(1/{}) are not permutations in this field, or we have a bug!", k, k);
+        panic!(
+            "x^{} and x^(1/{}) are not permutations in this field, or we have a bug!",
+            k, k
+        );
     }
 
     fn is_quadratic_residue(&self) -> bool {
@@ -354,7 +393,9 @@ pub trait Field: 'static + Sized + Copy + Ord + Hash + Send + Sync + Debug + Dis
     fn primitive_root_of_unity(n_power: usize) -> Self {
         assert!(n_power <= Self::TWO_ADICITY);
         let base_root = Self::MULTIPLICATIVE_SUBGROUP_GENERATOR.exp(Self::T);
-        base_root.exp(Self::from_canonical_u64(1u64 << (Self::TWO_ADICITY as u64 - n_power as u64)))
+        base_root.exp(Self::from_canonical_u64(
+            1u64 << (Self::TWO_ADICITY as u64 - n_power as u64),
+        ))
     }
 
     /// If this is a quadratic residue, return an arbitrary (but deterministic) one of its square
@@ -363,7 +404,7 @@ pub trait Field: 'static + Sized + Copy + Ord + Hash + Send + Sync + Debug + Dis
     fn square_root(&self) -> Option<Self> {
         if self.is_quadratic_residue() {
             let mut z = Self::MULTIPLICATIVE_SUBGROUP_GENERATOR.exp(Self::T);
-            let mut w = self.exp((Self::T-Self::ONE)/Self::TWO);
+            let mut w = self.exp((Self::T - Self::ONE) / Self::TWO);
             let mut x = w * *self;
             let mut b = x * w;
 
@@ -402,7 +443,7 @@ macro_rules! test_square_root {
             let x = <$field>::rand();
             let y = x.square();
             let y_sq = y.square_root().unwrap();
-            assert!((x == y_sq) || (x==-y_sq));
+            assert!((x == y_sq) || (x == -y_sq));
         }
     };
 }
