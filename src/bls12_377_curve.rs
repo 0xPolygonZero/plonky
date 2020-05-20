@@ -48,7 +48,6 @@ mod tests {
     #[test]
     fn test_g1_multiplication() {
         let lhs = Bls12377Scalar::from_canonical([11111111, 22222222, 33333333, 44444444]);
-        let b = (Bls12377::convert(lhs) * Bls12377::GENERATOR_PROJECTIVE) == mul_naive(lhs, Bls12377::GENERATOR_PROJECTIVE);
         assert_eq!(Bls12377::convert(lhs) * Bls12377::GENERATOR_PROJECTIVE, mul_naive(lhs, Bls12377::GENERATOR_PROJECTIVE));
     }
 

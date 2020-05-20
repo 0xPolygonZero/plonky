@@ -1,4 +1,4 @@
-use crate::{rescue_sponge, AffinePoint, Curve, Field};
+use crate::{rescue_sponge, util::ceil_div_usize, AffinePoint, Curve, Field};
 use blake3;
 
 pub fn hash_u32_to_curve<C: Curve>(seed: u32, security_bits: usize) -> AffinePoint<C> {
@@ -12,43 +12,38 @@ pub fn hash_usize_to_curve<C: Curve>(seed: usize, security_bits: usize) -> Affin
 }
 
 pub fn blake_field<F: Field>(iter: u8, seed: F) -> (F, bool) {
+    let mut hasher = blake3::Hasher::new();
     // Number of bytes required to make a field element.
-    let byte_length = (F::BITS / 8) + if F::BITS % 8 == 0 { 0 } else { 1 };
-    // Number of Blake hashes necessary to get `byte_length` bytes.
-    let n = (byte_length / blake3::OUT_LEN)
-        + if byte_length % blake3::OUT_LEN == 0 {
-            0
-        } else {
-            1
-        };
+    let byte_length = ceil_div_usize(F::BITS, 8);
+    // // Number of Blake hashes necessary to get `byte_length` bytes.
+    // let n = ceil_div_usize(byte_length, blake3::OUT_LEN);
     // Bytes version of the field element.
     let mut bytes = seed.to_canonical_u8_vec();
-    (0..3).for_each(|_| bytes.push(0));
+    (0..2).for_each(|_| bytes.push(0));
     // Add the `iter` value to get a different result at each iteration.
     bytes[byte_length] = iter;
-    let mut hash_container = vec![0; n * blake3::OUT_LEN];
+    let mut hash_container = vec![0; byte_length + 1];
     // Loop index.
     let mut j = 0;
     loop {
         // Add the loop index to get a different result if the hash fails.
-        bytes[byte_length+1] = j;
+        bytes[byte_length + 1] = j;
         if j > 0 {
-        // Reset the container to zeros.
+            // Reset the container to zeros.
             hash_container.iter_mut().for_each(|x| *x = 0);
+            // Reset the hasher.
+            hasher.reset();
         }
-        // Compute `n` different Blake hashes and copy them to the container.
-        for i in 0..n {
-            bytes[byte_length+2] = i as u8;
-            &hash_container[(i * blake3::OUT_LEN)..((i + 1) * blake3::OUT_LEN)]
-                .copy_from_slice(blake3::hash(&bytes).as_bytes());
-        }
+        // Fill the container with an extended hash.
+        hasher
+            .update(&bytes)
+            .finalize_xof()
+            .fill(&mut hash_container);
         // Try to convert the hash to a field element.
         let x = F::from_canonical_u8_vec(hash_container[..byte_length].to_vec());
         if let Ok(good) = x {
-            // Compute a final hash to get the `y_neg` boolean value
-            // bytes.push(n as u8);
-            bytes[byte_length+2] = n as u8;
-            let y_neg = blake3::hash(&bytes).as_bytes()[0] & 1 == 1;
+            // Use the extra-byte in `hash_container` to deduce `y_neg`.
+            let y_neg = hash_container.last().unwrap() & 1 == 1;
             return (good, y_neg);
         } else {
             j += 1;
@@ -132,9 +127,9 @@ mod tests {
     }
 
     #[test]
-    fn test_hash_rescue_10000() {
-        let N = 10000;
-        let points: Vec<_> = (0..N).map(|_| TweedledeeBase::rand()).collect();
+    fn test_hash_rescue_bench() {
+        let n = 10000;
+        let points: Vec<_> = (0..n).map(|_| TweedledeeBase::rand()).collect();
         let now = Instant::now();
         for &p in points.iter() {
             hash_base_field_to_curve::<Tweedledee>(p, 128);
@@ -142,9 +137,9 @@ mod tests {
         println!("Elapsed: {:.2?}", now.elapsed());
     }
     #[test]
-    fn test_hash_blake_10000() {
-        let N = 1000000;
-        let points: Vec<_> = (0..N).map(|_| TweedledeeBase::rand()).collect();
+    fn test_hash_blake_bench() {
+        let n = 16000;
+        let points: Vec<_> = (0..n).map(|_| TweedledeeBase::rand()).collect();
         let now = Instant::now();
         for &p in points.iter() {
             blake_hash_base_field_to_curve::<Tweedledee>(p);
@@ -153,8 +148,8 @@ mod tests {
     }
     #[test]
     fn test_hash_blake_deterministic() {
-        let N = 10000;
-        let points: Vec<_> = (0..N).map(|_| TweedledeeBase::rand()).collect();
+        let n = 10000;
+        let points: Vec<_> = (0..n).map(|_| TweedledeeBase::rand()).collect();
         let now = Instant::now();
         for &p in points.iter() {
             let x = blake_hash_base_field_to_curve::<Tweedledee>(p);
