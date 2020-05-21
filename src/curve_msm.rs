@@ -45,6 +45,15 @@ fn precompute_single_generator<C: Curve>(g: ProjectivePoint<C>, w: usize) -> Vec
     ProjectivePoint::batch_to_affine(&powers)
 }
 
+pub fn msm_parallel<C: Curve>(
+    scalars: &[C::ScalarField],
+    generators: &[ProjectivePoint<C>],
+    w: usize,
+) -> ProjectivePoint<C> {
+    let precomputation = msm_precompute(generators, w);
+    msm_execute_parallel(&precomputation, scalars)
+}
+
 pub fn msm_execute<C: Curve>(
     precomputation: &MsmPrecomputation<C>,
     scalars: &[C::ScalarField],
@@ -87,9 +96,9 @@ pub fn msm_execute<C: Curve>(
 pub fn msm_execute_parallel<C: Curve>(
     precomputation: &MsmPrecomputation<C>,
     scalars: &[C::ScalarField],
-    w: usize,
 ) -> ProjectivePoint<C> {
     assert_eq!(precomputation.powers_per_generator.len(), scalars.len());
+    let w = precomputation.w;
     let digits = (C::ScalarField::BITS + w - 1) / w;
     let base = 1 << w;
 
