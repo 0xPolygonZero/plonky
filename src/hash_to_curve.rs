@@ -14,7 +14,7 @@ pub fn hash_usize_to_curve<C: Curve>(seed: usize, security_bits: usize) -> Affin
 pub fn blake_field<F: Field>(iter: u8, seed: F) -> (F, bool) {
     let mut hasher = blake3::Hasher::new();
     // Number of bytes required to make a field element.
-    let byte_length = ceil_div_usize(F::BITS, 8);
+    let byte_length = F::BYTES;
     // Bytes version of the field element.
     let mut bytes = seed.to_canonical_u8_vec();
     (0..2).for_each(|_| bytes.push(0));
@@ -38,6 +38,7 @@ pub fn blake_field<F: Field>(iter: u8, seed: F) -> (F, bool) {
             .update(&bytes)
             .finalize_xof()
             .fill(&mut hash_container);
+        hash_container[byte_length-1] >>= 8*F::BYTES - F::BITS;
         // Try to convert the hash to a field element.
         let x = F::from_canonical_u8_vec(hash_container[..byte_length].to_vec());
         if let Ok(good) = x {
@@ -108,7 +109,7 @@ mod tests {
     use super::*;
     use crate::{
         hash_u32_to_curve, rescue_sponge, Field, Tweedledee, TweedledeeBase, Tweedledum,
-        TweedledumBase,
+        TweedledumBase, Bls12377, Bls12377Base
     };
     use std::time::Instant;
 
@@ -132,11 +133,19 @@ mod tests {
     #[test]
     fn test_hash_blake_deterministic() {
         let n = 10000;
-        let points: Vec<_> = (0..n).map(|_| TweedledeeBase::rand()).collect();
+        let points_dee: Vec<_> = (0..n).map(|_| TweedledeeBase::rand()).collect();
+        let points_dum: Vec<_> = (0..n).map(|_| TweedledumBase::rand()).collect();
+        let points_377: Vec<_> = (0..n).map(|_| Bls12377Base::rand()).collect();
         let now = Instant::now();
-        for &p in points.iter() {
-            let x = blake_hash_base_field_to_curve::<Tweedledee>(p);
-            let y = blake_hash_base_field_to_curve::<Tweedledee>(p);
+        for i in 0..n {
+            let x = blake_hash_base_field_to_curve::<Tweedledee>(points_dee[i]);
+            let y = blake_hash_base_field_to_curve::<Tweedledee>(points_dee[i]);
+            assert_eq!(x, y);
+            let x = blake_hash_base_field_to_curve::<Tweedledum>(points_dum[i]);
+            let y = blake_hash_base_field_to_curve::<Tweedledum>(points_dum[i]);
+            assert_eq!(x, y);
+            let x = blake_hash_base_field_to_curve::<Bls12377>(points_377[i]);
+            let y = blake_hash_base_field_to_curve::<Bls12377>(points_377[i]);
             assert_eq!(x, y);
         }
         println!("Elapsed: {:.2?}", now.elapsed());
