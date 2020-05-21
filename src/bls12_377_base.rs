@@ -181,6 +181,7 @@ impl Neg for Bls12377Base {
 
 impl Field for Bls12377Base {
     const BITS: usize = 377;
+    const BYTES: usize = 48;
 
     const ZERO: Self = Self {
         limbs: [0; 6]

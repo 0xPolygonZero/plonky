@@ -29,6 +29,7 @@ pub trait Field:
     + Div<Self, Output = Self>
 {
     const BITS: usize;
+    const BYTES: usize;
 
     const ZERO: Self;
     const ONE: Self;
@@ -93,7 +94,7 @@ pub trait Field:
         if Self::is_valid_canonical_u64(&u64_chunks) {
             Ok(Self::from_canonical_u64_vec(u64_chunks))
         } else {
-            Err(Error::msg("lol"))
+            Err(Error::msg("Element if not in the field."))
         }
     }
 

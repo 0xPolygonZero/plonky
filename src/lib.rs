@@ -31,6 +31,7 @@ pub use tweedledee_base::*;
 pub use tweedledee_curve::*;
 pub use tweedledum_base::*;
 pub use tweedledum_curve::*;
+pub use serialization::*;
 
 mod bigint_arithmetic;
 mod bigint_inverse;
@@ -59,3 +60,4 @@ mod tweedledee_curve;
 mod tweedledum_base;
 mod tweedledum_curve;
 mod util;
+mod serialization;
