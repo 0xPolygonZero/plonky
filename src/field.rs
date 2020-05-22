@@ -29,6 +29,7 @@ pub trait Field:
     + Div<Self, Output = Self>
 {
     const BITS: usize;
+    const BYTES: usize;
 
     const ZERO: Self;
     const ONE: Self;

@@ -182,6 +182,7 @@ impl Neg for TweedledumBase {
 
 impl Field for TweedledumBase {
     const BITS: usize = 255;
+    const BYTES: usize = 32;
     const ZERO: Self = Self { limbs: [0; 4] };
     const ONE: Self = Self {
         limbs: [

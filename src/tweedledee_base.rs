@@ -1,12 +1,15 @@
+use rand::Rng;
 use std::cmp::Ordering::Less;
 use std::convert::TryInto;
 use std::ops::{Add, Div, Mul, Neg, Sub};
-use rand::Rng;
 
 use unroll::unroll_for_loops;
 
 use crate::bigint_inverse::nonzero_multiplicative_inverse_4;
-use crate::{add_4_4_no_overflow, cmp_4_4, field_to_biguint, rand_range_4, rand_range_4_from_rng, sub_4_4, Field};
+use crate::{
+    add_4_4_no_overflow, cmp_4_4, field_to_biguint, rand_range_4, rand_range_4_from_rng, sub_4_4,
+    Field,
+};
 use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -182,6 +185,7 @@ impl Neg for TweedledeeBase {
 
 impl Field for TweedledeeBase {
     const BITS: usize = 255;
+    const BYTES: usize = 32;
     const ZERO: Self = Self { limbs: [0; 4] };
     const ONE: Self = Self {
         limbs: [
@@ -298,11 +302,10 @@ impl Display for TweedledeeBase {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use crate::{Field, TweedledeeBase};
     use crate::test_square_root;
+    use crate::{Field, TweedledeeBase};
 
     #[test]
     fn primitive_root_order() {
@@ -321,7 +324,7 @@ mod tests {
         let big = TweedledeeBase::ORDER_X2.to_vec();
         assert_eq!(TweedledeeBase::is_valid_canonical_u64(&big), false);
 
-        let limbs = vec![1,2,3,4,5];
+        let limbs = vec![1, 2, 3, 4, 5];
         assert_eq!(TweedledeeBase::is_valid_canonical_u64(&limbs), false);
     }
 

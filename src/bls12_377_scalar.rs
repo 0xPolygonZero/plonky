@@ -154,6 +154,7 @@ impl Neg for Bls12377Scalar {
 
 impl Field for Bls12377Scalar {
     const BITS: usize = 253;
+    const BYTES: usize = 32;
 
     const ZERO: Self = Self { limbs: [0; 4] };
     const ONE: Self = Self { limbs: [9015221291577245683, 8239323489949974514, 1646089257421115374, 958099254763297437] };
