@@ -87,6 +87,9 @@ impl_curve!(Bls12377, <Bls12377 as Curve>::BaseField);
 
 #[cfg(test)]
 mod test {
+    use super::*;
+    use crate::blake_hash_base_field_to_curve;
+
     macro_rules! test_field_serialization {
         ($field:ty, $test_name:ident) => {
             #[test]
@@ -127,8 +130,6 @@ mod test {
         };
     }
 
-    use super::*;
-    use crate::blake_hash_base_field_to_curve;
     test_field_serialization!(TweedledeeBase, test_tweedledee_base_serialization);
     test_field_serialization!(TweedledumBase, test_tweedledum_base_serialization);
     test_field_serialization!(Bls12377Base, test_bls_base_serialization);
