@@ -1,4 +1,4 @@
-use crate::{Target, AffinePoint, Curve, AffinePointTarget};
+use crate::{Target, AffinePoint, Curve, AffinePointTarget, Field};
 
 pub struct Proof<C: Curve> {
     /// A commitment to each wire polynomial.
@@ -9,13 +9,13 @@ pub struct Proof<C: Curve> {
     pub c_plonk_t: Vec<AffinePoint<C>>,
 
     /// The opening of each polynomial at each `PublicInputGate` index.
-    pub o_public_inputs: Vec<OpeningSet>,
+    pub o_public_inputs: Vec<OpeningSet<C::ScalarField>>,
     /// The opening of each polynomial at `zeta`.
-    pub o_local: OpeningSet,
+    pub o_local: OpeningSet<C::ScalarField>,
     /// The opening of each polynomial at `g * zeta`.
-    pub o_right: OpeningSet,
+    pub o_right: OpeningSet<C::ScalarField>,
     /// The opening of each polynomial at `g^65 * zeta`.
-    pub o_below: OpeningSet,
+    pub o_below: OpeningSet<C::ScalarField>,
 
     /// L_i in the Halo reduction.
     pub halo_l_i: Vec<AffinePoint<C>>,
@@ -72,17 +72,30 @@ impl ProofTarget {
 }
 
 /// The opening of each Plonk polynomial at a particular point.
-pub struct OpeningSet {
+#[derive(Clone)]
+pub struct OpeningSet<F: Field> {
     /// The purported opening of each constant polynomial.
-    pub o_constants: Vec<Target>,
+    pub o_constants: Vec<F>,
     /// The purported opening of each S_sigma polynomial in the context of Plonk's permutation argument.
-    pub o_plonk_sigmas: Vec<Target>,
+    pub o_plonk_sigmas: Vec<F>,
     /// The purported opening of each wire polynomial.
-    pub o_wires: Vec<Target>,
+    pub o_wires: Vec<F>,
     /// The purported opening of `Z`.
-    pub o_plonk_z: Target,
+    pub o_plonk_z: F,
     /// The purported opening of `t`.
-    pub o_plonk_t: Vec<Target>,
+    pub o_plonk_t: Vec<F>,
+}
+
+impl<F: Field> OpeningSet<F> {
+    pub fn to_vec(&self) -> Vec<F> {
+        [
+            self.o_constants.as_slice(),
+            self.o_plonk_sigmas.as_slice(),
+            self.o_wires.as_slice(),
+            &[self.o_plonk_z],
+            self.o_plonk_t.as_slice(),
+        ].concat()
+    }
 }
 
 /// The opening of each Plonk polynomial at a particular point.

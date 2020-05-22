@@ -1,6 +1,7 @@
 use crate::{AffinePointTarget, Circuit, CircuitBuilder, CurveMulOp, Field, HaloEndomorphismCurve, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, OpeningSetTarget, ProofTarget, PublicInput, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, Target, Curve};
 use crate::plonk_gates::evaluate_all_constraints_recursively;
 use crate::util::ceil_div_usize;
+use crate::plonk_challenger::RecursiveChallenger;
 
 /// Wraps a `Circuit` for recursive verification with inputs for the proof data.
 pub struct RecursiveCircuit<C: Curve> {
@@ -99,25 +100,22 @@ pub fn recursive_verification_circuit<C: Curve, InnerC: HaloEndomorphismCurve<Ba
     // Can call curve_assert_valid.
 
     // Compute random challenges.
-    let (beta, gamma) = builder.rescue_hash_n_to_2(&flatten_points(&proof.c_wires));
-    let alpha = builder.rescue_hash_n_to_1(&[vec![beta], proof.c_plonk_z.to_vec()].concat());
-    let zeta = builder.rescue_hash_n_to_1(&[vec![alpha], flatten_points(&proof.c_plonk_t)].concat());
-    let (v, u, x) = builder.rescue_hash_n_to_3(&[
-        vec![zeta],
-        proof.all_opening_targets(),
-    ].concat());
+    let mut challenger = RecursiveChallenger::new();
+    challenger.observe_affine_points(&proof.c_wires);
+    let (beta, gamma) = challenger.get_2_challenges(&mut builder);
+    challenger.observe_affine_point(proof.c_plonk_z);
+    let alpha = challenger.get_challenge(&mut builder);
+    challenger.observe_affine_points(&proof.c_plonk_t);
+    let zeta = challenger.get_challenge(&mut builder);
+    challenger.observe_elements(&proof.all_opening_targets());
+    let (v, u, x) = challenger.get_3_challenges(&mut builder);
 
     // Compute IPA challenges.
-    let mut transcript_state = v;
     let mut ipa_challenges = Vec::new();
     for i in 0..degree_pow {
-        let u_i = builder.rescue_hash_n_to_1(&[
-            vec![transcript_state],
-            proof.halo_l_i[i].to_vec(),
-            proof.halo_r_i[i].to_vec(),
-        ].concat());
-        ipa_challenges.push(u_i);
-        transcript_state = u_i;
+        challenger.observe_affine_points(&[proof.halo_l_i[i], proof.halo_r_i[i]]);
+        let l_challenge = challenger.get_challenge(&mut builder);
+        ipa_challenges.push(l_challenge);
     }
 
     let (u_l, u_r) = verify_all_ipas::<C, InnerC>(&mut builder, &proof, u, v, x, ipa_challenges);
@@ -147,13 +145,6 @@ pub fn recursive_verification_circuit<C: Curve, InnerC: HaloEndomorphismCurve<Ba
 
     let circuit = builder.build();
     RecursiveCircuit { circuit, proof }
-}
-
-fn flatten_points(points: &[AffinePointTarget]) -> Vec<Target> {
-    let coordinate_pairs: Vec<Vec<Target>> = points.iter()
-        .map(|p| p.to_vec())
-        .collect();
-    coordinate_pairs.concat()
 }
 
 /// Verify all IPAs in the given proof. Return `(u_l, u_r)`, which roughly correspond to `u` and

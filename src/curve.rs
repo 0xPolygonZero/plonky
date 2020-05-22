@@ -1,5 +1,7 @@
 use std::ops::Neg;
 
+use anyhow::Result;
+
 use crate::Field;
 
 // To avoid implementation conflicts from associated types,
@@ -25,6 +27,14 @@ pub trait Curve: 'static + Sized + Copy {
 
     fn convert(x: Self::ScalarField) -> CurveScalar<Self> {
         CurveScalar(x)
+    }
+
+    fn try_convert_b2s(x: Self::BaseField) -> Result<Self::ScalarField> {
+        x.try_convert::<Self::ScalarField>()
+    }
+
+    fn try_convert_s2b(x: Self::ScalarField) -> Result<Self::BaseField> {
+        x.try_convert::<Self::BaseField>()
     }
 }
 
