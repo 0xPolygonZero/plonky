@@ -5,7 +5,6 @@ use std::hash::Hash;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 use num::{BigUint, Integer, One};
-use anyhow::{Result, Error};
 
 use crate::{biguint_to_field, field_to_biguint};
 use std::cmp::Ordering;
@@ -186,7 +185,12 @@ pub trait Field:
     }
 
     fn inner_product(a: &[Self], b: &[Self]) -> Self {
-        todo!()
+        assert_eq!(a.len(), b.len());
+        let mut sum = Self::ZERO;
+        for (&a_i, &b_i) in a.iter().zip(b.iter()) {
+            sum = sum + a_i * b_i;
+        }
+        sum
     }
 
     fn batch_multiplicative_inverse_opt<F: Field>(x: &[F]) -> Vec<Option<F>> {

@@ -102,12 +102,17 @@ pub struct Circuit<C: Curve> {
     pub pedersen_h: AffinePoint<C>,
     /// The generator U used in Halo.
     pub u: AffinePoint<C>,
+    /// Each constant polynomial, in coefficient form.
     pub constants_coeffs: Vec<Vec<C::ScalarField>>,
-    pub plonk_sigmas_coeffs: Vec<Vec<C::ScalarField>>,
-    /// The constant polynomials in point-value form, low-degree extended to be degree 8n.
+    /// Each constant polynomial, in point-value form, low-degree extended to be degree 8n.
     pub constants_8n: Vec<Vec<C::ScalarField>>,
+    /// Each permutation polynomial, in coefficient form.
+    pub plonk_sigmas_coeffs: Vec<Vec<C::ScalarField>>,
+    /// A precomputation used for MSMs involving `generators`.
     pub msm_precomputation: MsmPrecomputation<C>,
+    /// A precomputation used for FFTs of degree n, where n is the number of gates.
     pub fft_precomputation_n: FftPrecomputation<C::ScalarField>,
+    /// A precomputation used for FFTs of degree 8n, where n is the number of gates.
     pub fft_precomputation_8n: FftPrecomputation<C::ScalarField>,
 }
 
@@ -1417,9 +1422,9 @@ impl<C: Curve> CircuitBuilder<C> {
         let pedersen_g = (0..degree).map(|i| blake_hash_usize_to_curve::<C>(i)).collect();
         let pedersen_h = blake_hash_usize_to_curve::<C>(degree);
         let u = blake_hash_usize_to_curve::<C>(degree + 1);
-        let plonk_sigmas_coeffs = todo!();
         let constants_coeffs = todo!();
         let constants_8n = todo!();
+        let plonk_sigmas_coeffs = todo!();
         let fft_precomputation_n = fft_precompute(degree);
         let fft_precomputation_8n = fft_precompute(degree * 8);
         let msm_precomputation = todo!();
@@ -1435,8 +1440,8 @@ impl<C: Curve> CircuitBuilder<C> {
             pedersen_h,
             u,
             constants_coeffs,
-            plonk_sigmas_coeffs,
             constants_8n,
+            plonk_sigmas_coeffs,
             msm_precomputation,
             fft_precomputation_n,
             fft_precomputation_8n,
