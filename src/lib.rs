@@ -49,6 +49,7 @@ mod curve_multiplication;
 mod hash_to_curve;
 mod mds;
 mod plonk;
+mod plonk_challenger;
 mod plonk_gates;
 mod plonk_proof;
 mod plonk_recursion;
