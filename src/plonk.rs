@@ -5,6 +5,7 @@ use std::time::Instant;
 use crate::{AffinePoint, Curve, Field, generate_rescue_constants, HaloEndomorphismCurve, Proof, FftPrecomputation, ifft_with_precomputation_power_of_2, MsmPrecomputation, msm_execute, ProjectivePoint, blake_hash_usize_to_curve, rescue_hash_n_to_1, rescue_hash_n_to_2, rescue_hash_n_to_3, msm_parallel, OpeningSet, fft_with_precomputation_power_of_2, fft_precompute};
 use crate::plonk_gates::{ArithmeticGate, Base4SumGate, BufferGate, CurveAddGate, CurveDblGate, CurveEndoGate, Gate, PublicInputGate, RescueStepAGate, RescueStepBGate};
 use crate::util::{ceil_div_usize, log2_strict};
+use crate::plonk_challenger::Challenger;
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
@@ -129,6 +130,8 @@ impl<C: Curve> Circuit<C> {
         &self,
         inputs: PartialWitness<C::ScalarField>,
     ) -> Proof<C> {
+        let mut challenger = Challenger::new(self.security_bits);
+
         // Generate the witness, and convert both to coefficient form and a degree-8n LDE.
         let witness = self.generate_witness(inputs);
         let wires_coeffs: Vec<Vec<C::ScalarField>> = witness.wire_values.iter()
@@ -148,7 +151,8 @@ impl<C: Curve> Circuit<C> {
         let c_wires = ProjectivePoint::batch_to_affine(&c_wires);
 
         // Generate a random beta and gamma from the transcript.
-        let (beta, gamma) = rescue_hash_n_to_2::<C::BaseField>(flatten_points(&c_wires), self.security_bits);
+        challenger.observe_affine_points(&c_wires);
+        let (beta, gamma) = challenger.get_2_challenges();
 
         // Generate Z, which is used in Plonk's permutation argument.
         let mut plonk_z_points = vec![C::ScalarField::ONE];
@@ -168,7 +172,8 @@ impl<C: Curve> Circuit<C> {
         let c_plonk_z = pedersen_hash::<C>(&plonk_z_coeffs, &self.msm_precomputation).to_affine();
 
         // Generate a random alpha from the transcript.
-        let alpha = rescue_hash_n_to_1::<C::BaseField>(vec![beta, c_plonk_z.x, c_plonk_z.y], self.security_bits);
+        challenger.observe_affine_point(c_plonk_z);
+        let alpha = challenger.get_challenge();
 
         // Generate the quotient polynomial, t.
         let plonk_t_points: Vec<C::ScalarField> = todo!();
@@ -181,7 +186,8 @@ impl<C: Curve> Circuit<C> {
         let c_plonk_t = ProjectivePoint::batch_to_affine(&c_plonk_t);
 
         // Generate a random zeta from the transcript.
-        let zeta_bf = rescue_hash_n_to_1::<C::BaseField>([vec![alpha], flatten_points(&c_plonk_t)].concat(), self.security_bits);
+        challenger.observe_affine_points(&c_plonk_t);
+        let zeta_bf = challenger.get_challenge();
         let zeta_sf = C::try_convert_b2s(zeta_bf).expect("should fit in both fields with high probability");
 
         // Open all polynomials at each PublicInputGate index.
@@ -216,9 +222,8 @@ impl<C: Curve> Circuit<C> {
             .collect();
 
         // Generate random v, u, and x from the transcript.
-        let (v, u, x) = rescue_hash_n_to_3::<C::BaseField>(
-            [vec![zeta_bf], all_opened_values_bf].concat(),
-            self.security_bits);
+        challenger.observe_elements(&all_opened_values_bf);
+        let (v, u, x) = challenger.get_3_challenges();
 
         // Reduce all IPAs to a single one with random weights.
         let combined_commit = todo!();
@@ -249,9 +254,8 @@ impl<C: Curve> Circuit<C> {
                 + C::convert(r_j_blinding_factor) * self.pedersen_h.to_projective()
                 + C::convert(C::ScalarField::inner_product(a_hi, b_lo)) * self.u.to_projective();
 
-            let l_challenge = rescue_hash_n_to_1::<C::BaseField>(
-                vec![transcript_state, halo_l_j.x, halo_l_j.y, halo_r_j.x, halo_r_j.y],
-                self.security_bits);
+            challenger.observe_proj_points(&[halo_l_j, halo_r_j]);
+            let l_challenge = challenger.get_challenge();
             let r_challenge = l_challenge.multiplicative_inverse();
             transcript_state = l_challenge;
         }

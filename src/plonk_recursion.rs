@@ -1,6 +1,7 @@
 use crate::{AffinePointTarget, Circuit, CircuitBuilder, CurveMulOp, Field, HaloEndomorphismCurve, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, OpeningSetTarget, ProofTarget, PublicInput, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, Target, Curve, flatten_point_targets};
 use crate::plonk_gates::evaluate_all_constraints_recursively;
 use crate::util::ceil_div_usize;
+use crate::plonk_challenger::RecursiveChallenger;
 
 /// Wraps a `Circuit` for recursive verification with inputs for the proof data.
 pub struct RecursiveCircuit<C: Curve> {
@@ -99,25 +100,22 @@ pub fn recursive_verification_circuit<C: Curve, InnerC: HaloEndomorphismCurve<Ba
     // Can call curve_assert_valid.
 
     // Compute random challenges.
-    let (beta, gamma) = builder.rescue_hash_n_to_2(&flatten_point_targets(&proof.c_wires));
-    let alpha = builder.rescue_hash_n_to_1(&[beta, proof.c_plonk_z.x, proof.c_plonk_z.y]);
-    let zeta = builder.rescue_hash_n_to_1(&[vec![alpha], flatten_point_targets(&proof.c_plonk_t)].concat());
-    let (v, u, x) = builder.rescue_hash_n_to_3(&[
-        vec![zeta],
-        proof.all_opening_targets(),
-    ].concat());
+    let mut challenger = RecursiveChallenger::new();
+    challenger.observe_affine_points(&proof.c_wires);
+    let (beta, gamma) = challenger.get_2_challenges(&mut builder);
+    challenger.observe_affine_point(proof.c_plonk_z);
+    let alpha = challenger.get_challenge(&mut builder);
+    challenger.observe_affine_points(&proof.c_plonk_t);
+    let zeta = challenger.get_challenge(&mut builder);
+    challenger.observe_elements(&proof.all_opening_targets());
+    let (v, u, x) = challenger.get_3_challenges(&mut builder);
 
     // Compute IPA challenges.
-    let mut transcript_state = v;
     let mut ipa_challenges = Vec::new();
     for i in 0..degree_pow {
-        let u_i = builder.rescue_hash_n_to_1(&[
-            vec![transcript_state],
-            proof.halo_l_i[i].to_vec(),
-            proof.halo_r_i[i].to_vec(),
-        ].concat());
-        ipa_challenges.push(u_i);
-        transcript_state = u_i;
+        challenger.observe_affine_points(&[proof.halo_l_i[i], proof.halo_r_i[i]]);
+        let l_challenge = challenger.get_challenge(&mut builder);
+        ipa_challenges.push(l_challenge);
     }
 
     let (u_l, u_r) = verify_all_ipas::<C, InnerC>(&mut builder, &proof, u, v, x, ipa_challenges);
