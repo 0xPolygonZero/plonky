@@ -1,4 +1,4 @@
-use crate::{AffinePointTarget, Circuit, CircuitBuilder, CurveMulOp, Field, HaloEndomorphismCurve, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, OpeningSetTarget, ProofTarget, PublicInput, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, Target, Curve, flatten_point_targets};
+use crate::{AffinePointTarget, Circuit, CircuitBuilder, CurveMulOp, Field, HaloEndomorphismCurve, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, OpeningSetTarget, ProofTarget, PublicInput, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, Target, Curve};
 use crate::plonk_gates::evaluate_all_constraints_recursively;
 use crate::util::ceil_div_usize;
 use crate::plonk_challenger::RecursiveChallenger;

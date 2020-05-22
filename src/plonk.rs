@@ -496,23 +496,6 @@ impl AffinePointTarget {
     }
 }
 
-pub(crate) fn flatten_points<C: Curve>(points: &[AffinePoint<C>]) -> Vec<C::BaseField> {
-    let coordinate_pairs: Vec<_> = points.iter()
-        .map(|p| {
-            debug_assert!(!p.zero);
-            vec![p.x, p.y]
-        })
-        .collect();
-    coordinate_pairs.concat()
-}
-
-pub(crate) fn flatten_point_targets(points: &[AffinePointTarget]) -> Vec<Target> {
-    let coordinate_pairs: Vec<_> = points.iter()
-        .map(|p| p.to_vec())
-        .collect();
-    coordinate_pairs.concat()
-}
-
 /// Represents a scalar * point multiplication operation.
 pub struct CurveMulOp {
     pub scalar: Target,
