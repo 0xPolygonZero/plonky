@@ -231,7 +231,6 @@ impl<C: Curve> Circuit<C> {
         let combined_opening = todo!();
 
         // Final IPA proof.
-        let mut transcript_state = v;
         for i in 0..self.degree_pow() {
             let a_lo = todo!();
             let a_hi = todo!();
@@ -257,7 +256,6 @@ impl<C: Curve> Circuit<C> {
             challenger.observe_proj_points(&[halo_l_j, halo_r_j]);
             let l_challenge = challenger.get_challenge();
             let r_challenge = l_challenge.multiplicative_inverse();
-            transcript_state = l_challenge;
         }
 
         Proof {
