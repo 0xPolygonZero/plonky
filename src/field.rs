@@ -5,6 +5,7 @@ use std::hash::Hash;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 use num::{BigUint, Integer, One};
+use anyhow::{Result, Error};
 
 use crate::{biguint_to_field, field_to_biguint};
 use std::cmp::Ordering;
@@ -75,7 +76,7 @@ pub trait Field:
         limbs
     }
 
-    fn from_canonical_u8_vec(u8_limbs: Vec<u8>) -> Option<Self> {
+    fn from_canonical_u8_vec(u8_limbs: Vec<u8>) -> Result<Self> {
         let mut u64_chunks = Vec::new();
         for u8_chunk in u8_limbs.chunks(8) {
             u64_chunks.push(
@@ -91,9 +92,9 @@ pub trait Field:
         }
 
         if Self::is_valid_canonical_u64(&u64_chunks) {
-            Some(Self::from_canonical_u64_vec(u64_chunks))
+            Ok(Self::from_canonical_u64_vec(u64_chunks))
         } else {
-            None
+            Err(Error::msg("Out of range"))
         }
     }
 
@@ -447,8 +448,8 @@ pub trait Field:
         }
     }
 
-    /// Return this field element re-encoded as an element of `F` if it fits, otherwise `None`.
-    fn try_convert<F: Field>(&self) -> Option<F> {
+    /// Return this field element re-encoded as an element of `F` if it fits, or `Err` if not.
+    fn try_convert<F: Field>(&self) -> Result<F> {
         F::from_canonical_u8_vec(self.to_canonical_u8_vec())
     }
 }
