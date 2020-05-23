@@ -6,10 +6,11 @@ use anyhow::Result;
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::SeedableRng;
 
-use crate::{AffinePoint, blake_hash_usize_to_curve, Curve, fft_precompute, fft_with_precomputation_power_of_2, FftPrecomputation, Field, generate_rescue_constants, HaloEndomorphismCurve, ifft_with_precomputation_power_of_2, msm_execute, msm_parallel, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof, rescue_hash_n_to_1, rescue_hash_n_to_2, rescue_hash_n_to_3};
+use crate::{AffinePoint, blake_hash_usize_to_curve, Curve, fft_precompute, fft_with_precomputation_power_of_2, FftPrecomputation, Field, generate_rescue_constants, HaloEndomorphismCurve, ifft_with_precomputation_power_of_2, msm_execute, msm_parallel, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof, rescue_hash_n_to_1, rescue_hash_n_to_2, rescue_hash_n_to_3, evaluate_all_constraints};
 use crate::plonk_challenger::Challenger;
 use crate::plonk_gates::{ArithmeticGate, Base4SumGate, BufferGate, CurveAddGate, CurveDblGate, CurveEndoGate, Gate, PublicInputGate, RescueStepAGate, RescueStepBGate};
 use crate::util::{ceil_div_usize, log2_strict};
+use crate::plonk_util::{eval_zero_poly, eval_l_1, reduce_with_powers};
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
@@ -99,8 +100,14 @@ pub struct Circuit<C: Curve> {
     pub gate_constants: Vec<Vec<C::ScalarField>>,
     pub routing_target_partitions: TargetPartitions,
     pub generators: Vec<Box<dyn WitnessGenerator<C::ScalarField>>>,
-    /// The generator of the subgroup H onto which the witness is mapped.
-    pub subgroup_generator: C::ScalarField,
+    /// A generator of `subgroup_n`.
+    pub subgroup_generator_n: C::ScalarField,
+    /// A generator of `subgroup_8n`.
+    pub subgroup_generator_8n: C::ScalarField,
+    /// A multiplicative subgroup of order n, where n is our number of gates.
+    pub subgroup_n: Vec<C::ScalarField>,
+    /// A multiplicative subgroup of order 8n, where n is our number of gates.
+    pub subgroup_8n: Vec<C::ScalarField>,
     /// The generators used for binding elements in a Pedersen commitment.
     pub pedersen_g: Vec<AffinePoint<C>>,
     /// The generator used for blinding Pedersen commitments.
@@ -130,7 +137,10 @@ impl<C: Curve> Circuit<C> {
         log2_strict(self.degree())
     }
 
-    pub fn generate_proof(
+    // TODO: For now we assume that there's exactly one embedded curve, InnerC.
+    // Ideally it should be possible to use any number of embedded curves (including zero),
+    // and we should add a set of curve gates for each embedded curve.
+    pub fn generate_proof<InnerC: HaloEndomorphismCurve<BaseField = C::ScalarField>>(
         &self,
         inputs: PartialWitness<C::ScalarField>,
     ) -> Result<Proof<C>> {
@@ -160,39 +170,45 @@ impl<C: Curve> Circuit<C> {
         let beta_sf = beta_bf.try_convert::<C::ScalarField>()?;
         let gamma_sf = gamma_bf.try_convert::<C::ScalarField>()?;
 
-        let subgroup = C::ScalarField::cyclic_subgroup_known_order(self.subgroup_generator, self.degree());
-
         // Generate Z, which is used in Plonk's permutation argument.
-        let mut plonk_z_points = vec![C::ScalarField::ONE];
+        let mut plonk_z_points_n = vec![C::ScalarField::ONE];
         for i in 1..self.degree() {
-            let x = subgroup[i];
+            let x = self.subgroup_n[i];
             let mut numerator = C::ScalarField::ONE;
             let mut denominator = C::ScalarField::ONE;
             for j in 0..NUM_ROUTED_WIRES {
                 let wire_value = witness.wire_values[j][i - 1];
-                let k_i = get_subgroup_shift::<C::ScalarField>(i);
+                let k_i = get_subgroup_shift::<C::ScalarField>(j);
                 let s_id = k_i * x;
                 let s_sigma = todo!();
                 numerator = numerator * (wire_value + beta_sf * s_id + gamma_sf);
                 denominator = denominator * (wire_value + beta_sf * s_sigma + gamma_sf);
             }
-            let last = *plonk_z_points.last().unwrap();
-            plonk_z_points.push(last * numerator / denominator);
+            let last = *plonk_z_points_n.last().unwrap();
+            plonk_z_points_n.push(last * numerator / denominator);
         }
 
         // Commit to Z.
-        let plonk_z_coeffs = ifft_with_precomputation_power_of_2(&plonk_z_points, &self.fft_precomputation_n);
+        let plonk_z_coeffs = ifft_with_precomputation_power_of_2(&plonk_z_points_n, &self.fft_precomputation_n);
         let c_plonk_z = pedersen_hash::<C>(&plonk_z_coeffs, &self.msm_precomputation).to_affine();
 
         // Generate a random alpha from the transcript.
         challenger.observe_affine_point(c_plonk_z);
-        let alpha = challenger.get_challenge();
+        let alpha_bf = challenger.get_challenge();
+        let alpha_sf = alpha_bf.try_convert::<C::ScalarField>()?;
 
-        // Generate the quotient polynomial, t.
-        let plonk_t_points: Vec<C::ScalarField> = todo!();
-        let plonk_t_coeffs = ifft_with_precomputation_power_of_2(&plonk_t_points, &self.fft_precomputation_n);
-        let plonk_t_coeff_chunks: Vec<Vec<C::ScalarField>> = plonk_t_coeffs.chunks(self.degree())
+        // Generate the vanishing polynomial.
+        let vanishing_coeffs = self.vanishing_poly_coeffs::<InnerC>(
+            &wire_values_8n, alpha_sf, beta_sf, gamma_sf, &plonk_z_coeffs);
+
+        // Compute the quotient polynomial, t(x) = vanishing(x) / Z_H(x).
+        let plonk_t_coeffs: Vec<C::ScalarField> = todo!();
+
+        // Split t into degree-n chunks.
+        let mut plonk_t_coeff_chunks: Vec<Vec<C::ScalarField>> = plonk_t_coeffs.chunks(self.degree())
             .map(|chunk| chunk.to_vec()).collect();
+
+        // Commit to the quotient polynomial.
         let c_plonk_t: Vec<ProjectivePoint<C>> = plonk_t_coeff_chunks.iter()
             .map(|coeffs| pedersen_hash::<C>(&plonk_t_coeffs, &self.msm_precomputation))
             .collect();
@@ -217,9 +233,9 @@ impl<C: Curve> Circuit<C> {
         let o_local = self.open_all_polynomials(&wires_coeffs, &plonk_z_coeffs, &plonk_t_coeff_chunks,
                                                 zeta_sf);
         let o_right = self.open_all_polynomials(&wires_coeffs, &plonk_z_coeffs, &plonk_t_coeff_chunks,
-                                                zeta_sf * self.subgroup_generator);
+                                                zeta_sf * self.subgroup_generator_n);
         let o_below = self.open_all_polynomials(&wires_coeffs, &plonk_z_coeffs, &plonk_t_coeff_chunks,
-                                                zeta_sf * self.subgroup_generator.exp_usize(GRID_WIDTH));
+                                                zeta_sf * self.subgroup_generator_n.exp_usize(GRID_WIDTH));
 
         // Get a list of all opened values, to append to the transcript.
         let all_opening_sets: Vec<OpeningSet<C::ScalarField>> = [
@@ -283,6 +299,74 @@ impl<C: Curve> Circuit<C> {
             halo_r_i: todo!(),
             halo_g: todo!(),
         })
+    }
+
+    fn vanishing_poly_coeffs<InnerC: HaloEndomorphismCurve<BaseField=C::ScalarField>>(
+        &self,
+        wire_values_8n: &[Vec<C::ScalarField>],
+        alpha_sf: C::ScalarField,
+        beta_sf: C::ScalarField,
+        gamma_sf: C::ScalarField,
+        plonk_z_coeffs: &[C::ScalarField],
+    ) -> Vec<C::ScalarField> {
+        // Low degree extend Z.
+        let plonk_z_points_8n = fft_with_precomputation_power_of_2(
+            &self.pad_to_8n(&plonk_z_coeffs),
+            &self.fft_precomputation_8n);
+
+        let mut vanishing_points: Vec<C::ScalarField> = Vec::new();
+        for (i, &x) in self.subgroup_8n.iter().enumerate() {
+            // Load the constant polynomials' values at x.
+            let mut local_constant_values = Vec::new();
+            for j in 0..NUM_CONSTANTS {
+                local_constant_values.push(self.constants_8n[j][i]);
+            }
+
+            // Load the wire polynomials' values at x, g x (the "right" position), and g^WIDTH x
+            // (the "below" position). Note that a shift of 1 in the degree-n subgroup corresponds
+            // to a shift of 8 in the degree-8n subgroup.
+            let i_right = (i + 8) % (8 * self.degree());
+            let i_below = (i + 8 * GRID_WIDTH) % (8 * self.degree());
+            let mut local_wire_values = Vec::new();
+            let mut right_wire_values = Vec::new();
+            let mut below_wire_values = Vec::new();
+            for j in 0..NUM_WIRES {
+                local_wire_values.push(wire_values_8n[j][i]);
+                right_wire_values.push(wire_values_8n[j][i_right]);
+                below_wire_values.push(wire_values_8n[j][i_below]);
+            }
+
+            let constraint_terms = evaluate_all_constraints::<C, InnerC>(
+                &local_constant_values, &local_wire_values, &right_wire_values, &below_wire_values);
+
+            // Evaluate the L_1(x) (Z(x) - 1) vanishing term.
+            let z_x = plonk_z_points_8n[i];
+            let z_gz = plonk_z_points_8n[i_right];
+            let vanishing_z_1_term = eval_l_1(self.degree(), x) * (z_x - C::ScalarField::ONE);
+
+            // Evaluate the Z(x) f'(x) - g'(x) Z(g x) term.
+            let mut f_prime = C::ScalarField::ONE;
+            let mut g_prime = C::ScalarField::ONE;
+            for j in 0..NUM_ROUTED_WIRES {
+                let wire_value = wire_values_8n[i][j];
+                let k_i = get_subgroup_shift::<C::ScalarField>(j);
+                let s_id = k_i * x;
+                let s_sigma = todo!();
+                f_prime = f_prime * (wire_value + beta_sf * s_id + gamma_sf);
+                g_prime = g_prime * (wire_value + beta_sf * s_sigma + gamma_sf);
+            }
+            let vanishing_v_shift_term = f_prime * z_x - g_prime * z_gz;
+
+            let vanishing_terms = [
+                vec![vanishing_z_1_term],
+                vec![vanishing_v_shift_term],
+                constraint_terms
+            ].concat();
+
+            vanishing_points.push(reduce_with_powers(&vanishing_terms, alpha_sf));
+        }
+
+        ifft_with_precomputation_power_of_2(&vanishing_points, &self.fft_precomputation_8n)
     }
 
     /// Zero-pad a list of polynomial coefficients to a length of 8n, which is the degree at which
@@ -1416,7 +1500,10 @@ impl<C: Curve> CircuitBuilder<C> {
             ..
         } = self;
 
-        let subgroup_generator = C::ScalarField::primitive_root_of_unity(degree_pow);
+        let subgroup_generator_n = C::ScalarField::primitive_root_of_unity(degree_pow);
+        let subgroup_generator_8n = C::ScalarField::primitive_root_of_unity(degree_pow + 3);
+        let subgroup_n = C::ScalarField::cyclic_subgroup_known_order(subgroup_generator_n, degree);
+        let subgroup_8n = C::ScalarField::cyclic_subgroup_known_order(subgroup_generator_n, 8 * degree);
         let pedersen_g = (0..degree).map(|i| blake_hash_usize_to_curve::<C>(i)).collect();
         let pedersen_h = blake_hash_usize_to_curve::<C>(degree);
         let u = blake_hash_usize_to_curve::<C>(degree + 1);
@@ -1433,7 +1520,10 @@ impl<C: Curve> CircuitBuilder<C> {
             gate_constants,
             routing_target_partitions,
             generators,
-            subgroup_generator,
+            subgroup_generator_n,
+            subgroup_generator_8n,
+            subgroup_n,
+            subgroup_8n,
             pedersen_g,
             pedersen_h,
             u,

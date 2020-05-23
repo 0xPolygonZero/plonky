@@ -53,6 +53,7 @@ mod plonk_challenger;
 mod plonk_gates;
 mod plonk_proof;
 mod plonk_recursion;
+mod plonk_util;
 mod poly_commit;
 mod pseudorandom;
 mod rescue;
