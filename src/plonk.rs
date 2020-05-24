@@ -1,11 +1,15 @@
 use std::borrow::Borrow;
-use std::collections::{HashMap, HashSet, BTreeMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::Instant;
 
-use crate::{AffinePoint, Curve, Field, generate_rescue_constants, HaloEndomorphismCurve, Proof, FftPrecomputation, ifft_with_precomputation_power_of_2, MsmPrecomputation, msm_execute, ProjectivePoint, blake_hash_usize_to_curve, rescue_hash_n_to_1, rescue_hash_n_to_2, rescue_hash_n_to_3, msm_parallel, OpeningSet, fft_with_precomputation_power_of_2, fft_precompute};
+use anyhow::Result;
+use rand_chacha::ChaCha8Rng;
+use rand_chacha::rand_core::SeedableRng;
+
+use crate::{AffinePoint, blake_hash_usize_to_curve, Curve, fft_precompute, fft_with_precomputation_power_of_2, FftPrecomputation, Field, generate_rescue_constants, HaloEndomorphismCurve, ifft_with_precomputation_power_of_2, msm_execute, msm_parallel, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof, rescue_hash_n_to_1, rescue_hash_n_to_2, rescue_hash_n_to_3};
+use crate::plonk_challenger::Challenger;
 use crate::plonk_gates::{ArithmeticGate, Base4SumGate, BufferGate, CurveAddGate, CurveDblGate, CurveEndoGate, Gate, PublicInputGate, RescueStepAGate, RescueStepBGate};
 use crate::util::{ceil_div_usize, log2_strict};
-use crate::plonk_challenger::Challenger;
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
@@ -129,7 +133,7 @@ impl<C: Curve> Circuit<C> {
     pub fn generate_proof(
         &self,
         inputs: PartialWitness<C::ScalarField>,
-    ) -> Proof<C> {
+    ) -> Result<Proof<C>> {
         let mut challenger = Challenger::new(self.security_bits);
 
         // Generate the witness, and convert both to coefficient form and a degree-8n LDE.
@@ -152,16 +156,25 @@ impl<C: Curve> Circuit<C> {
 
         // Generate a random beta and gamma from the transcript.
         challenger.observe_affine_points(&c_wires);
-        let (beta, gamma) = challenger.get_2_challenges();
+        let (beta_bf, gamma_bf) = challenger.get_2_challenges();
+        let beta_sf = beta_bf.try_convert::<C::ScalarField>()?;
+        let gamma_sf = gamma_bf.try_convert::<C::ScalarField>()?;
+
+        let subgroup = C::ScalarField::cyclic_subgroup_known_order(self.subgroup_generator, self.degree());
 
         // Generate Z, which is used in Plonk's permutation argument.
         let mut plonk_z_points = vec![C::ScalarField::ONE];
         for i in 1..self.degree() {
+            let x = subgroup[i];
             let mut numerator = C::ScalarField::ONE;
             let mut denominator = C::ScalarField::ONE;
             for j in 0..NUM_ROUTED_WIRES {
-                numerator = numerator * todo!();
-                denominator = denominator * todo!();
+                let wire_value = witness.wire_values[j][i - 1];
+                let k_i = get_subgroup_shift::<C::ScalarField>(i);
+                let s_id = k_i * x;
+                let s_sigma = todo!();
+                numerator = numerator * (wire_value + beta_sf * s_id + gamma_sf);
+                denominator = denominator * (wire_value + beta_sf * s_sigma + gamma_sf);
             }
             let last = *plonk_z_points.last().unwrap();
             plonk_z_points.push(last * numerator / denominator);
@@ -258,7 +271,7 @@ impl<C: Curve> Circuit<C> {
             let r_challenge = l_challenge.multiplicative_inverse();
         }
 
-        Proof {
+        Ok(Proof {
             c_wires,
             c_plonk_z,
             c_plonk_t,
@@ -269,7 +282,7 @@ impl<C: Curve> Circuit<C> {
             halo_l_i: todo!(),
             halo_r_i: todo!(),
             halo_g: todo!(),
-        }
+        })
     }
 
     /// Zero-pad a list of polynomial coefficients to a length of 8n, which is the degree at which
@@ -1521,4 +1534,23 @@ impl TargetPartitions {
 struct WirePartitions {
     partitions: Vec<Vec<Wire>>,
     indices: HashMap<Wire, usize>,
+}
+
+/// Returns `k_i`, the multiplier used in `S_ID_i` in the context of Plonk's permutation argument.
+pub(crate) fn get_subgroup_shift<F: Field>(i: usize) -> F {
+    // The optimized variant of Plonk's permutation argument calls for NUM_ROUTED_WIRES shifts,
+    // k_1, ..., k_n, which result in distinct cosets. The paper suggests a method which is
+    // fairly straightforward when only three shifts are needed, but seems a bit complex and
+    // expensive if more are needed.
+
+    // We will "cheat" and just use random field elements. Since our subgroup has |F*|/degree
+    // possible cosets, the probability of a collision is negligible for large fields.
+
+    if i == 0 {
+        // We use a trivial shift of 1 for k_1, as in the paper, to save a multiplication.
+        return F::ONE;
+    } else {
+        let mut rng = ChaCha8Rng::seed_from_u64(i as u64);
+        F::rand_from_rng(&mut rng)
+    }
 }

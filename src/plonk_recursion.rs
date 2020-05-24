@@ -1,4 +1,4 @@
-use crate::{AffinePointTarget, Circuit, CircuitBuilder, CurveMulOp, Field, HaloEndomorphismCurve, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, OpeningSetTarget, ProofTarget, PublicInput, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, Target, Curve};
+use crate::{AffinePointTarget, Circuit, CircuitBuilder, CurveMulOp, Field, HaloEndomorphismCurve, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, OpeningSetTarget, ProofTarget, PublicInput, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, Target, Curve, get_subgroup_shift};
 use crate::plonk_gates::evaluate_all_constraints_recursively;
 use crate::util::ceil_div_usize;
 use crate::plonk_challenger::RecursiveChallenger;
@@ -305,14 +305,9 @@ fn verify_assumptions<C: Curve, InnerC: HaloEndomorphismCurve<BaseField=C::Scala
     // Compute Z(zeta) f'(zeta) - Z(g * zeta) g'(zeta), which should vanish on H.
     let mut f_prime = one;
     let mut g_prime = one;
-    let quadratic_nonresidues = C::ScalarField::generate_quadratic_nonresidues(NUM_ROUTED_WIRES - 1);
     for i in 0..NUM_ROUTED_WIRES {
-        let s_id = if i == 0 {
-            zeta
-        } else {
-            let k_i = builder.constant_wire(quadratic_nonresidues[i - 1]);
-            builder.mul(k_i, zeta)
-        };
+        let k_i = builder.constant_wire(get_subgroup_shift::<C::ScalarField>(i));
+        let s_id = builder.mul(k_i, zeta);
         let beta_s_id = builder.mul(beta, s_id);
         let beta_s_sigma = builder.mul(beta, o_sigmas[i]);
         let f_prime_part = builder.add_many(&[o_local_wires[i], beta_s_id, gamma]);

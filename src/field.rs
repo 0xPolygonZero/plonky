@@ -358,20 +358,6 @@ pub trait Field:
         panic!("Number theory is a lie!")
     }
 
-    /// Generate a list of unique quadratic nonresidues in this field. This is guaranteed to be
-    /// deterministic, but the behavior is undefined beyond that.
-    fn generate_quadratic_nonresidues(n: usize) -> Vec<Self> {
-        let mut a = Self::TWO;
-        let mut residues = Vec::new();
-        while residues.len() < n {
-            if !a.is_quadratic_residue() {
-                residues.push(a);
-            }
-            a = a + Self::ONE;
-        }
-        residues
-    }
-
     fn num_bits(&self) -> usize {
         let mut n = 0;
         for (i, limb) in self.to_canonical_u64_vec().iter().enumerate() {
