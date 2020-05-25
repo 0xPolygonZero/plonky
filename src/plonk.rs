@@ -314,6 +314,7 @@ impl<C: Curve> Circuit<C> {
             &self.pad_to_8n(&plonk_z_coeffs),
             &self.fft_precomputation_8n);
 
+        // We will evaluate the vanishing polynomial at 8n points, then interpolate.
         let mut vanishing_points: Vec<C::ScalarField> = Vec::new();
         for (i, &x) in self.subgroup_8n.iter().enumerate() {
             // Load the constant polynomials' values at x.
