@@ -10,7 +10,7 @@ use crate::{AffinePoint, blake_hash_usize_to_curve, Curve, fft_precompute, fft_w
 use crate::plonk_challenger::Challenger;
 use crate::plonk_gates::{ArithmeticGate, Base4SumGate, BufferGate, CurveAddGate, CurveDblGate, CurveEndoGate, Gate, PublicInputGate, RescueStepAGate, RescueStepBGate};
 use crate::util::{ceil_div_usize, log2_strict};
-use crate::plonk_util::{eval_zero_poly, eval_l_1, reduce_with_powers};
+use crate::plonk_util::{eval_zero_poly, eval_l_1, reduce_with_powers, polynomial_division};
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
@@ -202,7 +202,8 @@ impl<C: Curve> Circuit<C> {
             &wire_values_8n, alpha_sf, beta_sf, gamma_sf, &plonk_z_coeffs);
 
         // Compute the quotient polynomial, t(x) = vanishing(x) / Z_H(x).
-        let plonk_t_coeffs: Vec<C::ScalarField> = todo!();
+        let (plonk_t_coeffs, r): (Vec<C::ScalarField>, Vec<C::ScalarField>) = polynomial_division(&vanishing_coeffs, &plonk_z_coeffs);
+        assert_eq!(r, Vec::new());
 
         // Split t into degree-n chunks.
         let mut plonk_t_coeff_chunks: Vec<Vec<C::ScalarField>> = plonk_t_coeffs.chunks(self.degree())
