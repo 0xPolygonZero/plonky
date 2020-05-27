@@ -2,6 +2,7 @@ use crate::{AffinePointTarget, Circuit, CircuitBuilder, CurveMulOp, Field, HaloE
 use crate::plonk_gates::evaluate_all_constraints_recursively;
 use crate::util::ceil_div_usize;
 use crate::plonk_challenger::RecursiveChallenger;
+use crate::plonk_util::reduce_with_powers_recursive;
 
 /// Wraps a `Circuit` for recursive verification with inputs for the proof data.
 pub struct RecursiveCircuit<C: Curve> {
@@ -187,7 +188,7 @@ fn verify_all_ipas<C: Curve, InnerC: HaloEndomorphismCurve<BaseField=C::ScalarFi
         .collect();
 
     // Then, we reduce the above opening set reductions to a single value.
-    let reduced_opening = reduce_with_powers(builder, &opening_set_reductions, v);
+    let reduced_opening = reduce_with_powers_recursive(builder, &opening_set_reductions, v);
 
     verify_ipa::<C, InnerC>(builder, proof, c_reduction, reduced_opening, x, ipa_challenges)
 }
@@ -330,7 +331,7 @@ fn verify_assumptions<C: Curve, InnerC: HaloEndomorphismCurve<BaseField=C::Scala
         vec![vanishing_v_shift_term],
         constraint_terms
     ].concat();
-    let vanishing_eval = reduce_with_powers(builder, &vanishing_terms, alpha);
+    let vanishing_eval = reduce_with_powers_recursive(builder, &vanishing_terms, alpha);
 
     // Evaluate the quotient polynomial, and assert that it matches the prover's opening.
     let quotient_eval = builder.div(vanishing_eval, zero_eval);
@@ -355,19 +356,6 @@ fn reduce_with_coefficients<C: Curve>(
     reduction
 }
 
-/// Computes a sum of terms weighted by powers of alpha.
-fn reduce_with_powers<C: Curve>(
-    builder: &mut CircuitBuilder<C>,
-    terms: &[Target],
-    alpha: Target,
-) -> Target {
-    let mut sum = builder.zero_wire();
-    for &term in terms.iter().rev() {
-        sum = builder.mul_add(sum, alpha, term);
-    }
-    sum
-}
-
 /// Compute `[x^0, x^1, ..., x^(n - 1)]`.
 fn powers<C: Curve>(builder: &mut CircuitBuilder<C>, x: Target, n: usize) -> Vec<Target> {
     let mut powers = Vec::new();
@@ -388,7 +376,7 @@ fn eval_composite_poly<C: Curve>(
     component_evals: &[Target],
     zeta_power_d: Target,
 ) -> Target {
-    reduce_with_powers(builder, component_evals, zeta_power_d)
+    reduce_with_powers_recursive(builder, component_evals, zeta_power_d)
 }
 
 /// Evaluate `g(X, {u_i})` as defined in the Halo paper.
