@@ -6,11 +6,11 @@ use anyhow::Result;
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::SeedableRng;
 
-use crate::{AffinePoint, blake_hash_usize_to_curve, Curve, fft_precompute, fft_with_precomputation_power_of_2, FftPrecomputation, Field, generate_rescue_constants, HaloEndomorphismCurve, ifft_with_precomputation_power_of_2, msm_execute, msm_parallel, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof, rescue_hash_n_to_1, rescue_hash_n_to_2, rescue_hash_n_to_3, evaluate_all_constraints, polynomial_division};
+use crate::{AffinePoint, blake_hash_usize_to_curve, Curve, evaluate_all_constraints, fft_precompute, fft_with_precomputation_power_of_2, FftPrecomputation, Field, generate_rescue_constants, HaloCurve, ifft_with_precomputation_power_of_2, msm_execute, msm_parallel, MsmPrecomputation, OpeningSet, polynomial_division, ProjectivePoint, Proof, rescue_hash_n_to_1, rescue_hash_n_to_2, rescue_hash_n_to_3};
 use crate::plonk_challenger::Challenger;
 use crate::plonk_gates::{ArithmeticGate, Base4SumGate, BufferGate, CurveAddGate, CurveDblGate, CurveEndoGate, Gate, PublicInputGate, RescueStepAGate, RescueStepBGate};
+use crate::plonk_util::{eval_l_1, eval_zero_poly, halo_n, powers, reduce_with_powers};
 use crate::util::{ceil_div_usize, log2_strict};
-use crate::plonk_util::{eval_zero_poly, eval_l_1, reduce_with_powers};
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
@@ -94,7 +94,7 @@ pub trait WitnessGenerator<F: Field>: 'static {
 }
 
 /// Contains all data needed to generate and/or verify proofs.
-pub struct Circuit<C: Curve> {
+pub struct Circuit<C: HaloCurve> {
     pub security_bits: usize,
     pub num_public_inputs: usize,
     pub gate_constants: Vec<Vec<C::ScalarField>>,
@@ -118,8 +118,12 @@ pub struct Circuit<C: Curve> {
     pub constants_coeffs: Vec<Vec<C::ScalarField>>,
     /// Each constant polynomial, in point-value form, low-degree extended to be degree 8n.
     pub constants_8n: Vec<Vec<C::ScalarField>>,
+    /// A commitment to each constant polynomial.
+    pub c_constants: Vec<AffinePoint<C>>,
     /// Each permutation polynomial, in coefficient form.
     pub plonk_sigmas_coeffs: Vec<Vec<C::ScalarField>>,
+    /// A commitment to each permutation polynomial.
+    pub c_plonk_sigmas: Vec<AffinePoint<C>>,
     /// A precomputation used for MSMs involving `generators`.
     pub msm_precomputation: MsmPrecomputation<C>,
     /// A precomputation used for FFTs of degree n, where n is the number of gates.
@@ -128,7 +132,7 @@ pub struct Circuit<C: Curve> {
     pub fft_precomputation_8n: FftPrecomputation<C::ScalarField>,
 }
 
-impl<C: Curve> Circuit<C> {
+impl<C: HaloCurve> Circuit<C> {
     pub fn degree(&self) -> usize {
         self.gate_constants.len()
     }
@@ -140,7 +144,7 @@ impl<C: Curve> Circuit<C> {
     // TODO: For now we assume that there's exactly one embedded curve, InnerC.
     // Ideally it should be possible to use any number of embedded curves (including zero),
     // and we should add a set of curve gates for each embedded curve.
-    pub fn generate_proof<InnerC: HaloEndomorphismCurve<BaseField = C::ScalarField>>(
+    pub fn generate_proof<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &self,
         inputs: PartialWitness<C::ScalarField>,
     ) -> Result<Proof<C>> {
@@ -222,7 +226,7 @@ impl<C: Curve> Circuit<C> {
 
         // Open all polynomials at each PublicInputGate index.
         let num_public_input_gates = ceil_div_usize(self.num_public_inputs, NUM_WIRES);
-        let o_public_inputs = (0..num_public_input_gates)
+        let o_public_inputs: Vec<OpeningSet<C::ScalarField>> = (0..num_public_input_gates)
             // We place PublicInputGates at indices 0, 2, 4, ...
             .map(|i| i * 2)
             .map(|i| self.open_all_polynomials(
@@ -240,10 +244,10 @@ impl<C: Curve> Circuit<C> {
 
         // Get a list of all opened values, to append to the transcript.
         let all_opening_sets: Vec<OpeningSet<C::ScalarField>> = [
-            o_public_inputs,
-            vec![o_local, o_right, o_below],
+            o_public_inputs.clone(),
+            vec![o_local.clone(), o_right.clone(), o_below.clone()],
         ].concat();
-        let all_opened_values_sf: Vec<C::ScalarField> = all_opening_sets.into_iter()
+        let all_opened_values_sf: Vec<C::ScalarField> = all_opening_sets.iter()
             .map(|os| os.to_vec()).collect::<Vec<_>>()
             .concat();
         let all_opened_values_bf: Vec<_> = all_opened_values_sf.into_iter()
@@ -253,12 +257,55 @@ impl<C: Curve> Circuit<C> {
 
         // Generate random v, u, and x from the transcript.
         challenger.observe_elements(&all_opened_values_bf);
-        let (v, u, x) = challenger.get_3_challenges();
+        let (v_bf, u_bf, x) = challenger.get_3_challenges();
+        let v_sf = v_bf.try_convert::<C::ScalarField>()?;
+        let u_sf = u_bf.try_convert::<C::ScalarField>()?;
 
-        // Reduce all IPAs to a single one with random weights.
-        let combined_commit = todo!();
-        let combined_coeffs = todo!();
-        let combined_opening = todo!();
+        // Make a list of all polynomials' commitments and coefficients, to be reduced later.
+        // This must match the order of OpeningSet::to_vec.
+        let all_commits = [
+            self.c_constants.clone(),
+            self.c_plonk_sigmas.clone(),
+            c_wires.clone(),
+            vec![c_plonk_z],
+            c_plonk_t.clone(),
+        ].concat();
+        let all_coeffs = [
+            self.constants_coeffs.clone(),
+            self.plonk_sigmas_coeffs.clone(),
+            wires_coeffs,
+            vec![plonk_z_coeffs],
+            plonk_t_coeff_chunks,
+        ].concat();
+
+        // Normally we would reduce these lists using powers of u, but for the sake of efficiency
+        // (particularly in the recursive verifier) we instead use n(u^i) for each u^i, where n is
+        // the injective function related to the Halo endomorphism. Here we compute n(u^i).
+        let actual_scalars: Vec<C::ScalarField> = powers(u_sf, all_commits.len()).iter()
+            .map(|u_power| halo_n::<C>(&u_power.to_canonical_bool_vec()[..self.security_bits]))
+            .collect();
+
+        // Reduce the commitment list to a single commitment.
+        let reduced_commit = msm_parallel(
+            &actual_scalars,
+            &all_commits.iter().map(AffinePoint::to_projective).collect::<Vec<_>>(),
+            2);
+
+        // Reduce the coefficient list to a single set of polynomial coefficients.
+        let mut reduced_coeffs = vec![C::ScalarField::ZERO; self.degree()];
+        for (i, coeffs) in all_coeffs.iter().enumerate() {
+            for (j, &c) in coeffs.iter().enumerate() {
+                reduced_coeffs[j] = reduced_coeffs[j] + actual_scalars[i] * c;
+            }
+        }
+
+        // Reduce each opening set to a single point.
+        let opening_set_reductions: Vec<C::ScalarField> = all_opening_sets.iter()
+            .map(|opening_set| C::ScalarField::inner_product(&actual_scalars, &opening_set.to_vec()))
+            .collect();
+
+        // Then, we reduce the above opening set reductions to a single value.
+        let reduced_opening = reduce_with_powers(&opening_set_reductions, v_sf);
 
         // Final IPA proof.
         for i in 0..self.degree_pow() {
@@ -302,7 +349,7 @@ impl<C: Curve> Circuit<C> {
         })
     }
 
-    fn vanishing_poly_coeffs<InnerC: HaloEndomorphismCurve<BaseField=C::ScalarField>>(
+    fn vanishing_poly_coeffs<InnerC: HaloCurve<BaseField=C::ScalarField>>(
         &self,
         wire_values_8n: &[Vec<C::ScalarField>],
         alpha_sf: C::ScalarField,
@@ -614,7 +661,7 @@ pub struct CurveMsmEndoResult {
     pub actual_scalars: Vec<Target>,
 }
 
-pub struct CircuitBuilder<C: Curve> {
+pub struct CircuitBuilder<C: HaloCurve> {
     pub(crate) security_bits: usize,
     public_input_index: usize,
     virtual_target_index: usize,
@@ -625,7 +672,7 @@ pub struct CircuitBuilder<C: Curve> {
     constant_wires: HashMap<C::ScalarField, Target>,
 }
 
-impl<C: Curve> CircuitBuilder<C> {
+impl<C: HaloCurve> CircuitBuilder<C> {
     pub fn new(security_bits: usize) -> Self {
         CircuitBuilder {
             security_bits,
@@ -1188,7 +1235,7 @@ impl<C: Curve> CircuitBuilder<C> {
         self.curve_msm::<InnerC>(&[mul])
     }
 
-    pub fn curve_mul_endo<InnerC: HaloEndomorphismCurve<BaseField=C::ScalarField>>(
+    pub fn curve_mul_endo<InnerC: HaloCurve<BaseField=C::ScalarField>>(
         &mut self,
         mul: CurveMulOp,
     ) -> CurveMulEndoResult {
@@ -1283,7 +1330,7 @@ impl<C: Curve> CircuitBuilder<C> {
     }
 
     /// Like `curve_msm`, but uses the endomorphism described in the Halo paper.
-    pub fn curve_msm_endo<InnerC: HaloEndomorphismCurve<BaseField=C::ScalarField>>(
+    pub fn curve_msm_endo<InnerC: HaloCurve<BaseField=C::ScalarField>>(
         &mut self,
         parts: &[CurveMulOp],
     ) -> CurveMsmEndoResult {
@@ -1502,19 +1549,35 @@ impl<C: Curve> CircuitBuilder<C> {
             ..
         } = self;
 
+        let fft_precomputation_n = fft_precompute(degree);
+        let fft_precomputation_8n = fft_precompute(degree * 8);
+        let msm_precomputation = todo!();
+
         let subgroup_generator_n = C::ScalarField::primitive_root_of_unity(degree_pow);
         let subgroup_generator_8n = C::ScalarField::primitive_root_of_unity(degree_pow + 3);
         let subgroup_n = C::ScalarField::cyclic_subgroup_known_order(subgroup_generator_n, degree);
         let subgroup_8n = C::ScalarField::cyclic_subgroup_known_order(subgroup_generator_n, 8 * degree);
+
         let pedersen_g = (0..degree).map(|i| blake_hash_usize_to_curve::<C>(i)).collect();
         let pedersen_h = blake_hash_usize_to_curve::<C>(degree);
         let u = blake_hash_usize_to_curve::<C>(degree + 1);
-        let constants_coeffs = todo!();
-        let constants_8n = todo!();
-        let plonk_sigmas_coeffs = todo!();
-        let fft_precomputation_n = fft_precompute(degree);
-        let fft_precomputation_8n = fft_precompute(degree * 8);
-        let msm_precomputation = todo!();
+
+        let constants_coeffs: Vec<Vec<C::ScalarField>> = gate_constants.iter()
+            .map(|values| ifft_with_precomputation_power_of_2(values, &fft_precomputation_n))
+            .collect();
+        let constants_8n = constants_coeffs.iter()
+            .map(|coeffs| fft_with_precomputation_power_of_2(coeffs, &fft_precomputation_8n))
+            .collect();
+        let c_constants: Vec<ProjectivePoint<C>> = constants_coeffs.iter()
+            .map(|coeffs| pedersen_hash(&coeffs, &msm_precomputation))
+            .collect();
+        let c_constants = ProjectivePoint::batch_to_affine(&c_constants);
+
+        let plonk_sigmas_coeffs: Vec<Vec<C::ScalarField>> = todo!();
+        let c_plonk_sigmas: Vec<ProjectivePoint<C>> = plonk_sigmas_coeffs.iter()
+            .map(|coeffs| pedersen_hash(&coeffs, &msm_precomputation))
+            .collect();
+        let c_plonk_sigmas = ProjectivePoint::batch_to_affine(&c_plonk_sigmas);
 
         Circuit {
             security_bits,
@@ -1531,7 +1594,9 @@ impl<C: Curve> CircuitBuilder<C> {
             u,
             constants_coeffs,
             constants_8n,
+            c_constants,
             plonk_sigmas_coeffs,
+            c_plonk_sigmas,
             msm_precomputation,
             fft_precomputation_n,
             fft_precomputation_8n,

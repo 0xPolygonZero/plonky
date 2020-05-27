@@ -1,4 +1,4 @@
-use crate::{Field, rescue_sponge, Curve, Target, CircuitBuilder, AffinePoint, AffinePointTarget, ProjectivePoint};
+use crate::{Field, rescue_sponge, Curve, Target, CircuitBuilder, AffinePoint, AffinePointTarget, ProjectivePoint, HaloCurve};
 use std::marker::PhantomData;
 
 /// Observes prover messages, and generates challenges by hashing the transcript.
@@ -64,12 +64,12 @@ impl<F: Field> Challenger<F> {
 }
 
 /// Observes prover messages, and generates challenges by hashing the transcript.
-pub(crate) struct RecursiveChallenger<C: Curve> {
+pub(crate) struct RecursiveChallenger<C: HaloCurve> {
     transcript: Vec<Target>,
     _phantom: PhantomData<C>,
 }
 
-impl<C: Curve> RecursiveChallenger<C> {
+impl<C: HaloCurve> RecursiveChallenger<C> {
     pub(crate) fn new() -> RecursiveChallenger<C> {
         RecursiveChallenger { transcript: Vec::new(), _phantom: PhantomData }
     }
