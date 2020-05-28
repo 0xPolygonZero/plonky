@@ -6,7 +6,7 @@ use anyhow::Result;
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::SeedableRng;
 
-use crate::{AffinePoint, blake_hash_usize_to_curve, Curve, fft_precompute, fft_with_precomputation_power_of_2, FftPrecomputation, Field, generate_rescue_constants, HaloEndomorphismCurve, ifft_with_precomputation_power_of_2, msm_execute, msm_parallel, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof, rescue_hash_n_to_1, rescue_hash_n_to_2, rescue_hash_n_to_3, evaluate_all_constraints, polynomial_division};
+use crate::{AffinePoint, blake_hash_usize_to_curve, Curve, fft_precompute, fft_with_precomputation_power_of_2, FftPrecomputation, Field, generate_rescue_constants, HaloEndomorphismCurve, ifft_with_precomputation_power_of_2, msm_execute, msm_parallel, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof, rescue_hash_n_to_1, rescue_hash_n_to_2, rescue_hash_n_to_3, evaluate_all_constraints, polynomial_division, polynomial_is_zero};
 use crate::plonk_challenger::Challenger;
 use crate::plonk_gates::{ArithmeticGate, Base4SumGate, BufferGate, CurveAddGate, CurveDblGate, CurveEndoGate, Gate, PublicInputGate, RescueStepAGate, RescueStepBGate};
 use crate::util::{ceil_div_usize, log2_strict};
@@ -203,7 +203,7 @@ impl<C: Curve> Circuit<C> {
 
         // Compute the quotient polynomial, t(x) = vanishing(x) / Z_H(x).
         let (plonk_t_coeffs, r): (Vec<C::ScalarField>, Vec<C::ScalarField>) = polynomial_division(&vanishing_coeffs, &plonk_z_coeffs);
-        assert_eq!(r, Vec::new());
+        assert!(polynomial_is_zero(&r));
 
         // Split t into degree-n chunks.
         let mut plonk_t_coeff_chunks: Vec<Vec<C::ScalarField>> = plonk_t_coeffs.chunks(self.degree())
