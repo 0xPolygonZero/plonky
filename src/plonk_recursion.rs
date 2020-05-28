@@ -1,11 +1,11 @@
-use crate::{AffinePointTarget, Circuit, CircuitBuilder, CurveMulOp, Field, HaloEndomorphismCurve, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, OpeningSetTarget, ProofTarget, PublicInput, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, Target, Curve, get_subgroup_shift};
-use crate::plonk_gates::evaluate_all_constraints_recursively;
-use crate::util::ceil_div_usize;
+use crate::{AffinePointTarget, Circuit, CircuitBuilder, Curve, CurveMulOp, Field, get_subgroup_shift, HaloCurve, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, OpeningSetTarget, ProofTarget, PublicInput, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, Target};
 use crate::plonk_challenger::RecursiveChallenger;
-use crate::plonk_util::reduce_with_powers_recursive;
+use crate::plonk_gates::evaluate_all_constraints_recursively;
+use crate::plonk_util::{powers_recursive, reduce_with_powers_recursive};
+use crate::util::ceil_div_usize;
 
 /// Wraps a `Circuit` for recursive verification with inputs for the proof data.
-pub struct RecursiveCircuit<C: Curve> {
+pub struct RecursiveCircuit<C: HaloCurve> {
     pub circuit: Circuit<C>,
     pub proof: ProofTarget,
 }
@@ -51,7 +51,7 @@ fn num_public_input_gates(num_public_inputs: usize) -> usize {
     ceil_div_usize(num_public_inputs, NUM_WIRES)
 }
 
-pub fn recursive_verification_circuit<C: Curve, InnerC: HaloEndomorphismCurve<BaseField=C::ScalarField>>(
+pub fn recursive_verification_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>(
     degree_pow: usize,
     security_bits: usize,
 ) -> RecursiveCircuit<C> {
@@ -150,7 +150,7 @@ pub fn recursive_verification_circuit<C: Curve, InnerC: HaloEndomorphismCurve<Ba
 
 /// Verify all IPAs in the given proof. Return `(u_l, u_r)`, which roughly correspond to `u` and
 /// `u^{-1}` in the Halo paper, respectively.
-fn verify_all_ipas<C: Curve, InnerC: HaloEndomorphismCurve<BaseField=C::ScalarField>>(
+fn verify_all_ipas<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>(
     builder: &mut CircuitBuilder<C>,
     proof: &ProofTarget,
     u: Target,
@@ -172,7 +172,7 @@ fn verify_all_ipas<C: Curve, InnerC: HaloEndomorphismCurve<BaseField=C::ScalarFi
         proof.c_plonk_t.clone(),
     ].concat();
     let mut c_reduction_muls = Vec::new();
-    let powers_of_u = powers(builder, u, c_all.len());
+    let powers_of_u = powers_recursive(builder, u, c_all.len());
     for (&c, &power) in c_all.iter().zip(powers_of_u.iter()) {
         let mul = CurveMulOp { scalar: power, point: c };
         c_reduction_muls.push(mul);
@@ -195,7 +195,7 @@ fn verify_all_ipas<C: Curve, InnerC: HaloEndomorphismCurve<BaseField=C::ScalarFi
 
 /// Verify the final IPA. Return `(u_l, u_r)`, which roughly correspond to `u` and `u^{-1}` in the
 /// Halo paper, respectively.
-fn verify_ipa<C: Curve, InnerC: HaloEndomorphismCurve<BaseField=C::ScalarField>>(
+fn verify_ipa<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>(
     builder: &mut CircuitBuilder<C>,
     proof: &ProofTarget,
     p: AffinePointTarget,
@@ -244,7 +244,7 @@ fn verify_ipa<C: Curve, InnerC: HaloEndomorphismCurve<BaseField=C::ScalarField>>
     (u_l, u_r)
 }
 
-fn make_opening_set<C: Curve>(builder: &mut CircuitBuilder<C>) -> OpeningSetTarget {
+fn make_opening_set<C: HaloCurve>(builder: &mut CircuitBuilder<C>) -> OpeningSetTarget {
     OpeningSetTarget {
         o_constants: builder.add_virtual_targets(NUM_CONSTANTS),
         o_plonk_sigmas: builder.add_virtual_targets(NUM_ROUTED_WIRES),
@@ -254,7 +254,7 @@ fn make_opening_set<C: Curve>(builder: &mut CircuitBuilder<C>) -> OpeningSetTarg
     }
 }
 
-fn make_opening_sets<C: Curve>(builder: &mut CircuitBuilder<C>, n: usize) -> Vec<OpeningSetTarget> {
+fn make_opening_sets<C: HaloCurve>(builder: &mut CircuitBuilder<C>, n: usize) -> Vec<OpeningSetTarget> {
     (0..n).map(|i| make_opening_set(builder)).collect()
 }
 
@@ -262,7 +262,7 @@ fn make_opening_sets<C: Curve>(builder: &mut CircuitBuilder<C>, n: usize) -> Vec
 /// only partially verifies its inner proof. It outputs various challenges and openings, and the
 /// following proof is expected to verify constraints upon that data. This function performs those
 /// final verification steps.
-fn verify_assumptions<C: Curve, InnerC: HaloEndomorphismCurve<BaseField=C::ScalarField>>(
+fn verify_assumptions<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>(
     builder: &mut CircuitBuilder<C>,
     degree_pow: usize,
     public_inputs: &RecursionPublicInputs,
@@ -344,7 +344,7 @@ fn verify_assumptions<C: Curve, InnerC: HaloEndomorphismCurve<BaseField=C::Scala
 }
 
 /// Computes a sum of terms weighted by the given coefficients.
-fn reduce_with_coefficients<C: Curve>(
+fn reduce_with_coefficients<C: HaloCurve>(
     builder: &mut CircuitBuilder<C>,
     terms: &[Target],
     coefficients: &[Target],
@@ -356,22 +356,9 @@ fn reduce_with_coefficients<C: Curve>(
     reduction
 }
 
-/// Compute `[x^0, x^1, ..., x^(n - 1)]`.
-fn powers<C: Curve>(builder: &mut CircuitBuilder<C>, x: Target, n: usize) -> Vec<Target> {
-    let mut powers = Vec::new();
-    let mut current = builder.one_wire();
-    for i in 0..n {
-        if i != 0 {
-            current = builder.mul(current, x);
-        }
-        powers.push(current);
-    }
-    powers
-}
-
 /// In Plonk, some polynomials are broken up into degree-d components. Given an evaluation of each
 /// component at some point zeta, this function evaluates the composite polynomial at zeta.
-fn eval_composite_poly<C: Curve>(
+fn eval_composite_poly<C: HaloCurve>(
     builder: &mut CircuitBuilder<C>,
     component_evals: &[Target],
     zeta_power_d: Target,
@@ -380,7 +367,7 @@ fn eval_composite_poly<C: Curve>(
 }
 
 /// Evaluate `g(X, {u_i})` as defined in the Halo paper.
-fn halo_g<C: Curve>(builder: &mut CircuitBuilder<C>, x: Target, us: &[Target]) -> Target {
+fn halo_g<C: HaloCurve>(builder: &mut CircuitBuilder<C>, x: Target, us: &[Target]) -> Target {
     let mut product = builder.one_wire();
     let mut x_power = x;
     for &u_i in us {

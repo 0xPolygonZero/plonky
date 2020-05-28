@@ -14,10 +14,10 @@
 
 use std::marker::PhantomData;
 
-use crate::{AffinePoint, CircuitBuilder, Curve, Field, GRID_WIDTH, HaloEndomorphismCurve, NUM_ADVICE_WIRES, NUM_ROUTED_WIRES, NUM_WIRES, PartialWitness, Target, Wire, WitnessGenerator};
+use crate::{AffinePoint, CircuitBuilder, Curve, Field, GRID_WIDTH, HaloCurve, NUM_ADVICE_WIRES, NUM_ROUTED_WIRES, NUM_WIRES, PartialWitness, Target, Wire, WitnessGenerator};
 use crate::mds::mds;
 
-pub(crate) fn evaluate_all_constraints<C: Curve, InnerC: HaloEndomorphismCurve<BaseField=C::ScalarField>>(
+pub(crate) fn evaluate_all_constraints<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>(
     local_constant_values: &[C::ScalarField],
     local_wire_values: &[C::ScalarField],
     right_wire_values: &[C::ScalarField],
@@ -47,7 +47,7 @@ pub(crate) fn evaluate_all_constraints<C: Curve, InnerC: HaloEndomorphismCurve<B
     unified_constraint_set
 }
 
-pub(crate) fn evaluate_all_constraints_recursively<C: Curve, InnerC: HaloEndomorphismCurve<BaseField=C::ScalarField>>(
+pub(crate) fn evaluate_all_constraints_recursively<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>(
     builder: &mut CircuitBuilder<C>,
     local_constant_values: &[Target],
     local_wire_values: &[Target],
@@ -79,14 +79,14 @@ pub(crate) fn evaluate_all_constraints_recursively<C: Curve, InnerC: HaloEndomor
 }
 
 /// Computes `x * (x - 1)`, which should vanish iff `x` is binary.
-fn assert_binary_recursively<C: Curve>(builder: &mut CircuitBuilder<C>, x: Target) -> Target {
+fn assert_binary_recursively<C: HaloCurve>(builder: &mut CircuitBuilder<C>, x: Target) -> Target {
     let one = builder.one_wire();
     let x_minus_one = builder.sub(x, one);
     builder.mul(x, x_minus_one)
 }
 
 /// Computes `x * y - 1`, which should vanish iff `x` and `y` are inverses.
-fn assert_inverses_recursively<C: Curve>(
+fn assert_inverses_recursively<C: HaloCurve>(
     builder: &mut CircuitBuilder<C>,
     x: Target,
     y: Target,
@@ -96,7 +96,7 @@ fn assert_inverses_recursively<C: Curve>(
     builder.sub(x_y, one)
 }
 
-pub trait Gate<C: Curve>: WitnessGenerator<C::ScalarField> {
+pub trait Gate<C: HaloCurve>: WitnessGenerator<C::ScalarField> {
     const NAME: &'static str;
 
     /// In order to combine the constraints of various gate types into a unified constraint set, we
@@ -181,18 +181,18 @@ pub trait Gate<C: Curve>: WitnessGenerator<C::ScalarField> {
 /// can only receive 6 public inputs. To work around this, we place a BufferGate immediately after
 /// each PublicInputGate, and have the PublicInputGate copy its 5 non-routed wires to routed wires
 /// of the BufferGate.
-pub(crate) struct PublicInputGate<C: Curve> {
+pub(crate) struct PublicInputGate<C: HaloCurve> {
     pub index: usize,
     _phantom: PhantomData<C>,
 }
 
-impl<C: Curve> PublicInputGate<C> {
+impl<C: HaloCurve> PublicInputGate<C> {
     pub fn new(index: usize) -> Self {
         PublicInputGate { index, _phantom: PhantomData }
     }
 }
 
-impl<C: Curve> Gate<C> for PublicInputGate<C> {
+impl<C: HaloCurve> Gate<C> for PublicInputGate<C> {
     const NAME: &'static str = "PublicInputGate";
 
     const PREFIX: &'static [bool] = &[false, false, false, false, false];
@@ -225,7 +225,7 @@ impl<C: Curve> Gate<C> for PublicInputGate<C> {
     }
 }
 
-impl<C: Curve> WitnessGenerator<C::ScalarField> for PublicInputGate<C> {
+impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for PublicInputGate<C> {
     fn dependencies(&self) -> Vec<Target> {
         (0..NUM_WIRES)
             .map(|i| Target::Wire(Wire { gate: self.index, input: i }))
@@ -253,12 +253,12 @@ impl<C: Curve> WitnessGenerator<C::ScalarField> for PublicInputGate<C> {
 ///   for receiving the last gate's output.
 /// * The first constant value configured for this gate will be proxied to its `WIRE_BUFFER_CONST`
 ///   wire; this allows us to create routable constant wires.
-pub(crate) struct BufferGate<C: Curve> {
+pub(crate) struct BufferGate<C: HaloCurve> {
     pub index: usize,
     _phantom: PhantomData<C>,
 }
 
-impl<C: Curve> BufferGate<C> {
+impl<C: HaloCurve> BufferGate<C> {
     pub fn new(index: usize) -> Self {
         BufferGate { index, _phantom: PhantomData }
     }
@@ -271,7 +271,7 @@ impl<C: Curve> BufferGate<C> {
     pub const WIRE_BUFFER_CONST: usize = 5;
 }
 
-impl<C: Curve> Gate<C> for BufferGate<C> {
+impl<C: HaloCurve> Gate<C> for BufferGate<C> {
     const NAME: &'static str = "BufferGate";
 
     const PREFIX: &'static [bool] = &[false, false, true, true];
@@ -300,7 +300,7 @@ impl<C: Curve> Gate<C> for BufferGate<C> {
     }
 }
 
-impl<C: Curve> WitnessGenerator<C::ScalarField> for BufferGate<C> {
+impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for BufferGate<C> {
     fn dependencies(&self) -> Vec<Target> {
         Vec::new()
     }
@@ -319,13 +319,13 @@ impl<C: Curve> WitnessGenerator<C::ScalarField> for BufferGate<C> {
 /// facilitate MSMs which use this gate, it also adds the bit to an accumulator.
 ///
 /// `C` is the curve whose points are being added.
-pub(crate) struct CurveAddGate<C: Curve, InnerC: Curve<BaseField=C::ScalarField>> {
+pub(crate) struct CurveAddGate<C: HaloCurve, InnerC: Curve<BaseField=C::ScalarField>> {
     pub index: usize,
     _phantom_oc: PhantomData<C>,
     _phantom_ic: PhantomData<InnerC>,
 }
 
-impl<C: Curve, InnerC: Curve<BaseField=C::ScalarField>>
+impl<C: HaloCurve, InnerC: Curve<BaseField=C::ScalarField>>
 CurveAddGate<C, InnerC> {
     pub fn new(index: usize) -> Self {
         CurveAddGate { index, _phantom_oc: PhantomData, _phantom_ic: PhantomData }
@@ -341,7 +341,7 @@ CurveAddGate<C, InnerC> {
     pub const WIRE_INVERSE: usize = 7;
 }
 
-impl<C: Curve, InnerC: Curve<BaseField=C::ScalarField>>
+impl<C: HaloCurve, InnerC: Curve<BaseField=C::ScalarField>>
 Gate<C> for CurveAddGate<C, InnerC> {
     const NAME: &'static str = "CurveAddGate";
 
@@ -419,7 +419,7 @@ Gate<C> for CurveAddGate<C, InnerC> {
     }
 }
 
-impl<C: Curve, InnerC: Curve<BaseField=C::ScalarField>>
+impl<C: HaloCurve, InnerC: Curve<BaseField=C::ScalarField>>
 WitnessGenerator<C::ScalarField> for CurveAddGate<C, InnerC> {
     fn dependencies(&self) -> Vec<Target> {
         vec![
@@ -479,13 +479,13 @@ WitnessGenerator<C::ScalarField> for CurveAddGate<C, InnerC> {
 }
 
 /// A curve which performs point doubling.
-pub(crate) struct CurveDblGate<C: Curve, InnerC: Curve<BaseField=C::ScalarField>> {
+pub(crate) struct CurveDblGate<C: HaloCurve, InnerC: Curve<BaseField=C::ScalarField>> {
     pub index: usize,
     _phantom_oc: PhantomData<C>,
     _phantom_ic: PhantomData<InnerC>,
 }
 
-impl<C: Curve, InnerC: Curve<BaseField=C::ScalarField>>
+impl<C: HaloCurve, InnerC: Curve<BaseField=C::ScalarField>>
 CurveDblGate<C, InnerC> {
     pub fn new(index: usize) -> Self {
         CurveDblGate { index, _phantom_oc: PhantomData, _phantom_ic: PhantomData }
@@ -498,7 +498,7 @@ CurveDblGate<C, InnerC> {
     pub const WIRE_INVERSE: usize = 4;
 }
 
-impl<C: Curve, InnerC: Curve<BaseField=C::ScalarField>>
+impl<C: HaloCurve, InnerC: Curve<BaseField=C::ScalarField>>
 Gate<C> for CurveDblGate<C, InnerC> {
     const NAME: &'static str = "CurveDblGate";
 
@@ -571,7 +571,7 @@ Gate<C> for CurveDblGate<C, InnerC> {
     }
 }
 
-impl<C: Curve, InnerC: Curve<BaseField=C::ScalarField>>
+impl<C: HaloCurve, InnerC: Curve<BaseField=C::ScalarField>>
 WitnessGenerator<C::ScalarField> for CurveDblGate<C, InnerC> {
     fn dependencies(&self) -> Vec<Target> {
         vec![
@@ -606,13 +606,13 @@ WitnessGenerator<C::ScalarField> for CurveDblGate<C, InnerC> {
 
 /// A gate which performs an iteration of an simultaneous doubling MSM loop, employing the
 /// endomorphism described in the Halo paper. `C` is the curve of the inner proof.
-pub(crate) struct CurveEndoGate<C: Curve, InnerC: HaloEndomorphismCurve<BaseField=C::ScalarField>> {
+pub(crate) struct CurveEndoGate<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>> {
     pub index: usize,
     _phantom_oc: PhantomData<C>,
     _phantom_ic: PhantomData<InnerC>,
 }
 
-impl<C: Curve, InnerC: HaloEndomorphismCurve<BaseField=C::ScalarField>>
+impl<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>
 CurveEndoGate<C, InnerC> {
     pub fn new(index: usize) -> Self {
         CurveEndoGate { index, _phantom_oc: PhantomData, _phantom_ic: PhantomData }
@@ -629,7 +629,7 @@ CurveEndoGate<C, InnerC> {
     pub const WIRE_INVERSE: usize = 8;
 }
 
-impl<C: Curve, InnerC: HaloEndomorphismCurve<BaseField=C::ScalarField>>
+impl<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>
 Gate<C> for CurveEndoGate<C, InnerC> {
     const NAME: &'static str = "CurveEndoGate";
 
@@ -728,6 +728,7 @@ Gate<C> for CurveEndoGate<C, InnerC> {
         let computed_scalar_acc_unsigned_new = builder.mul_add(scalar_acc_unsigned_old, four, unsigned_limb);
 
         // This is based on Algorithm 2 in the Halo paper.
+        // TODO: Wrong zeta used here?
         let signed_limb_multiplier = builder.mul_add(zeta_minus_one, scalar_bit_1, one);
         let signed_limb_sign = builder.mul_sub(scalar_bit_0, two, one);
         let signed_limb = builder.mul(signed_limb_sign, signed_limb_multiplier);
@@ -745,7 +746,7 @@ Gate<C> for CurveEndoGate<C, InnerC> {
     }
 }
 
-impl<C: Curve, InnerC: HaloEndomorphismCurve<BaseField=C::ScalarField>>
+impl<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>
 WitnessGenerator<C::ScalarField> for CurveEndoGate<C, InnerC> {
     fn dependencies(&self) -> Vec<Target> {
         vec![
@@ -835,12 +836,12 @@ WitnessGenerator<C::ScalarField> for CurveEndoGate<C, InnerC> {
 }
 
 /// The first step of Rescue, i.e. the one with the `x^(1/5)` layer.
-pub(crate) struct RescueStepAGate<C: Curve> {
+pub(crate) struct RescueStepAGate<C: HaloCurve> {
     pub index: usize,
     _phantom: PhantomData<C>,
 }
 
-impl<C: Curve> RescueStepAGate<C> {
+impl<C: HaloCurve> RescueStepAGate<C> {
     pub fn new(index: usize) -> Self {
         RescueStepAGate { index, _phantom: PhantomData }
     }
@@ -856,7 +857,7 @@ impl<C: Curve> RescueStepAGate<C> {
     pub const WIRE_ROOT_2: usize = 8;
 }
 
-impl<C: Curve> Gate<C> for RescueStepAGate<C> {
+impl<C: HaloCurve> Gate<C> for RescueStepAGate<C> {
     const NAME: &'static str = "RescueStepAGate";
 
     const PREFIX: &'static [bool] = &[true, false];
@@ -947,7 +948,7 @@ impl<C: Curve> Gate<C> for RescueStepAGate<C> {
     }
 }
 
-impl<C: Curve> WitnessGenerator<C::ScalarField> for RescueStepAGate<C> {
+impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for RescueStepAGate<C> {
     fn dependencies(&self) -> Vec<Target> {
         vec![
             Target::Wire(Wire { gate: self.index, input: Self::WIRE_INPUT_0 }),
@@ -994,12 +995,12 @@ impl<C: Curve> WitnessGenerator<C::ScalarField> for RescueStepAGate<C> {
 }
 
 /// The second step of Rescue, i.e. the one with the `x^5` layer.
-pub(crate) struct RescueStepBGate<C: Curve> {
+pub(crate) struct RescueStepBGate<C: HaloCurve> {
     pub index: usize,
     _phantom: PhantomData<C>,
 }
 
-impl<C: Curve> RescueStepBGate<C> {
+impl<C: HaloCurve> RescueStepBGate<C> {
     pub fn new(index: usize) -> Self {
         RescueStepBGate { index, _phantom: PhantomData }
     }
@@ -1012,7 +1013,7 @@ impl<C: Curve> RescueStepBGate<C> {
     pub const WIRE_OUTPUT_2: usize = 5;
 }
 
-impl<C: Curve> Gate<C> for RescueStepBGate<C> {
+impl<C: HaloCurve> Gate<C> for RescueStepBGate<C> {
     const NAME: &'static str = "RescueStepBGate";
 
     const PREFIX: &'static [bool] = &[true, true];
@@ -1095,7 +1096,7 @@ impl<C: Curve> Gate<C> for RescueStepBGate<C> {
     }
 }
 
-impl<C: Curve> WitnessGenerator<C::ScalarField> for RescueStepBGate<C> {
+impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for RescueStepBGate<C> {
     fn dependencies(&self) -> Vec<Target> {
         vec![
             Target::Wire(Wire { gate: self.index, input: Self::WIRE_INPUT_0 }),
@@ -1141,7 +1142,7 @@ pub(crate) struct Base4SumGate<C: Curve> {
     _phantom: PhantomData<C>,
 }
 
-impl<C: Curve> Base4SumGate<C> {
+impl<C: HaloCurve> Base4SumGate<C> {
     pub fn new(index: usize) -> Self {
         Base4SumGate { index, _phantom: PhantomData }
     }
@@ -1152,7 +1153,7 @@ impl<C: Curve> Base4SumGate<C> {
     pub const NUM_LIMBS: usize = 7;
 }
 
-impl<C: Curve> Gate<C> for Base4SumGate<C> {
+impl<C: HaloCurve> Gate<C> for Base4SumGate<C> {
     const NAME: &'static str = "Base4SumGate";
 
     const PREFIX: &'static [bool] = &[false, false, true, false];
@@ -1220,7 +1221,7 @@ impl<C: Curve> Gate<C> for Base4SumGate<C> {
     }
 }
 
-impl<C: Curve> WitnessGenerator<C::ScalarField> for Base4SumGate<C> {
+impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for Base4SumGate<C> {
     fn dependencies(&self) -> Vec<Target> {
         Vec::new()
     }
@@ -1237,12 +1238,12 @@ impl<C: Curve> WitnessGenerator<C::ScalarField> for Base4SumGate<C> {
 /// ```text
 /// output := const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend + const_2
 /// ```
-pub(crate) struct ArithmeticGate<C: Curve> {
+pub(crate) struct ArithmeticGate<C: HaloCurve> {
     pub index: usize,
     _phantom: PhantomData<C>,
 }
 
-impl<C: Curve> ArithmeticGate<C> {
+impl<C: HaloCurve> ArithmeticGate<C> {
     pub fn new(index: usize) -> Self {
         ArithmeticGate { index, _phantom: PhantomData }
     }
@@ -1253,7 +1254,7 @@ impl<C: Curve> ArithmeticGate<C> {
     pub const WIRE_OUTPUT: usize = 3;
 }
 
-impl<C: Curve> Gate<C> for ArithmeticGate<C> {
+impl<C: HaloCurve> Gate<C> for ArithmeticGate<C> {
     const NAME: &'static str = "ArithmeticGate";
 
     const PREFIX: &'static [bool] = &[false, true];
@@ -1297,7 +1298,7 @@ impl<C: Curve> Gate<C> for ArithmeticGate<C> {
     }
 }
 
-impl<C: Curve> WitnessGenerator<C::ScalarField> for ArithmeticGate<C> {
+impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for ArithmeticGate<C> {
     fn dependencies(&self) -> Vec<Target> {
         vec![
             Target::Wire(Wire { gate: self.index, input: Self::WIRE_MULTIPLICAND_0 }),

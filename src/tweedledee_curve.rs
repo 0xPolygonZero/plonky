@@ -1,4 +1,4 @@
-use crate::{AffinePoint, Curve, Field, HaloEndomorphismCurve, TweedledeeBase, TweedledumBase};
+use crate::{AffinePoint, Curve, Field, HaloCurve, TweedledeeBase, TweedledumBase};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Tweedledee;
@@ -17,7 +17,7 @@ impl Curve for Tweedledee {
     };
 }
 
-impl HaloEndomorphismCurve for Tweedledee {
+impl HaloCurve for Tweedledee {
     const ZETA: Self::BaseField = TweedledeeBase {
         limbs: [
             1444470991491022206,
@@ -38,7 +38,7 @@ impl HaloEndomorphismCurve for Tweedledee {
 
 #[cfg(test)]
 mod tests {
-    use crate::curve::{AffinePoint, Curve, HaloEndomorphismCurve, ProjectivePoint};
+    use crate::curve::{AffinePoint, Curve, HaloCurve, ProjectivePoint};
     use crate::Tweedledee;
 
     /// A simple, somewhat inefficient implementation of multiplication which is used as a reference

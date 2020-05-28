@@ -40,7 +40,7 @@ pub trait Curve: 'static + Sized + Copy {
 
 /// A curve with the endomorphism described in the Halo paper, i.e. `phi((x, y)) = (zeta_p x, y)`,
 /// where `phi(P) = [zeta_q] P` for some `zeta_q` of multiplicative order 3.
-pub trait HaloEndomorphismCurve: Curve {
+pub trait HaloCurve: Curve {
     const ZETA: Self::BaseField;
     const ZETA_SCALAR: Self::ScalarField;
 }
