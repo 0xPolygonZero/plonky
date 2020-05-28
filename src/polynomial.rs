@@ -2,7 +2,6 @@ use crate::{
     fft_precompute, fft_with_precomputation, ifft_with_precomputation_power_of_2, util::log2_ceil,
     Field,
 };
-use std::time::Instant;
 
 // Store polynomial as a list of coefficient starting with the constant coefficient.
 type Polynomial<F: Field> = Vec<F>;
@@ -27,7 +26,7 @@ fn lead<F: Field>(a: &Polynomial<F>) -> F {
     ans
 }
 
-fn is_zero<F: Field>(a: &Polynomial<F>) -> bool {
+pub fn polynomial_is_zero<F: Field>(a: &Polynomial<F>) -> bool {
     a.iter().all(|&x| x.is_zero())
 }
 
@@ -75,9 +74,9 @@ pub fn polynomial_long_division<F: Field>(
     b: &Polynomial<F>,
 ) -> (Polynomial<F>, Polynomial<F>) {
     let (a_degree, b_degree) = (degree(a), degree(b));
-    if is_zero(a) {
+    if polynomial_is_zero(a) {
         (Vec::new(), Vec::new())
-    } else if is_zero(b) {
+    } else if polynomial_is_zero(b) {
         panic!("Division by zero polynomial");
     } else if a_degree < b_degree {
         (Vec::new(), a.to_vec())
@@ -87,7 +86,7 @@ pub fn polynomial_long_division<F: Field>(
         let mut remainder = a.to_vec();
         // Can unwrap here because we know self is not zero.
         let divisor_leading_inv = lead(b).multiplicative_inverse_assuming_nonzero();
-        while !is_zero(&remainder) && degree(&remainder) >= b_degree {
+        while !polynomial_is_zero(&remainder) && degree(&remainder) >= b_degree {
             let cur_q_coeff = *remainder.last().unwrap() * divisor_leading_inv;
             let cur_q_degree = remainder.len() - 1 - b_degree;
             quotient[cur_q_degree] = cur_q_coeff;
@@ -150,10 +149,63 @@ pub fn polynomial_division<F: Field>(
     (q, r)
 }
 
+// Divides a polynomial `a` by `Z_H = X^n - 1`. Assumes `Z_H | a`, otherwise result is meaningless.
+pub fn divide_by_z_h<F: Field>(a: &Polynomial<F>, n: usize) -> Polynomial<F> {
+    let mut a_trim = a.clone();
+    trim(&mut a_trim);
+    let g = F::MULTIPLICATIVE_SUBGROUP_GENERATOR;
+    let mut g_pow = F::ONE;
+    // Multiply the i-th coefficient of `a` by `g^i`. Then `new_a(w^j) = old_a(g.w^j)`.
+    a_trim.iter_mut().for_each(|x| {
+        *x = (*x) * g_pow;
+        g_pow = g * g_pow;
+    });
+    let d = degree(&a_trim);
+    let root = F::primitive_root_of_unity(log2_ceil(a_trim.len()));
+    let precomputation = fft_precompute(d + 1);
+    // Equals to the evaluation of `a` on `{g.w^i}`.
+    let mut a_eval = fft_with_precomputation(&a_trim, &precomputation);
+    // Compute the denominators `1/(g^n.w^(n*i) - 1)` using batch inversion.
+    let denominator_g = g.exp_usize(n);
+    let root_n = root.exp_usize(n);
+    let mut root_pow = F::ONE;
+    let denominators = (0..a_eval.len())
+        .map(|i| {
+            if i != 0 {
+                root_pow = root_pow * root_n;
+            }
+            denominator_g * root_pow - F::ONE
+        })
+        .collect::<Vec<_>>();
+    let denominators_inv = F::batch_multiplicative_inverse(&denominators);
+    // Divide every element of `a_eval` by the corresponding denominator.
+    // Then, `a_eval` is the evaluation of `a/Z_H` on `{g.w^i}`.
+    a_eval
+        .iter_mut()
+        .zip(denominators_inv.iter())
+        .for_each(|(x, &d)| {
+            *x = (*x) * d;
+            root_pow = root_pow * root_n;
+        });
+    // `p` is the interpolating polynomial of `a_eval` on `{w^i}`.
+    let mut p = ifft_with_precomputation_power_of_2(&a_eval, &precomputation);
+    // We need to scale it by `g^(-i)` to get the interpolating polynomial of `a_eval` on `{g.w^i}`,
+    // a.k.a `a/Z_H`.
+    let g_inv = g.multiplicative_inverse_assuming_nonzero();
+    let mut g_inv_pow = F::ONE;
+    p.iter_mut().for_each(|x| {
+        *x = (*x) * g_inv_pow;
+        g_inv_pow = g_inv_pow * g_inv;
+    });
+    p
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::{Field, TweedledeeBase};
+    use std::time::Instant;
+
 
     fn evaluate_at_naive<F: Field>(coefficients: &[F], point: F) -> F {
         let mut sum = F::ZERO;
@@ -246,5 +298,21 @@ mod test {
                 evaluate_at_naive(&b, x) * evaluate_at_naive(&q, x) + evaluate_at_naive(&r, x)
             );
         }
+    }
+
+    #[test]
+    fn test_division_by_z_h() {
+        type F = TweedledeeBase;
+        let mut p: Vec<F> = (0..112_000).map(|_| F::rand()).collect();
+        trim(&mut p);
+        let mut z_h = vec![F::ZERO; 16_001];
+        z_h[16_000] = F::ONE;
+        z_h[0] = F::NEG_ONE;
+        let m = polynomial_multiplication(&p, &z_h);
+        let now = Instant::now();
+        let mut p_test = divide_by_z_h(&m, 16_000);
+        trim(&mut p_test);
+        println!("Division time: {:?}", now.elapsed());
+        assert_eq!(p, p_test);
     }
 }
