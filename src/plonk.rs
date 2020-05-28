@@ -122,6 +122,8 @@ pub struct Circuit<C: HaloCurve> {
     pub c_constants: Vec<AffinePoint<C>>,
     /// Each permutation polynomial, in coefficient form.
     pub s_sigma_coeffs: Vec<Vec<C::ScalarField>>,
+    /// Each permutation polynomial, low-degree extended to be degree 8n.
+    pub s_sigma_values_8n: Vec<Vec<C::ScalarField>>,
     /// A commitment to each permutation polynomial.
     pub c_s_sigmas: Vec<AffinePoint<C>>,
     /// A precomputation used for MSMs involving `generators`.
@@ -399,7 +401,7 @@ impl<C: HaloCurve> Circuit<C> {
                 let wire_value = wire_values_8n[i][j];
                 let k_i = get_subgroup_shift::<C::ScalarField>(j);
                 let s_id = k_i * x;
-                let s_sigma = todo!();
+                let s_sigma = self.s_sigma_values_8n[j][i];
                 f_prime = f_prime * (wire_value + beta_sf * s_id + gamma_sf);
                 g_prime = g_prime * (wire_value + beta_sf * s_sigma + gamma_sf);
             }
@@ -1584,7 +1586,10 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
         // Compute S_sigma, then a commitment to it.
         let s_sigma_coeffs: Vec<Vec<C::ScalarField>> = sigma_chunks.iter()
-            .map(|sigma_chunk| ifft_with_precomputation_power_of_2(sigma_chunk, &fft_precomputation_8n))
+            .map(|sigma_chunk| ifft_with_precomputation_power_of_2(sigma_chunk, &fft_precomputation_n))
+            .collect();
+        let s_sigma_values_8n: Vec<Vec<C::ScalarField>> = s_sigma_coeffs.iter()
+            .map(|coeffs| fft_with_precomputation_power_of_2(coeffs, &fft_precomputation_8n))
             .collect();
         let c_s_sigmas: Vec<ProjectivePoint<C>> = s_sigma_coeffs.iter()
             .map(|coeffs| pedersen_hash(&coeffs, &msm_precomputation))
@@ -1608,6 +1613,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             constants_8n,
             c_constants,
             s_sigma_coeffs,
+            s_sigma_values_8n,
             c_s_sigmas,
             msm_precomputation,
             fft_precomputation_n,
