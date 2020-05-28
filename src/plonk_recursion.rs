@@ -163,10 +163,10 @@ fn verify_all_ipas<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>(
     // For now, we use a dummy point for each of those polynomial commitments.
     let dummy_point = builder.constant_affine_point(InnerC::GENERATOR_AFFINE);
     let c_constants = vec![dummy_point; NUM_CONSTANTS];
-    let c_plonk_sigmas = vec![dummy_point; NUM_ROUTED_WIRES];
+    let c_s_sigmas = vec![dummy_point; NUM_ROUTED_WIRES];
     let c_all: Vec<AffinePointTarget> = [
         c_constants,
-        c_plonk_sigmas,
+        c_s_sigmas,
         proof.c_wires.clone(),
         vec![proof.c_plonk_z],
         proof.c_plonk_t.clone(),
