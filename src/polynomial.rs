@@ -150,31 +150,52 @@ pub fn polynomial_division<F: Field>(
 }
 
 pub fn divide_by_z_h<F: Field>(a: &Polynomial<F>, n: usize) -> Polynomial<F> {
-    let mut at = a.clone();
-    trim(&mut at);
+    let mut a_trim = a.clone();
+    trim(&mut a_trim);
     let g = F::MULTIPLICATIVE_SUBGROUP_GENERATOR;
     let mut g_pow = F::ONE;
-    at.iter_mut().for_each(|x| {
+    // Multiply the i-th coefficient of `a` by `g^i`. Then `new_a(w^j) = old_a(g.w^j)`.
+    a_trim.iter_mut().for_each(|x| {
         *x = (*x) * g_pow;
         g_pow = g * g_pow;
     });
-    let d = degree(&at);
-    let root = F::primitive_root_of_unity(log2_ceil(at.len()));
+    let d = degree(&a_trim);
+    let root = F::primitive_root_of_unity(log2_ceil(a_trim.len()));
     let precomputation = fft_precompute(d + 1);
-    // Equals to evaluation of `a` on `{g.w^i}`.
-    let mut a_eval = fft_with_precomputation(&at, &precomputation);
+    // Equals to the evaluation of `a` on `{g.w^i}`.
+    let mut a_eval = fft_with_precomputation(&a_trim, &precomputation);
+    // Compute the denominators `1/(g^n.w^(n*i) - 1)` using batch inversion.
     let denominator_g = g.exp_usize(n);
     let root_n = root.exp_usize(n);
     let mut root_pow = F::ONE;
-    a_eval.iter_mut().for_each(|x| {
-        *x = (*x) * (denominator_g * root_pow - F::ONE).multiplicative_inverse_assuming_nonzero();
-        root_pow = root_pow * root_n;
-    });
+    let denominators = (0..a_eval.len())
+        .map(|i| {
+            if i != 0 {
+                root_pow = root_pow * root_n;
+            }
+            denominator_g * root_pow - F::ONE
+        })
+        .collect::<Vec<_>>();
+    let denominators_inv = F::batch_multiplicative_inverse(&denominators);
+    // Divide every element of `a_eval` by the corresponding denominator.
+    // Then, `a_eval` is the evaluation of `a/Z_H` on `{g.w^i}`.
+    a_eval
+        .iter_mut()
+        .zip(denominators_inv.iter())
+        .for_each(|(x, &d)| {
+            *x = (*x) * d;
+            root_pow = root_pow * root_n;
+        });
+    // `p` is the interpolating polynomial of `a_eval` on `{w^i}`.
     let mut p = ifft_with_precomputation_power_of_2(&a_eval, &precomputation);
-    let gm1 = g.multiplicative_inverse_assuming_nonzero();
-    p.iter_mut()
-        .enumerate()
-        .for_each(|(i, x)| *x = (*x) * gm1.exp_usize(i));
+    // We need to scale it by `g^(-i)` to get the interpolating polynomial of `a_eval` on `{g.w^i}`,
+    // a.k.a `a/Z_H`.
+    let g_inv = g.multiplicative_inverse_assuming_nonzero();
+    let mut g_inv_pow = F::ONE;
+    p.iter_mut().for_each(|x| {
+        *x = (*x) * g_inv_pow;
+        g_inv_pow = g_inv_pow * g_inv;
+    });
     p
 }
 
