@@ -149,6 +149,7 @@ pub fn polynomial_division<F: Field>(
     (q, r)
 }
 
+// Divides a polynomial `a` by `Z_H = X^n - 1`. Assumes `Z_H | a`, otherwise result is meaningless.
 pub fn divide_by_z_h<F: Field>(a: &Polynomial<F>, n: usize) -> Polynomial<F> {
     let mut a_trim = a.clone();
     trim(&mut a_trim);
@@ -205,29 +206,6 @@ mod test {
     use crate::{Field, TweedledeeBase};
     use std::time::Instant;
 
-    #[test]
-    fn test_lol() {
-        type F = TweedledeeBase;
-        // let a = vec![F::NEG_ONE, F::ZERO, F::ONE];
-        // let p = divide_by_z_h(&a, 1);
-        // let a = vec![F::NEG_ONE, F::NEG_ONE, F::NEG_ONE, F::ONE, F::ONE, F::ONE];
-        // let p = divide_by_z_h(&a, 3);
-        let mut p: Vec<F> = (0..112_000).map(|_| F::rand()).collect();
-        trim(&mut p);
-        let mut z_h = vec![F::ZERO; 16_001];
-        z_h[16_000] = F::ONE;
-        z_h[0] = F::NEG_ONE;
-        let m = polynomial_multiplication(&p, &z_h);
-        let now = Instant::now();
-        let mut p_test = divide_by_z_h(&m, 16_000);
-        trim(&mut p_test);
-        println!("Division time: {:?}", now.elapsed());
-        assert_eq!(p, p_test);
-        // dbg!(p
-        //     .iter()
-        //     .map(|x| x.to_canonical_u64_vec())
-        //     .collect::<Vec<_>>());
-    }
 
     fn evaluate_at_naive<F: Field>(coefficients: &[F], point: F) -> F {
         let mut sum = F::ZERO;
@@ -320,5 +298,21 @@ mod test {
                 evaluate_at_naive(&b, x) * evaluate_at_naive(&q, x) + evaluate_at_naive(&r, x)
             );
         }
+    }
+
+    #[test]
+    fn test_division_by_z_h() {
+        type F = TweedledeeBase;
+        let mut p: Vec<F> = (0..112_000).map(|_| F::rand()).collect();
+        trim(&mut p);
+        let mut z_h = vec![F::ZERO; 16_001];
+        z_h[16_000] = F::ONE;
+        z_h[0] = F::NEG_ONE;
+        let m = polynomial_multiplication(&p, &z_h);
+        let now = Instant::now();
+        let mut p_test = divide_by_z_h(&m, 16_000);
+        trim(&mut p_test);
+        println!("Division time: {:?}", now.elapsed());
+        assert_eq!(p, p_test);
     }
 }
