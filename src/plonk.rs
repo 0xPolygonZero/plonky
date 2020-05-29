@@ -6,7 +6,7 @@ use anyhow::Result;
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::SeedableRng;
 
-use crate::{AffinePoint, blake_hash_usize_to_curve, Curve, fft_precompute, fft_with_precomputation_power_of_2, FftPrecomputation, Field, generate_rescue_constants, HaloEndomorphismCurve, ifft_with_precomputation_power_of_2, msm_execute, msm_parallel, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof, rescue_hash_n_to_1, rescue_hash_n_to_2, rescue_hash_n_to_3, evaluate_all_constraints, divide_by_z_h};
+use crate::{AffinePoint, blake_hash_usize_to_curve, Curve, fft_precompute, fft_with_precomputation_power_of_2, FftPrecomputation, Field, generate_rescue_constants, ifft_with_precomputation_power_of_2, msm_execute, msm_parallel, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof, rescue_hash_n_to_1, rescue_hash_n_to_2, rescue_hash_n_to_3, evaluate_all_constraints, divide_by_z_h, HaloCurve};
 use crate::plonk_challenger::Challenger;
 use crate::plonk_gates::{ArithmeticGate, Base4SumGate, BufferGate, CurveAddGate, CurveDblGate, CurveEndoGate, Gate, PublicInputGate, RescueStepAGate, RescueStepBGate};
 use crate::plonk_util::{eval_l_1, eval_zero_poly, halo_n, powers, reduce_with_powers};
@@ -121,9 +121,11 @@ pub struct Circuit<C: HaloCurve> {
     /// A commitment to each constant polynomial.
     pub c_constants: Vec<AffinePoint<C>>,
     /// Each permutation polynomial, in coefficient form.
-    pub plonk_sigmas_coeffs: Vec<Vec<C::ScalarField>>,
+    pub s_sigma_coeffs: Vec<Vec<C::ScalarField>>,
+    /// Each permutation polynomial, low-degree extended to be degree 8n.
+    pub s_sigma_values_8n: Vec<Vec<C::ScalarField>>,
     /// A commitment to each permutation polynomial.
-    pub c_plonk_sigmas: Vec<AffinePoint<C>>,
+    pub c_s_sigmas: Vec<AffinePoint<C>>,
     /// A precomputation used for MSMs involving `generators`.
     pub msm_precomputation: MsmPrecomputation<C>,
     /// A precomputation used for FFTs of degree n, where n is the number of gates.
@@ -264,14 +266,14 @@ impl<C: HaloCurve> Circuit<C> {
         // This must match the order of OpeningSet::to_vec.
         let all_commits = [
             self.c_constants.clone(),
-            self.c_plonk_sigmas.clone(),
+            self.c_s_sigmas.clone(),
             c_wires.clone(),
             vec![c_plonk_z],
             c_plonk_t.clone(),
         ].concat();
         let all_coeffs = [
             self.constants_coeffs.clone(),
-            self.plonk_sigmas_coeffs.clone(),
+            self.s_sigma_coeffs.clone(),
             wires_coeffs,
             vec![plonk_z_coeffs],
             plonk_t_coeff_chunks,
@@ -399,7 +401,7 @@ impl<C: HaloCurve> Circuit<C> {
                 let wire_value = wire_values_8n[i][j];
                 let k_i = get_subgroup_shift::<C::ScalarField>(j);
                 let s_id = k_i * x;
-                let s_sigma = todo!();
+                let s_sigma = self.s_sigma_values_8n[j][i];
                 f_prime = f_prime * (wire_value + beta_sf * s_id + gamma_sf);
                 g_prime = g_prime * (wire_value + beta_sf * s_sigma + gamma_sf);
             }
@@ -443,7 +445,7 @@ impl<C: HaloCurve> Circuit<C> {
 
         OpeningSet {
             o_constants: self.constants_coeffs.iter().map(|c| C::ScalarField::inner_product(c, &powers_of_zeta)).collect(),
-            o_plonk_sigmas: self.plonk_sigmas_coeffs.iter().map(|c| C::ScalarField::inner_product(c, &powers_of_zeta)).collect(),
+            o_plonk_sigmas: self.s_sigma_coeffs.iter().map(|c| C::ScalarField::inner_product(c, &powers_of_zeta)).collect(),
             o_wires: wire_coeffs.iter().map(|c| C::ScalarField::inner_product(c, &powers_of_zeta)).collect(),
             o_plonk_z: C::ScalarField::inner_product(&plonk_z_coeffs, &powers_of_zeta),
             o_plonk_t: plonk_t_coeffs.iter().map(|c| C::ScalarField::inner_product(c, &powers_of_zeta)).collect(),
@@ -1539,6 +1541,8 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         let degree = self.num_gates();
         let degree_pow = log2_strict(degree);
         let routing_target_partitions = self.get_routing_partitions();
+        let wire_partitions = routing_target_partitions.to_wire_partitions();
+        let sigma = wire_partitions.to_sigma();
 
         let CircuitBuilder {
             security_bits,
@@ -1572,11 +1576,25 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             .collect();
         let c_constants = ProjectivePoint::batch_to_affine(&c_constants);
 
-        let plonk_sigmas_coeffs: Vec<Vec<C::ScalarField>> = todo!();
-        let c_plonk_sigmas: Vec<ProjectivePoint<C>> = plonk_sigmas_coeffs.iter()
+        // Convert sigma's values to scalar field elements and split it into degree-n chunks.
+        let sigma_chunks: Vec<Vec<C::ScalarField>> = sigma.into_iter()
+            .map(|x| C::ScalarField::from_canonical_usize(x))
+            .collect::<Vec<_>>()
+            .chunks(degree)
+            .map(|chunk| chunk.to_vec())
+            .collect();
+
+        // Compute S_sigma, then a commitment to it.
+        let s_sigma_coeffs: Vec<Vec<C::ScalarField>> = sigma_chunks.iter()
+            .map(|sigma_chunk| ifft_with_precomputation_power_of_2(sigma_chunk, &fft_precomputation_n))
+            .collect();
+        let s_sigma_values_8n: Vec<Vec<C::ScalarField>> = s_sigma_coeffs.iter()
+            .map(|coeffs| fft_with_precomputation_power_of_2(coeffs, &fft_precomputation_8n))
+            .collect();
+        let c_s_sigmas: Vec<ProjectivePoint<C>> = s_sigma_coeffs.iter()
             .map(|coeffs| pedersen_hash(&coeffs, &msm_precomputation))
             .collect();
-        let c_plonk_sigmas = ProjectivePoint::batch_to_affine(&c_plonk_sigmas);
+        let c_s_sigmas = ProjectivePoint::batch_to_affine(&c_s_sigmas);
 
         Circuit {
             security_bits,
@@ -1594,8 +1612,9 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             constants_coeffs,
             constants_8n,
             c_constants,
-            plonk_sigmas_coeffs,
-            c_plonk_sigmas,
+            s_sigma_coeffs,
+            s_sigma_values_8n,
+            c_s_sigmas,
             msm_precomputation,
             fft_precomputation_n,
             fft_precomputation_8n,
@@ -1662,7 +1681,7 @@ impl TargetPartitions {
         }
     }
 
-    fn to_gate_inputs(&self) -> WirePartitions {
+    fn to_wire_partitions(&self) -> WirePartitions {
         // Here we just drop all CircuitInputs, leaving all GateInputs.
         let mut partitions = Vec::new();
         let mut indices = HashMap::new();
@@ -1690,6 +1709,43 @@ impl TargetPartitions {
 struct WirePartitions {
     partitions: Vec<Vec<Wire>>,
     indices: HashMap<Wire, usize>,
+}
+
+impl WirePartitions {
+    /// Find a wire's "neighbor" in the context of Plonk's "extended copy constraints" check. In
+    /// other words, find the next wire in the given wire's partition. If the given wire is last in
+    /// its partition, this will loop around. If the given wire has a partition all to itself, it
+    /// is considered its own neighbor.
+    fn get_neighbor(&self, wire: Wire) -> Wire {
+        let partition = &self.partitions[self.indices[&wire]];
+        let n = partition.len();
+        for i in 0..n {
+            if partition[i] == wire {
+                let neighbor_index = (i + 1) % n;
+                return partition[neighbor_index];
+            }
+        }
+        panic!("Wire not found in the expected partition")
+    }
+
+    /// Generates sigma in the context of Plonk, which is a map from `[kn]` to `[kn]`, where `k` is
+    /// the number of wires and `n` is the number of gates.
+    fn to_sigma(&self) -> Vec<usize> {
+        let kn = self.indices.len();
+        let k = NUM_WIRES;
+        let n = kn / k;
+        debug_assert_eq!(k * n, kn);
+
+        let mut sigma = Vec::new();
+        for input in 0..k {
+            for gate in 0..n {
+                let wire = Wire { gate, input };
+                let neighbor = self.get_neighbor(wire);
+                sigma.push(neighbor.input * n + neighbor.gate);
+            }
+        }
+        sigma
+    }
 }
 
 /// Returns `k_i`, the multiplier used in `S_ID_i` in the context of Plonk's permutation argument.
