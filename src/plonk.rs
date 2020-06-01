@@ -6,7 +6,7 @@ use anyhow::Result;
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::SeedableRng;
 
-use crate::{AffinePoint, blake_hash_usize_to_curve, Curve, fft_precompute, fft_with_precomputation_power_of_2, FftPrecomputation, Field, generate_rescue_constants, ifft_with_precomputation_power_of_2, msm_execute, msm_parallel, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof, rescue_hash_n_to_1, rescue_hash_n_to_2, rescue_hash_n_to_3, evaluate_all_constraints, divide_by_z_h, HaloCurve};
+use crate::{AffinePoint, blake_hash_usize_to_curve, Curve, fft_precompute, fft_with_precomputation_power_of_2, FftPrecomputation, Field, generate_rescue_constants, ifft_with_precomputation_power_of_2, msm_execute, msm_parallel, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof, rescue_hash_n_to_1, rescue_hash_n_to_2, rescue_hash_n_to_3, evaluate_all_constraints, divide_by_z_h, HaloCurve, msm_precompute};
 use crate::plonk_challenger::Challenger;
 use crate::plonk_gates::{ArithmeticGate, Base4SumGate, BufferGate, CurveAddGate, CurveDblGate, CurveEndoGate, Gate, PublicInputGate, RescueStepAGate, RescueStepBGate};
 use crate::plonk_util::{eval_l_1, eval_zero_poly, halo_n, powers, reduce_with_powers};
@@ -127,7 +127,7 @@ pub struct Circuit<C: HaloCurve> {
     /// A commitment to each permutation polynomial.
     pub c_s_sigmas: Vec<AffinePoint<C>>,
     /// A precomputation used for MSMs involving `generators`.
-    pub msm_precomputation: MsmPrecomputation<C>,
+    pub pedersen_g_msm_precomputation: MsmPrecomputation<C>,
     /// A precomputation used for FFTs of degree n, where n is the number of gates.
     pub fft_precomputation_n: FftPrecomputation<C::ScalarField>,
     /// A precomputation used for FFTs of degree 8n, where n is the number of gates.
@@ -166,7 +166,7 @@ impl<C: HaloCurve> Circuit<C> {
 
         // Commit to the wire polynomials.
         let c_wires: Vec<ProjectivePoint<C>> = wires_coeffs.iter()
-            .map(|coeffs| pedersen_hash(coeffs, &self.msm_precomputation))
+            .map(|coeffs| pedersen_hash(coeffs, &self.pedersen_g_msm_precomputation))
             .collect();
         let c_wires = ProjectivePoint::batch_to_affine(&c_wires);
 
@@ -186,7 +186,7 @@ impl<C: HaloCurve> Circuit<C> {
                 let wire_value = witness.wire_values[j][i - 1];
                 let k_i = get_subgroup_shift::<C::ScalarField>(j);
                 let s_id = k_i * x;
-                let s_sigma = todo!();
+                let s_sigma = self.s_sigma_values_8n[j][8 * i];
                 numerator = numerator * (wire_value + beta_sf * s_id + gamma_sf);
                 denominator = denominator * (wire_value + beta_sf * s_sigma + gamma_sf);
             }
@@ -196,7 +196,7 @@ impl<C: HaloCurve> Circuit<C> {
 
         // Commit to Z.
         let plonk_z_coeffs = ifft_with_precomputation_power_of_2(&plonk_z_points_n, &self.fft_precomputation_n);
-        let c_plonk_z = pedersen_hash::<C>(&plonk_z_coeffs, &self.msm_precomputation).to_affine();
+        let c_plonk_z = pedersen_hash::<C>(&plonk_z_coeffs, &self.pedersen_g_msm_precomputation).to_affine();
 
         // Generate a random alpha from the transcript.
         challenger.observe_affine_point(c_plonk_z);
@@ -216,7 +216,7 @@ impl<C: HaloCurve> Circuit<C> {
 
         // Commit to the quotient polynomial.
         let c_plonk_t: Vec<ProjectivePoint<C>> = plonk_t_coeff_chunks.iter()
-            .map(|coeffs| pedersen_hash::<C>(&plonk_t_coeffs, &self.msm_precomputation))
+            .map(|coeffs| pedersen_hash::<C>(&plonk_t_coeffs, &self.pedersen_g_msm_precomputation))
             .collect();
         let c_plonk_t = ProjectivePoint::batch_to_affine(&c_plonk_t);
 
@@ -309,16 +309,28 @@ impl<C: HaloCurve> Circuit<C> {
         let reduced_opening = reduce_with_powers(&opening_set_reductions, v_sf);
 
         // Final IPA proof.
-        for i in 0..self.degree_pow() {
-            let a_lo = todo!();
-            let a_hi = todo!();
-            let b_lo = todo!();
-            let b_hi = todo!();
-            let g_lo = todo!();
-            let g_hi = todo!();
+        let mut halo_a = reduced_coeffs;
+        let mut halo_b = powers(zeta_sf, self.degree());
+        let mut halo_g = AffinePoint::batch_to_projective(&self.pedersen_g);
+        let mut halo_l = Vec::new();
+        let mut halo_r = Vec::new();
+        for j in (1..self.degree_pow()).rev() {
+            let n = 1 << j;
+            let middle = n / 2;
 
-            let l_j_blinding_factor = todo!();
-            let r_j_blinding_factor = todo!();
+            assert_eq!(halo_a.len(), n);
+            assert_eq!(halo_b.len(), n);
+            assert_eq!(halo_g.len(), n);
+
+            let a_lo = &halo_a[..middle];
+            let a_hi = &halo_a[middle..];
+            let b_lo = &halo_b[..middle];
+            let b_hi = &halo_b[middle..];
+            let g_lo = &halo_g[..middle];
+            let g_hi = &halo_g[middle..];
+
+            let l_j_blinding_factor = C::ScalarField::rand();
+            let r_j_blinding_factor = C::ScalarField::rand();
 
             let window_size = 8;
 
@@ -326,15 +338,32 @@ impl<C: HaloCurve> Circuit<C> {
             let halo_l_j = msm_parallel(a_lo, g_hi, window_size)
                 + C::convert(l_j_blinding_factor) * self.pedersen_h.to_projective()
                 + C::convert(C::ScalarField::inner_product(a_lo, b_hi)) * self.u.to_projective();
+            halo_l.push(halo_l_j);
             // R_i = <a_hi, G_lo> + [r_j] H + [<a_hi, b_lo>] U.
             let halo_r_j = msm_parallel(a_hi, g_lo, window_size)
                 + C::convert(r_j_blinding_factor) * self.pedersen_h.to_projective()
                 + C::convert(C::ScalarField::inner_product(a_hi, b_lo)) * self.u.to_projective();
+            halo_r.push(halo_r_j);
 
             challenger.observe_proj_points(&[halo_l_j, halo_r_j]);
-            let l_challenge = challenger.get_challenge();
-            let r_challenge = l_challenge.multiplicative_inverse();
+            let l_challenge_bf = challenger.get_challenge();
+            let r_challenge_bf = l_challenge_bf.multiplicative_inverse().expect("This is improbable!");
+            let l_challenge_sf = l_challenge_bf.try_convert::<C::ScalarField>()?;
+            let r_challenge_sf = r_challenge_bf.try_convert::<C::ScalarField>()?;
+
+            halo_a = C::ScalarField::add_slices(
+                &l_challenge_sf.scale_slice(a_lo),
+                &r_challenge_sf.scale_slice(a_hi));
+            halo_b = C::ScalarField::add_slices(
+                &l_challenge_sf.scale_slice(b_lo),
+                &r_challenge_sf.scale_slice(b_hi));
+            halo_g = ProjectivePoint::<C>::add_slices(
+                &l_challenge_sf.scale_proj_point_slice(g_lo),
+                &r_challenge_sf.scale_proj_point_slice(g_hi));
         }
+
+        debug_assert_eq!(halo_g.len(), 1);
+        let halo_g = halo_g[0].to_affine();
 
         Ok(Proof {
             c_wires,
@@ -344,9 +373,9 @@ impl<C: HaloCurve> Circuit<C> {
             o_local,
             o_right,
             o_below,
-            halo_l_i: todo!(),
-            halo_r_i: todo!(),
-            halo_g: todo!(),
+            halo_l: ProjectivePoint::batch_to_affine(&halo_l),
+            halo_r: ProjectivePoint::batch_to_affine(&halo_r),
+            halo_g,
         })
     }
 
@@ -565,23 +594,23 @@ impl<C: HaloCurve> Circuit<C> {
 /// Like `pedersen_commit`, but with no blinding factor.
 fn pedersen_hash<C: Curve>(
     xs: &[C::ScalarField],
-    msm_precomputation: &MsmPrecomputation<C>,
+    pedersen_g_msm_precomputation: &MsmPrecomputation<C>,
 ) -> ProjectivePoint<C> {
-    msm_execute(msm_precomputation, xs)
+    msm_execute(pedersen_g_msm_precomputation, xs)
 }
 
 fn pedersen_commit<C: Curve>(
     xs: &[C::ScalarField],
     opening: C::ScalarField,
     h: AffinePoint<C>,
-    msm_precomputation: &MsmPrecomputation<C>,
+    pedersen_g_msm_precomputation: &MsmPrecomputation<C>,
 ) -> ProjectivePoint<C> {
     // TODO: Couldn't get this working with *.
     let h = h.to_projective();
     let mul_precomputation = h.mul_precompute();
     let blinding_term = h.mul_with_precomputation(opening, mul_precomputation);
 
-    msm_execute(msm_precomputation, xs) + blinding_term
+    msm_execute(pedersen_g_msm_precomputation, xs) + blinding_term
 }
 
 /// A sort of proxy wire, in the context of routing and witness generation. It is not an actual
@@ -1554,16 +1583,18 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
         let fft_precomputation_n = fft_precompute(degree);
         let fft_precomputation_8n = fft_precompute(degree * 8);
-        let msm_precomputation = todo!();
 
         let subgroup_generator_n = C::ScalarField::primitive_root_of_unity(degree_pow);
         let subgroup_generator_8n = C::ScalarField::primitive_root_of_unity(degree_pow + 3);
         let subgroup_n = C::ScalarField::cyclic_subgroup_known_order(subgroup_generator_n, degree);
         let subgroup_8n = C::ScalarField::cyclic_subgroup_known_order(subgroup_generator_n, 8 * degree);
 
-        let pedersen_g = (0..degree).map(|i| blake_hash_usize_to_curve::<C>(i)).collect();
+        let pedersen_g: Vec<_> = (0..degree).map(|i| blake_hash_usize_to_curve::<C>(i)).collect();
         let pedersen_h = blake_hash_usize_to_curve::<C>(degree);
         let u = blake_hash_usize_to_curve::<C>(degree + 1);
+
+        let w = 8; // TODO: Should really be set dynamically based on MSM size.
+        let pedersen_g_msm_precomputation = msm_precompute(&AffinePoint::batch_to_projective(&pedersen_g), w);
 
         let constants_coeffs: Vec<Vec<C::ScalarField>> = gate_constants.iter()
             .map(|values| ifft_with_precomputation_power_of_2(values, &fft_precomputation_n))
@@ -1572,7 +1603,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             .map(|coeffs| fft_with_precomputation_power_of_2(coeffs, &fft_precomputation_8n))
             .collect();
         let c_constants: Vec<ProjectivePoint<C>> = constants_coeffs.iter()
-            .map(|coeffs| pedersen_hash(&coeffs, &msm_precomputation))
+            .map(|coeffs| pedersen_hash(&coeffs, &pedersen_g_msm_precomputation))
             .collect();
         let c_constants = ProjectivePoint::batch_to_affine(&c_constants);
 
@@ -1592,7 +1623,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             .map(|coeffs| fft_with_precomputation_power_of_2(coeffs, &fft_precomputation_8n))
             .collect();
         let c_s_sigmas: Vec<ProjectivePoint<C>> = s_sigma_coeffs.iter()
-            .map(|coeffs| pedersen_hash(&coeffs, &msm_precomputation))
+            .map(|coeffs| pedersen_hash(&coeffs, &pedersen_g_msm_precomputation))
             .collect();
         let c_s_sigmas = ProjectivePoint::batch_to_affine(&c_s_sigmas);
 
@@ -1615,7 +1646,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             s_sigma_coeffs,
             s_sigma_values_8n,
             c_s_sigmas,
-            msm_precomputation,
+            pedersen_g_msm_precomputation,
             fft_precomputation_n,
             fft_precomputation_8n,
         }

@@ -7,7 +7,7 @@ use std::ops::{Add, Div, Mul, Neg, Sub};
 use num::{BigUint, Integer, One};
 use anyhow::{Result, Error};
 
-use crate::{biguint_to_field, field_to_biguint};
+use crate::{biguint_to_field, field_to_biguint, AffinePoint, Curve, ProjectivePoint, msm_parallel};
 use std::cmp::Ordering;
 use std::cmp::Ordering::Equal;
 
@@ -22,11 +22,11 @@ pub trait Field:
     + Debug
     + Display
     + Default
-    + Neg<Output = Self>
-    + Add<Self, Output = Self>
-    + Sub<Self, Output = Self>
-    + Mul<Self, Output = Self>
-    + Div<Self, Output = Self>
+    + Neg<Output=Self>
+    + Add<Self, Output=Self>
+    + Sub<Self, Output=Self>
+    + Mul<Self, Output=Self>
+    + Div<Self, Output=Self>
 {
     const BITS: usize;
     const BYTES: usize;
@@ -186,6 +186,20 @@ pub trait Field:
         *self * Self::FOUR
     }
 
+    fn scale_slice(&self, slice: &[Self]) -> Vec<Self> {
+        slice.iter().map(|&x| *self * x).collect()
+    }
+
+    fn scale_proj_point_slice<C>(&self, slice: &[ProjectivePoint<C>]) -> Vec<ProjectivePoint<C>>
+        where C: Curve<ScalarField=Self> {
+        slice.iter().map(|&p| C::convert(*self) * p).collect()
+    }
+
+    fn add_slices(a: &[Self], b: &[Self]) -> Vec<Self> {
+        assert_eq!(a.len(), b.len());
+        a.iter().zip(b.iter()).map(|(&a_i, &b_i)| a_i + b_i).collect()
+    }
+
     fn inner_product(a: &[Self], b: &[Self]) -> Self {
         assert_eq!(a.len(), b.len());
         let mut sum = Self::ZERO;
@@ -277,9 +291,7 @@ pub trait Field:
     }
 
     fn generator_order(generator: Self) -> usize
-    where
-        Self: Hash,
-    {
+    where Self: Hash {
         Self::cyclic_subgroup_unknown_order(generator).len()
     }
 

@@ -76,6 +76,10 @@ impl<C: Curve> AffinePoint<C> {
         ProjectivePoint { x, y, z: C::BaseField::ONE, zero }
     }
 
+    pub fn batch_to_projective(affine_points: &[Self]) -> Vec<ProjectivePoint<C>> {
+        affine_points.iter().map(Self::to_projective).collect()
+    }
+
     pub fn double(&self) -> Self {
         // TODO: This is a very lazy implementation...
         self.to_projective().double().to_affine()
@@ -171,6 +175,11 @@ impl<C: Curve> ProjectivePoint<C> {
         let y3 = w * (b - h) - rr.double();
         let z3 = s.cube();
         Self { x: x3, y: y3, z: z3, zero: false }
+    }
+
+    pub fn add_slices(a: &[Self], b: &[Self]) -> Vec<Self> {
+        assert_eq!(a.len(), b.len());
+        a.iter().zip(b.iter()).map(|(&a_i, &b_i)| a_i + b_i).collect()
     }
 }
 

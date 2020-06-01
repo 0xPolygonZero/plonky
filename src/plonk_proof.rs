@@ -17,10 +17,10 @@ pub struct Proof<C: Curve> {
     /// The opening of each polynomial at `g^65 * zeta`.
     pub o_below: OpeningSet<C::ScalarField>,
 
-    /// L_i in the Halo reduction.
-    pub halo_l_i: Vec<AffinePoint<C>>,
-    /// R_i in the Halo reduction.
-    pub halo_r_i: Vec<AffinePoint<C>>,
+    /// L in the Halo reduction.
+    pub halo_l: Vec<AffinePoint<C>>,
+    /// R in the Halo reduction.
+    pub halo_r: Vec<AffinePoint<C>>,
     /// The purported value of G, i.e. <s, G>, in the context of Halo.
     pub halo_g: AffinePoint<C>,
 }
