@@ -539,7 +539,10 @@ impl<C: HaloCurve> Circuit<C> {
             // Refresh the set of pending generators.
             pending_generator_indices.clear();
             for target in populated_targets {
-                for &generator_idx in &generator_indices_by_deps[&target] {
+                let no_indices = Vec::new();
+                let affected_generator_indices = generator_indices_by_deps.get(&target).unwrap_or(&no_indices);
+
+                for &generator_idx in affected_generator_indices {
                     // If this generator is not already pending or completed, and its dependencies
                     // are all satisfied, then add it as a pending generator.
                     let generator: &dyn WitnessGenerator<C::ScalarField> = self.generators[generator_idx].borrow();
