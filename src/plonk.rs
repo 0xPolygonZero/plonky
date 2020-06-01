@@ -10,7 +10,7 @@ use crate::{AffinePoint, blake_hash_usize_to_curve, Curve, fft_precompute, fft_w
 use crate::plonk_challenger::Challenger;
 use crate::plonk_gates::{ArithmeticGate, Base4SumGate, BufferGate, CurveAddGate, CurveDblGate, CurveEndoGate, Gate, PublicInputGate, RescueStepAGate, RescueStepBGate};
 use crate::plonk_util::{eval_l_1, eval_zero_poly, halo_n, powers, reduce_with_powers};
-use crate::util::{ceil_div_usize, log2_strict};
+use crate::util::{ceil_div_usize, log2_strict, transpose};
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
@@ -63,6 +63,15 @@ impl<F: Field> PartialWitness<F> {
         if let Some(old_value) = opt_old_value {
             debug_assert_eq!(old_value, value, "Target was set twice with different values");
         }
+    }
+
+    pub fn set_point_target<InnerC: Curve<BaseField=F>>(
+        &mut self,
+        point_target: AffinePointTarget,
+        point: AffinePoint<InnerC>,
+    ) {
+        self.set_target(point_target.x, point.x);
+        self.set_target(point_target.y, point.y);
     }
 
     pub fn set_wire(&mut self, wire: Wire, value: F) {
@@ -148,12 +157,11 @@ impl<C: HaloCurve> Circuit<C> {
     // and we should add a set of curve gates for each embedded curve.
     pub fn generate_proof<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &self,
-        inputs: PartialWitness<C::ScalarField>,
+        witness: Witness<C::ScalarField>,
     ) -> Result<Proof<C>> {
         let mut challenger = Challenger::new(self.security_bits);
 
-        // Generate the witness, and convert both to coefficient form and a degree-8n LDE.
-        let witness = self.generate_witness(inputs);
+        // Convert the witness both to coefficient form and a degree-8n LDE.
         let wires_coeffs: Vec<Vec<C::ScalarField>> = witness.wire_values.iter()
             .map(|values| ifft_with_precomputation_power_of_2(values, &self.fft_precomputation_n))
             .collect();
@@ -1494,13 +1502,20 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
     /// Adds a gate to the circuit, without doing any routing.
     pub fn add_gate<G: Gate<C>>(&mut self, gate: G, gate_constants: Vec<C::ScalarField>) {
-        // Merge the gate type's prefix bits with the given gate config constants.
         debug_assert!(G::PREFIX.len() + gate_constants.len() <= NUM_CONSTANTS);
+
+        // Merge the gate type's prefix bits with the given gate config constants.
         let mut all_constants = Vec::new();
         for &prefix_bit in G::PREFIX {
             all_constants.push(C::ScalarField::from_canonical_bool(prefix_bit));
         }
         all_constants.extend(gate_constants);
+
+        // Pad if not all constants were used.
+        while all_constants.len() < NUM_CONSTANTS {
+            all_constants.push(C::ScalarField::ZERO);
+        }
+
         self.gate_constants.push(all_constants);
         self.add_generator(gate);
         *self.gate_counts.entry(G::NAME).or_insert(0) += 1;
@@ -1596,7 +1611,10 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         let w = 8; // TODO: Should really be set dynamically based on MSM size.
         let pedersen_g_msm_precomputation = msm_precompute(&AffinePoint::batch_to_projective(&pedersen_g), w);
 
-        let constants_coeffs: Vec<Vec<C::ScalarField>> = gate_constants.iter()
+        // While gate_constants is indexed by gate index first, this is indexed by wire index first.
+        let wire_constants = transpose::<C::ScalarField>(&gate_constants);
+
+        let constants_coeffs: Vec<Vec<C::ScalarField>> = wire_constants.iter()
             .map(|values| ifft_with_precomputation_power_of_2(values, &fft_precomputation_n))
             .collect();
         let constants_8n = constants_coeffs.iter()
