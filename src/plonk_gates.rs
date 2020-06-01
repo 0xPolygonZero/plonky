@@ -17,7 +17,7 @@ use std::marker::PhantomData;
 use crate::{AffinePoint, CircuitBuilder, Curve, Field, GRID_WIDTH, HaloCurve, NUM_ADVICE_WIRES, NUM_ROUTED_WIRES, NUM_WIRES, PartialWitness, Target, Wire, WitnessGenerator};
 use crate::mds::mds;
 
-pub(crate) fn evaluate_all_constraints<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>(
+pub fn evaluate_all_constraints<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>(
     local_constant_values: &[C::ScalarField],
     local_wire_values: &[C::ScalarField],
     right_wire_values: &[C::ScalarField],
@@ -47,7 +47,7 @@ pub(crate) fn evaluate_all_constraints<C: HaloCurve, InnerC: HaloCurve<BaseField
     unified_constraint_set
 }
 
-pub(crate) fn evaluate_all_constraints_recursively<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>(
+pub fn evaluate_all_constraints_recursively<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>(
     builder: &mut CircuitBuilder<C>,
     local_constant_values: &[Target],
     local_wire_values: &[Target],
@@ -181,7 +181,7 @@ pub trait Gate<C: HaloCurve>: WitnessGenerator<C::ScalarField> {
 /// can only receive 6 public inputs. To work around this, we place a BufferGate immediately after
 /// each PublicInputGate, and have the PublicInputGate copy its 5 non-routed wires to routed wires
 /// of the BufferGate.
-pub(crate) struct PublicInputGate<C: HaloCurve> {
+pub struct PublicInputGate<C: HaloCurve> {
     pub index: usize,
     _phantom: PhantomData<C>,
 }
@@ -253,7 +253,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for PublicInputGate<C> {
 ///   for receiving the last gate's output.
 /// * The first constant value configured for this gate will be proxied to its `WIRE_BUFFER_CONST`
 ///   wire; this allows us to create routable constant wires.
-pub(crate) struct BufferGate<C: HaloCurve> {
+pub struct BufferGate<C: HaloCurve> {
     pub index: usize,
     _phantom: PhantomData<C>,
 }
@@ -319,7 +319,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for BufferGate<C> {
 /// facilitate MSMs which use this gate, it also adds the bit to an accumulator.
 ///
 /// `C` is the curve whose points are being added.
-pub(crate) struct CurveAddGate<C: HaloCurve, InnerC: Curve<BaseField=C::ScalarField>> {
+pub struct CurveAddGate<C: HaloCurve, InnerC: Curve<BaseField=C::ScalarField>> {
     pub index: usize,
     _phantom_oc: PhantomData<C>,
     _phantom_ic: PhantomData<InnerC>,
@@ -479,7 +479,7 @@ WitnessGenerator<C::ScalarField> for CurveAddGate<C, InnerC> {
 }
 
 /// A curve which performs point doubling.
-pub(crate) struct CurveDblGate<C: HaloCurve, InnerC: Curve<BaseField=C::ScalarField>> {
+pub struct CurveDblGate<C: HaloCurve, InnerC: Curve<BaseField=C::ScalarField>> {
     pub index: usize,
     _phantom_oc: PhantomData<C>,
     _phantom_ic: PhantomData<InnerC>,
@@ -606,7 +606,7 @@ WitnessGenerator<C::ScalarField> for CurveDblGate<C, InnerC> {
 
 /// A gate which performs an iteration of an simultaneous doubling MSM loop, employing the
 /// endomorphism described in the Halo paper. `C` is the curve of the inner proof.
-pub(crate) struct CurveEndoGate<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>> {
+pub struct CurveEndoGate<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>> {
     pub index: usize,
     _phantom_oc: PhantomData<C>,
     _phantom_ic: PhantomData<InnerC>,
@@ -836,7 +836,7 @@ WitnessGenerator<C::ScalarField> for CurveEndoGate<C, InnerC> {
 }
 
 /// The first step of Rescue, i.e. the one with the `x^(1/5)` layer.
-pub(crate) struct RescueStepAGate<C: HaloCurve> {
+pub struct RescueStepAGate<C: HaloCurve> {
     pub index: usize,
     _phantom: PhantomData<C>,
 }
@@ -995,7 +995,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for RescueStepAGate<C> {
 }
 
 /// The second step of Rescue, i.e. the one with the `x^5` layer.
-pub(crate) struct RescueStepBGate<C: HaloCurve> {
+pub struct RescueStepBGate<C: HaloCurve> {
     pub index: usize,
     _phantom: PhantomData<C>,
 }
@@ -1137,7 +1137,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for RescueStepBGate<C> {
 }
 
 /// A gate for accumulating base-4 limbs.
-pub(crate) struct Base4SumGate<C: Curve> {
+pub struct Base4SumGate<C: Curve> {
     pub index: usize,
     _phantom: PhantomData<C>,
 }
@@ -1238,7 +1238,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for Base4SumGate<C> {
 /// ```text
 /// output := const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend + const_2
 /// ```
-pub(crate) struct ArithmeticGate<C: HaloCurve> {
+pub struct ArithmeticGate<C: HaloCurve> {
     pub index: usize,
     _phantom: PhantomData<C>,
 }

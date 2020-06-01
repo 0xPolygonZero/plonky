@@ -65,6 +65,12 @@ impl<F: Field> PartialWitness<F> {
         }
     }
 
+    pub fn set_targets(&mut self, targets: &[Target], values: &[F]) {
+        debug_assert_eq!(targets.len(), values.len());
+        targets.iter().zip(values.iter())
+            .for_each(|(&target, &value)| self.set_target(target, value))
+    }
+
     pub fn set_point_target<InnerC: Curve<BaseField=F>>(
         &mut self,
         point_target: AffinePointTarget,
@@ -72,6 +78,16 @@ impl<F: Field> PartialWitness<F> {
     ) {
         self.set_target(point_target.x, point.x);
         self.set_target(point_target.y, point.y);
+    }
+
+    pub fn set_point_targets<InnerC: Curve<BaseField=F>>(
+        &mut self,
+        point_targets: &[AffinePointTarget],
+        points: &[AffinePoint<InnerC>],
+    ) {
+        debug_assert_eq!(point_targets.len(), points.len());
+        point_targets.iter().zip(points.iter())
+            .for_each(|(&point_target, &point)| self.set_point_target(point_target, point))
     }
 
     pub fn set_wire(&mut self, wire: Wire, value: F) {
@@ -1496,7 +1512,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     /// Adds a gate to the circuit, without doing any routing.
-    fn add_gate_no_constants<G: Gate<C>>(&mut self, gate: G) {
+    pub fn add_gate_no_constants<G: Gate<C>>(&mut self, gate: G) {
         self.add_gate(gate, Vec::new());
     }
 

@@ -451,6 +451,10 @@ pub trait Field:
     fn try_convert<F: Field>(&self) -> Result<F> {
         F::from_canonical_u8_vec(self.to_canonical_u8_vec())
     }
+
+    fn try_convert_all<F: Field>(values: &[Self]) -> Result<Vec<F>> {
+        values.iter().map(|f| f.try_convert::<F>()).collect()
+    }
 }
 
 #[macro_export]
