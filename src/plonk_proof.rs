@@ -1,4 +1,6 @@
-use crate::{Target, AffinePoint, Curve, AffinePointTarget, Field};
+use anyhow::Result;
+
+use crate::{AffinePoint, AffinePointTarget, Curve, Field, PartialWitness, Target};
 
 pub struct Proof<C: Curve> {
     /// A commitment to each wire polynomial.
@@ -69,6 +71,29 @@ impl ProofTarget {
             .collect();
         targets_2d.concat()
     }
+
+    pub fn populate_witness<C: Curve>(
+        &self,
+        witness: &mut PartialWitness<C::BaseField>,
+        values: Proof<C>,
+    ) {
+        witness.set_point_targets(&self.c_wires, &values.c_wires);
+        witness.set_point_target(self.c_plonk_z, values.c_plonk_z);
+        witness.set_point_targets(&self.c_plonk_t, &values.c_plonk_t);
+
+        debug_assert_eq!(self.o_public_inputs.len(), values.o_public_inputs.len());
+        for (o_pi_targets, o_pi_values) in self.o_public_inputs.iter().zip(values.o_public_inputs) {
+            o_pi_targets.populate_witness(witness, o_pi_values);
+        }
+
+        self.o_local.populate_witness(witness, values.o_local);
+        self.o_right.populate_witness(witness, values.o_right);
+        self.o_below.populate_witness(witness, values.o_below);
+
+        witness.set_point_targets(&self.halo_l_i, &values.halo_l);
+        witness.set_point_targets(&self.halo_r_i, &values.halo_r);
+        witness.set_point_target(self.halo_g, values.halo_g);
+    }
 }
 
 /// The opening of each Plonk polynomial at a particular point.
@@ -122,5 +147,24 @@ impl OpeningSetTarget {
             &[self.o_plonk_z],
             self.o_plonk_t.as_slice(),
         ].concat()
+    }
+
+    pub fn populate_witness<InnerBF: Field, InnerSF: Field>(
+        &self,
+        witness: &mut PartialWitness<InnerBF>,
+        values: OpeningSet<InnerSF>,
+    ) -> Result<()> {
+        // TODO: We temporarily assume that each opened value fits in both fields.
+        witness.set_targets(&self.o_constants,
+                            &InnerSF::try_convert_all::<InnerBF>(&values.o_constants)?);
+        witness.set_targets(&self.o_plonk_sigmas,
+                            &InnerSF::try_convert_all::<InnerBF>(&values.o_plonk_sigmas)?);
+        witness.set_targets(&self.o_wires,
+                            &InnerSF::try_convert_all::<InnerBF>(&values.o_wires)?);
+        witness.set_target(self.o_plonk_z,
+                           values.o_plonk_z.try_convert::<InnerBF>()?);
+        witness.set_targets(&self.o_plonk_t,
+                            &InnerSF::try_convert_all::<InnerBF>(&values.o_plonk_t)?);
+        Ok(())
     }
 }
