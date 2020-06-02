@@ -5,8 +5,9 @@
 //! 00001 CurveAddGate
 //! 00010 CurveDblGate
 //! 00011 CurveEndoGate
-//! 0010* Base4SumGate
-//! 0011* BufferGate
+//! 00100 Base4SumGate
+//! 00101 BufferGate
+//! 0011* ConstantGate
 //! 01*** ArithmeticGate
 //! 10*** RescueStepAGate
 //! 11*** RescueStepBGate
@@ -14,7 +15,7 @@
 
 use std::marker::PhantomData;
 
-use crate::{AffinePoint, CircuitBuilder, Curve, Field, GRID_WIDTH, HaloCurve, NUM_ADVICE_WIRES, NUM_ROUTED_WIRES, NUM_WIRES, PartialWitness, Target, Wire, WitnessGenerator};
+use crate::{AffinePoint, CircuitBuilder, Curve, Field, GRID_WIDTH, HaloCurve, NUM_ADVICE_WIRES, NUM_ROUTED_WIRES, NUM_WIRES, PartialWitness, Target, Wire, WitnessGenerator, NUM_CONSTANTS};
 use crate::mds::mds;
 
 pub fn evaluate_all_constraints<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>(
@@ -30,6 +31,7 @@ pub fn evaluate_all_constraints<C: HaloCurve, InnerC: HaloCurve<BaseField=C::Sca
         Base4SumGate::<C>::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
         PublicInputGate::<C>::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
         BufferGate::<C>::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
+        ConstantGate::<C>::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
         ArithmeticGate::<C>::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
         RescueStepAGate::<C>::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
         RescueStepBGate::<C>::evaluate_filtered(local_constant_values, local_wire_values, right_wire_values, below_wire_values),
@@ -61,6 +63,7 @@ pub fn evaluate_all_constraints_recursively<C: HaloCurve, InnerC: HaloCurve<Base
         Base4SumGate::<C>::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
         PublicInputGate::<C>::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
         BufferGate::<C>::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
+        ConstantGate::<C>::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
         ArithmeticGate::<C>::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
         RescueStepAGate::<C>::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
         RescueStepBGate::<C>::evaluate_filtered_recursively(builder, local_constant_values, local_wire_values, right_wire_values, below_wire_values),
@@ -246,13 +249,10 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for PublicInputGate<C> {
     }
 }
 
-/// A gate which doesn't perform any arithmetic, but just acts as a buffer for receiving data. This
-/// is used in a couple ways:
-/// * Some gates, such as the Rescue round gate, "output" their results using one of the next gate's
-///   "input" wires. The last such gate has no next gate of the same type, so we add a buffer gate
-///   for receiving the last gate's output.
-/// * The first constant value configured for this gate will be proxied to its `WIRE_BUFFER_CONST`
-///   wire; this allows us to create routable constant wires.
+/// A gate which doesn't perform any arithmetic, but just acts as a buffer for receiving data.
+/// Some gates, such as the Rescue round gate, "output" their results using one of the next gate's
+/// "input" wires. The last such gate has no next gate of the same type, so we add a buffer gate
+/// for receiving the last gate's output.
 pub struct BufferGate<C: HaloCurve> {
     pub index: usize,
     _phantom: PhantomData<C>,
@@ -262,19 +262,12 @@ impl<C: HaloCurve> BufferGate<C> {
     pub fn new(index: usize) -> Self {
         BufferGate { index, _phantom: PhantomData }
     }
-
-    pub const WIRE_BUFFER_0: usize = 0;
-    pub const WIRE_BUFFER_1: usize = 1;
-    pub const WIRE_BUFFER_2: usize = 2;
-    pub const WIRE_BUFFER_3: usize = 3;
-    pub const WIRE_BUFFER_4: usize = 4;
-    pub const WIRE_BUFFER_CONST: usize = 5;
 }
 
 impl<C: HaloCurve> Gate<C> for BufferGate<C> {
     const NAME: &'static str = "BufferGate";
 
-    const PREFIX: &'static [bool] = &[false, false, true, true];
+    const PREFIX: &'static [bool] = &[false, false, true, false, true];
 
     fn evaluate_unfiltered(
         local_constant_values: &[C::ScalarField],
@@ -282,9 +275,7 @@ impl<C: HaloCurve> Gate<C> for BufferGate<C> {
         right_wire_values: &[C::ScalarField],
         below_wire_values: &[C::ScalarField],
     ) -> Vec<C::ScalarField> {
-        let wire_value = local_wire_values[Self::WIRE_BUFFER_CONST];
-        let const_value = local_constant_values[<Self as Gate<C>>::PREFIX.len()];
-        vec![wire_value - const_value]
+        Vec::new()
     }
 
     fn evaluate_unfiltered_recursively(
@@ -294,9 +285,7 @@ impl<C: HaloCurve> Gate<C> for BufferGate<C> {
         right_wire_values: &[Target],
         below_wire_values: &[Target],
     ) -> Vec<Target> {
-        let wire_value = local_wire_values[Self::WIRE_BUFFER_CONST];
-        let const_value = local_constant_values[<Self as Gate<C>>::PREFIX.len()];
-        vec![builder.sub(wire_value, const_value)]
+        Vec::new()
     }
 }
 
@@ -306,12 +295,68 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for BufferGate<C> {
     }
 
     fn generate(&self, constants: &Vec<Vec<C::ScalarField>>, _witness: &PartialWitness<C::ScalarField>) -> PartialWitness<C::ScalarField> {
-        let buffer_const_target = Wire { gate: self.index, input: Self::WIRE_BUFFER_CONST };
+        PartialWitness::new()
+    }
+}
 
-        let mut witness = PartialWitness::new();
-        let const_value = constants[self.index][<Self as Gate<_>>::PREFIX.len()];
-        witness.set_wire(buffer_const_target, const_value);
-        witness
+/// A gate which takes a single constant parameter and outputs that value.
+pub struct ConstantGate<C: HaloCurve> {
+    pub index: usize,
+    _phantom: PhantomData<C>,
+}
+
+impl<C: HaloCurve> ConstantGate<C> {
+    pub const WIRE_OUTPUT: usize = 0;
+
+    pub fn new(index: usize) -> Self {
+        ConstantGate { index, _phantom: PhantomData }
+    }
+}
+
+impl<C: HaloCurve> Gate<C> for ConstantGate<C> {
+    const NAME: &'static str = "ConstantGate";
+
+    const PREFIX: &'static [bool] = &[false, false, true, true];
+
+    fn evaluate_unfiltered(
+        local_constant_values: &[C::ScalarField],
+        local_wire_values: &[C::ScalarField],
+        _right_wire_values: &[C::ScalarField],
+        _below_wire_values: &[C::ScalarField],
+    ) -> Vec<C::ScalarField> {
+        let c = local_constant_values[Self::PREFIX.len()];
+        let out = local_wire_values[Self::WIRE_OUTPUT];
+        vec![c - out]
+    }
+
+    fn evaluate_unfiltered_recursively(
+        builder: &mut CircuitBuilder<C>,
+        local_constant_values: &[Target],
+        local_wire_values: &[Target],
+        _right_wire_values: &[Target],
+        _below_wire_values: &[Target],
+    ) -> Vec<Target> {
+        let c = local_constant_values[Self::PREFIX.len()];
+        let out = local_wire_values[Self::WIRE_OUTPUT];
+        vec![builder.sub(c, out)]
+    }
+}
+
+impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for ConstantGate<C> {
+    fn dependencies(&self) -> Vec<Target> {
+        Vec::new()
+    }
+
+    fn generate(
+        &self,
+        constants: &Vec<Vec<C::ScalarField>>,
+        _witness: &PartialWitness<C::ScalarField>,
+    ) -> PartialWitness<C::ScalarField> {
+        let constants = &constants[self.index];
+        let c = constants[Self::PREFIX.len()];
+        let mut result = PartialWitness::new();
+        result.set_wire(Wire { gate: self.index, input: Self::WIRE_OUTPUT }, c);
+        result
     }
 }
 
@@ -1156,7 +1201,7 @@ impl<C: HaloCurve> Base4SumGate<C> {
 impl<C: HaloCurve> Gate<C> for Base4SumGate<C> {
     const NAME: &'static str = "Base4SumGate";
 
-    const PREFIX: &'static [bool] = &[false, false, true, false];
+    const PREFIX: &'static [bool] = &[false, false, true, false, false];
 
     fn evaluate_unfiltered(
         local_constant_values: &[C::ScalarField],

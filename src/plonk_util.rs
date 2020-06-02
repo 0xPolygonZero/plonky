@@ -1,4 +1,4 @@
-use crate::{CircuitBuilder, Curve, Field, HaloCurve, Target};
+use crate::{CircuitBuilder, Field, HaloCurve, Target};
 
 /// Evaluate the polynomial which vanishes on any multiplicative subgroup of a given order `n`.
 pub(crate) fn eval_zero_poly<F: Field>(n: usize, x: F) -> F {
@@ -9,6 +9,12 @@ pub(crate) fn eval_zero_poly<F: Field>(n: usize, x: F) -> F {
 /// Evaluate the Lagrange basis `L_1` with `L_1(1) = 1`, and `L_1(x) = 0` for other members of an
 /// order `n` multiplicative subgroup.
 pub(crate) fn eval_l_1<F: Field>(n: usize, x: F) -> F {
+    if x.is_one() {
+        // The code below would divide by zero, since we have (x - 1) in both the numerator and
+        // denominator.
+        return F::ONE;
+    }
+
     // L_1(x) = (x^n - 1) / (n * (x - 1))
     //        = Z(x) / (n * (x - 1))
     eval_zero_poly(n, x) / (F::from_canonical_usize(n) * (x - F::ONE))
@@ -95,4 +101,16 @@ pub(crate) fn powers_recursive<C: HaloCurve>(builder: &mut CircuitBuilder<C>, x:
         powers.push(current);
     }
     powers
+}
+
+/// Zero-pad a list of `n` polynomial coefficients to a length of `8n`, which is the degree at
+/// which we do most polynomial arithmetic.
+pub(crate) fn pad_to_8n<F: Field>(coeffs: &[F]) -> Vec<F> {
+    let n = coeffs.len();
+
+    let mut result = coeffs.to_vec();
+    while result.len() < 8 * n {
+        result.push(F::ZERO);
+    }
+    result
 }

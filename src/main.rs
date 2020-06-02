@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use plonky::{recursive_verification_circuit, Tweedledum, Tweedledee, PartialWitness, Curve, Circuit, CircuitBuilder, BufferGate};
+use plonky::{recursive_verification_circuit, Tweedledum, Tweedledee, PartialWitness, Circuit, CircuitBuilder, BufferGate};
 
 const INNER_PROOF_DEGREE_POW: usize = 14;
 const INNER_PROOF_DEGREE: usize = 1 << INNER_PROOF_DEGREE_POW;

@@ -6,10 +6,10 @@ use anyhow::Result;
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::SeedableRng;
 
-use crate::{AffinePoint, blake_hash_usize_to_curve, Curve, fft_precompute, fft_with_precomputation_power_of_2, FftPrecomputation, Field, generate_rescue_constants, ifft_with_precomputation_power_of_2, msm_execute, msm_parallel, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof, rescue_hash_n_to_1, rescue_hash_n_to_2, rescue_hash_n_to_3, evaluate_all_constraints, divide_by_z_h, HaloCurve, msm_precompute};
+use crate::{AffinePoint, blake_hash_usize_to_curve, Curve, divide_by_z_h, evaluate_all_constraints, fft_precompute, fft_with_precomputation_power_of_2, FftPrecomputation, Field, generate_rescue_constants, HaloCurve, ifft_with_precomputation_power_of_2, msm_execute, msm_parallel, msm_precompute, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof, rescue_hash_n_to_1, rescue_hash_n_to_2, rescue_hash_n_to_3, ConstantGate};
 use crate::plonk_challenger::Challenger;
 use crate::plonk_gates::{ArithmeticGate, Base4SumGate, BufferGate, CurveAddGate, CurveDblGate, CurveEndoGate, Gate, PublicInputGate, RescueStepAGate, RescueStepBGate};
-use crate::plonk_util::{eval_l_1, eval_zero_poly, halo_n, powers, reduce_with_powers};
+use crate::plonk_util::{eval_l_1, eval_zero_poly, halo_n, powers, reduce_with_powers, pad_to_8n};
 use crate::util::{ceil_div_usize, log2_strict, transpose};
 
 pub(crate) const NUM_WIRES: usize = 9;
@@ -61,7 +61,8 @@ impl<F: Field> PartialWitness<F> {
     pub fn set_target(&mut self, target: Target, value: F) {
         let opt_old_value = self.wire_values.insert(target, value);
         if let Some(old_value) = opt_old_value {
-            debug_assert_eq!(old_value, value, "Target was set twice with different values");
+            debug_assert_eq!(old_value, value,
+                             "Target {:?} was set twice with different values", target);
         }
     }
 
@@ -178,11 +179,12 @@ impl<C: HaloCurve> Circuit<C> {
         let mut challenger = Challenger::new(self.security_bits);
 
         // Convert the witness both to coefficient form and a degree-8n LDE.
-        let wires_coeffs: Vec<Vec<C::ScalarField>> = witness.wire_values.iter()
+        let wire_values_by_wire_index = transpose(&witness.wire_values);
+        let wires_coeffs: Vec<Vec<C::ScalarField>> = wire_values_by_wire_index.iter()
             .map(|values| ifft_with_precomputation_power_of_2(values, &self.fft_precomputation_n))
             .collect();
         let wires_coeffs_8n: Vec<_> = wires_coeffs.iter()
-            .map(|coeffs| self.pad_to_8n(coeffs))
+            .map(|coeffs| pad_to_8n(coeffs))
             .collect();
         let wire_values_8n: Vec<_> = wires_coeffs_8n.iter()
             .map(|coeffs| fft_with_precomputation_power_of_2(coeffs, &self.fft_precomputation_8n))
@@ -207,7 +209,7 @@ impl<C: HaloCurve> Circuit<C> {
             let mut numerator = C::ScalarField::ONE;
             let mut denominator = C::ScalarField::ONE;
             for j in 0..NUM_ROUTED_WIRES {
-                let wire_value = witness.wire_values[j][i - 1];
+                let wire_value = witness.wire_values[i - 1][j];
                 let k_i = get_subgroup_shift::<C::ScalarField>(j);
                 let s_id = k_i * x;
                 let s_sigma = self.s_sigma_values_8n[j][8 * i];
@@ -240,7 +242,7 @@ impl<C: HaloCurve> Circuit<C> {
 
         // Commit to the quotient polynomial.
         let c_plonk_t: Vec<ProjectivePoint<C>> = plonk_t_coeff_chunks.iter()
-            .map(|coeffs| pedersen_hash::<C>(&plonk_t_coeffs, &self.pedersen_g_msm_precomputation))
+            .map(|coeffs| pedersen_hash::<C>(coeffs, &self.pedersen_g_msm_precomputation))
             .collect();
         let c_plonk_t = ProjectivePoint::batch_to_affine(&c_plonk_t);
 
@@ -338,13 +340,13 @@ impl<C: HaloCurve> Circuit<C> {
         let mut halo_g = AffinePoint::batch_to_projective(&self.pedersen_g);
         let mut halo_l = Vec::new();
         let mut halo_r = Vec::new();
-        for j in (1..self.degree_pow()).rev() {
+        for j in (1..=self.degree_pow()).rev() {
             let n = 1 << j;
             let middle = n / 2;
 
-            assert_eq!(halo_a.len(), n);
-            assert_eq!(halo_b.len(), n);
-            assert_eq!(halo_g.len(), n);
+            debug_assert_eq!(halo_a.len(), n);
+            debug_assert_eq!(halo_b.len(), n);
+            debug_assert_eq!(halo_g.len(), n);
 
             let a_lo = &halo_a[..middle];
             let a_hi = &halo_a[middle..];
@@ -413,7 +415,7 @@ impl<C: HaloCurve> Circuit<C> {
     ) -> Vec<C::ScalarField> {
         // Low degree extend Z.
         let plonk_z_points_8n = fft_with_precomputation_power_of_2(
-            &self.pad_to_8n(&plonk_z_coeffs),
+            &pad_to_8n(&plonk_z_coeffs),
             &self.fft_precomputation_8n);
 
         // We will evaluate the vanishing polynomial at 8n points, then interpolate.
@@ -451,7 +453,7 @@ impl<C: HaloCurve> Circuit<C> {
             let mut f_prime = C::ScalarField::ONE;
             let mut g_prime = C::ScalarField::ONE;
             for j in 0..NUM_ROUTED_WIRES {
-                let wire_value = wire_values_8n[i][j];
+                let wire_value = wire_values_8n[j][i];
                 let k_i = get_subgroup_shift::<C::ScalarField>(j);
                 let s_id = k_i * x;
                 let s_sigma = self.s_sigma_values_8n[j][i];
@@ -470,17 +472,6 @@ impl<C: HaloCurve> Circuit<C> {
         }
 
         ifft_with_precomputation_power_of_2(&vanishing_points, &self.fft_precomputation_8n)
-    }
-
-    /// Zero-pad a list of polynomial coefficients to a length of 8n, which is the degree at which
-    /// we do most polynomial arithmetic.
-    fn pad_to_8n(&self, coeffs: &[C::ScalarField]) -> Vec<C::ScalarField> {
-        let eight_n = 8 * self.degree();
-        let mut result = coeffs.to_vec();
-        while result.len() < eight_n {
-            result.push(C::ScalarField::ZERO);
-        }
-        result
     }
 
     /// Open each polynomial at the given point, `zeta`.
@@ -815,9 +806,11 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     fn create_constant_wire(&mut self, c: C::ScalarField) -> Target {
-        let index = self.num_gates();
-        self.add_gate(BufferGate::new(index), vec![c]);
-        Target::Wire(Wire { gate: index, input: BufferGate::<C>::WIRE_BUFFER_CONST })
+        // We will create a ConstantGate and pass c as its first (and only) constant, which will
+        // cause it to populate its output wire with the same value c.
+        let gate = self.num_gates();
+        self.add_gate(ConstantGate::new(gate), vec![c]);
+        Target::Wire(Wire { gate, input: ConstantGate::<C>::WIRE_OUTPUT })
     }
 
     pub fn constant_affine_point<InnerC: Curve<BaseField=C::ScalarField>>(
@@ -1264,7 +1257,6 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         AffinePointTarget { x: result_x, y: result_y }
     }
 
-
     pub fn curve_double<InnerC: Curve<BaseField=C::ScalarField>>(
         &mut self,
         p: AffinePointTarget,
@@ -1637,7 +1629,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             .map(|values| ifft_with_precomputation_power_of_2(values, &fft_precomputation_n))
             .collect();
         let constants_8n = constants_coeffs.iter()
-            .map(|coeffs| fft_with_precomputation_power_of_2(coeffs, &fft_precomputation_8n))
+            .map(|coeffs| fft_with_precomputation_power_of_2(&pad_to_8n(coeffs), &fft_precomputation_8n))
             .collect();
         let c_constants: Vec<ProjectivePoint<C>> = constants_coeffs.iter()
             .map(|coeffs| pedersen_hash(&coeffs, &pedersen_g_msm_precomputation))
@@ -1657,7 +1649,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             .map(|sigma_chunk| ifft_with_precomputation_power_of_2(sigma_chunk, &fft_precomputation_n))
             .collect();
         let s_sigma_values_8n: Vec<Vec<C::ScalarField>> = s_sigma_coeffs.iter()
-            .map(|coeffs| fft_with_precomputation_power_of_2(coeffs, &fft_precomputation_8n))
+            .map(|coeffs| fft_with_precomputation_power_of_2(&pad_to_8n(coeffs), &fft_precomputation_8n))
             .collect();
         let c_s_sigmas: Vec<ProjectivePoint<C>> = s_sigma_coeffs.iter()
             .map(|coeffs| pedersen_hash(&coeffs, &pedersen_g_msm_precomputation))
@@ -1757,8 +1749,8 @@ impl TargetPartitions {
         for old_partition in &self.partitions {
             let mut new_partition = Vec::new();
             for target in old_partition {
-                if let Target::Wire(gi) = *target {
-                    new_partition.push(gi);
+                if let Target::Wire(w) = *target {
+                    new_partition.push(w);
                 }
             }
             partitions.push(new_partition);
@@ -1770,7 +1762,9 @@ impl TargetPartitions {
             }
         }
 
-        WirePartitions { partitions, indices }
+        let result = WirePartitions { partitions, indices };
+        result.assert_valid();
+        result
     }
 }
 
@@ -1780,6 +1774,17 @@ struct WirePartitions {
 }
 
 impl WirePartitions {
+    fn assert_valid(&self) {
+        for partition in &self.partitions {
+            for wire in partition {
+                if wire.input >= NUM_ROUTED_WIRES {
+                    assert_eq!(partition.len(), 1,
+                               "Non-routed wires should not be in a partition containing other wires");
+                }
+            }
+        }
+    }
+
     /// Find a wire's "neighbor" in the context of Plonk's "extended copy constraints" check. In
     /// other words, find the next wire in the given wire's partition. If the given wire is last in
     /// its partition, this will loop around. If the given wire has a partition all to itself, it
@@ -1797,19 +1802,18 @@ impl WirePartitions {
     }
 
     /// Generates sigma in the context of Plonk, which is a map from `[kn]` to `[kn]`, where `k` is
-    /// the number of wires and `n` is the number of gates.
+    /// the number of routed wires and `n` is the number of gates.
     fn to_sigma(&self) -> Vec<usize> {
-        let kn = self.indices.len();
-        let k = NUM_WIRES;
-        let n = kn / k;
-        debug_assert_eq!(k * n, kn);
+        debug_assert_eq!(self.indices.len() % NUM_WIRES, 0);
+        let num_all_wires = self.indices.len();
+        let num_gates = num_all_wires / NUM_WIRES;
 
         let mut sigma = Vec::new();
-        for input in 0..k {
-            for gate in 0..n {
+        for input in 0..NUM_ROUTED_WIRES {
+            for gate in 0..num_gates {
                 let wire = Wire { gate, input };
                 let neighbor = self.get_neighbor(wire);
-                sigma.push(neighbor.input * n + neighbor.gate);
+                sigma.push(neighbor.input * num_gates + neighbor.gate);
             }
         }
         sigma
@@ -1832,5 +1836,22 @@ pub(crate) fn get_subgroup_shift<F: Field>(i: usize) -> F {
     } else {
         let mut rng = ChaCha8Rng::seed_from_u64(i as u64);
         F::rand_from_rng(&mut rng)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{CircuitBuilder, Curve, Field, PartialWitness, Tweedledee, Tweedledum};
+
+    #[test]
+    fn test_generate_proof() {
+        let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+        let t = builder.add_virtual_target();
+        builder.assert_zero(t);
+        let mut partial_witness = PartialWitness::new();
+        partial_witness.set_target(t, <Tweedledee as Curve>::ScalarField::ZERO);
+        let circuit = builder.build();
+        let witness = circuit.generate_witness(partial_witness);
+        let proof = circuit.generate_proof::<Tweedledum>(witness);
     }
 }
