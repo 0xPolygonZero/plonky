@@ -8,15 +8,21 @@ const SECURITY_BITS: usize = 128;
 
 fn main() {
     println!("Generating inner circuit");
+    let start = Instant::now();
     let inner_circuit = generate_trivial_circuit();
+    println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!();
 
     println!("Generating inner witness");
+    let start = Instant::now();
     let inner_witness = inner_circuit.generate_witness(PartialWitness::new());
+    println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!();
 
     println!("Generating inner proof");
+    let start = Instant::now();
     let inner_proof = inner_circuit.generate_proof::<Tweedledee>(inner_witness).unwrap();
+    println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!();
 
     println!("Generating recursion circuit...");
