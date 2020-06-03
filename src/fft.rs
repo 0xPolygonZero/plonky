@@ -90,6 +90,9 @@ pub fn fft_with_precomputation_power_of_2<F: Field>(
     coefficients: &[F],
     precomputation: &FftPrecomputation<F>,
 ) -> Vec<F> {
+    debug_assert_eq!(coefficients.len(), precomputation.subgroups_rev.last().unwrap().len(),
+                     "Number of coefficients does not match size of subgroup in precomputation");
+
     let degree = coefficients.len();
     let half_degree = coefficients.len() >> 1;
     let degree_pow = log2_strict(degree);
