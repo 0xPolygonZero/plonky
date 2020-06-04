@@ -1,14 +1,15 @@
 use crate::plonk_gates::*;
 use crate::plonk_util::{
-    coeffs_to_commitments, coeffs_to_values, coeffs_to_values_padded, pad_to_8n, values_to_coeffs,
+    coeffs_to_commitments, coeffs_to_values, coeffs_to_values_padded, pad_to_8n, pedersen_hash,
+    values_to_coeffs,
 };
 use crate::util::{ceil_div_usize, log2_strict, transpose};
 use crate::{
     blake_hash_usize_to_curve, fft_precompute, fft_with_precomputation_power_of_2,
-    generate_rescue_constants, ifft_with_precomputation_power_of_2, msm_precompute, pedersen_hash,
-    AffinePoint, AffinePointTarget, Circuit, Curve, CurveMsmEndoResult, CurveMulEndoResult,
-    CurveMulOp, Field, HaloCurve, PartialWitness, ProjectivePoint, PublicInput, Target,
-    TargetPartitions, VirtualTarget, Wire, WitnessGenerator, NUM_CONSTANTS, NUM_WIRES,
+    generate_rescue_constants, ifft_with_precomputation_power_of_2, msm_precompute, AffinePoint,
+    AffinePointTarget, Circuit, Curve, CurveMsmEndoResult, CurveMulEndoResult, CurveMulOp, Field,
+    HaloCurve, PartialWitness, ProjectivePoint, PublicInput, Target, TargetPartitions,
+    VirtualTarget, Wire, WitnessGenerator, NUM_CONSTANTS, NUM_WIRES,
 };
 use std::collections::{BTreeMap, HashMap};
 

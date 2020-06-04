@@ -1,7 +1,7 @@
 use crate::{
-    fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, pedersen_hash,
+    fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2,
     AffinePoint, CircuitBuilder, Curve, FftPrecomputation, Field, HaloCurve, MsmPrecomputation,
-    ProjectivePoint, Target,
+    ProjectivePoint, Target, msm_execute
 };
 
 /// Evaluate the polynomial which vanishes on any multiplicative subgroup of a given order `n`.
@@ -155,4 +155,26 @@ pub(crate) fn coeffs_to_commitments<C: Curve>(
         .map(|coeffs| pedersen_hash(coeffs, msm_precomputation))
         .collect();
     ProjectivePoint::batch_to_affine(&projs)
+}
+
+/// Like `pedersen_commit`, but with no blinding factor.
+pub fn pedersen_hash<C: Curve>(
+    xs: &[C::ScalarField],
+    pedersen_g_msm_precomputation: &MsmPrecomputation<C>,
+) -> ProjectivePoint<C> {
+    msm_execute(pedersen_g_msm_precomputation, xs)
+}
+
+fn pedersen_commit<C: Curve>(
+    xs: &[C::ScalarField],
+    opening: C::ScalarField,
+    h: AffinePoint<C>,
+    pedersen_g_msm_precomputation: &MsmPrecomputation<C>,
+) -> ProjectivePoint<C> {
+    // TODO: Couldn't get this working with *.
+    let h = h.to_projective();
+    let mul_precomputation = h.mul_precompute();
+    let blinding_term = h.mul_with_precomputation(opening, mul_precomputation);
+
+    msm_execute(pedersen_g_msm_precomputation, xs) + blinding_term
 }

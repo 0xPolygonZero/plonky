@@ -3,15 +3,29 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::Instant;
 
 use anyhow::Result;
-use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::SeedableRng;
+use rand_chacha::ChaCha8Rng;
 
-use crate::{AffinePoint, blake_hash_usize_to_curve, Curve, divide_by_z_h, evaluate_all_constraints, fft_precompute, fft_with_precomputation_power_of_2, FftPrecomputation, Field, generate_rescue_constants, HaloCurve, ifft_with_precomputation_power_of_2, msm_execute, msm_parallel, msm_precompute, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof, rescue_hash_n_to_1, rescue_hash_n_to_2, rescue_hash_n_to_3, ConstantGate, CircuitBuilder};
+use crate::partition::{get_subgroup_shift, TargetPartitions};
 use crate::plonk_challenger::Challenger;
-use crate::plonk_gates::{ArithmeticGate, Base4SumGate, BufferGate, CurveAddGate, CurveDblGate, CurveEndoGate, Gate, PublicInputGate, RescueStepAGate, RescueStepBGate};
-use crate::plonk_util::{eval_l_1, eval_zero_poly, halo_n, powers, reduce_with_powers, pad_to_8n};
+use crate::plonk_gates::{
+    ArithmeticGate, Base4SumGate, BufferGate, CurveAddGate, CurveDblGate, CurveEndoGate, Gate,
+    PublicInputGate, RescueStepAGate, RescueStepBGate,
+};
+use crate::plonk_util::{
+    eval_l_1, eval_zero_poly, halo_n, pad_to_8n, pedersen_hash, powers, reduce_with_powers,
+};
+use crate::target::{Target, Wire};
 use crate::util::{ceil_div_usize, log2_strict, transpose};
-use crate::partition::{TargetPartitions, get_subgroup_shift};
+use crate::witness::{PartialWitness, Witness, WitnessGenerator};
+use crate::{
+    blake_hash_usize_to_curve, divide_by_z_h, evaluate_all_constraints, fft_precompute,
+    fft_with_precomputation_power_of_2, generate_rescue_constants,
+    ifft_with_precomputation_power_of_2, msm_execute, msm_parallel, msm_precompute,
+    rescue_hash_n_to_1, rescue_hash_n_to_2, rescue_hash_n_to_3, AffinePoint, CircuitBuilder,
+    ConstantGate, Curve, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, OpeningSet,
+    ProjectivePoint, Proof,
+};
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
@@ -21,104 +35,6 @@ pub(crate) const GRID_WIDTH: usize = 65;
 // This is currently dominated by Base4SumGate. It has degree-4n constraints, and its prefix is 4
 // bits long, so its filtered constraints are degree-8n. Dividing by Z_H makes t degree-7n.
 pub(crate) const QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER: usize = 7;
-
-pub struct PartialWitness<F: Field> {
-    wire_values: HashMap<Target, F>,
-}
-
-impl<F: Field> PartialWitness<F> {
-    pub fn new() -> Self {
-        PartialWitness { wire_values: HashMap::new() }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.wire_values.is_empty()
-    }
-
-    pub fn contains_target(&self, target: Target) -> bool {
-        self.wire_values.contains_key(&target)
-    }
-
-    pub fn contains_wire(&self, wire: Wire) -> bool {
-        self.contains_target(Target::Wire(wire))
-    }
-
-    pub fn contains_all_targets(&self, targets: &[Target]) -> bool {
-        targets.iter().all(|&t| self.contains_target(t))
-    }
-
-    pub fn all_populated_targets(&self) -> Vec<Target> {
-        self.wire_values.keys().cloned().collect()
-    }
-
-    pub fn get_target(&self, target: Target) -> F {
-        self.wire_values[&target]
-    }
-
-    pub fn get_wire(&self, wire: Wire) -> F {
-        self.get_target(Target::Wire(wire))
-    }
-
-    pub fn set_target(&mut self, target: Target, value: F) {
-        let opt_old_value = self.wire_values.insert(target, value);
-        if let Some(old_value) = opt_old_value {
-            debug_assert_eq!(old_value, value,
-                             "Target {:?} was set twice with different values", target);
-        }
-    }
-
-    pub fn set_targets(&mut self, targets: &[Target], values: &[F]) {
-        debug_assert_eq!(targets.len(), values.len());
-        targets.iter().zip(values.iter())
-            .for_each(|(&target, &value)| self.set_target(target, value))
-    }
-
-    pub fn set_point_target<InnerC: Curve<BaseField=F>>(
-        &mut self,
-        point_target: AffinePointTarget,
-        point: AffinePoint<InnerC>,
-    ) {
-        self.set_target(point_target.x, point.x);
-        self.set_target(point_target.y, point.y);
-    }
-
-    pub fn set_point_targets<InnerC: Curve<BaseField=F>>(
-        &mut self,
-        point_targets: &[AffinePointTarget],
-        points: &[AffinePoint<InnerC>],
-    ) {
-        debug_assert_eq!(point_targets.len(), points.len());
-        point_targets.iter().zip(points.iter())
-            .for_each(|(&point_target, &point)| self.set_point_target(point_target, point))
-    }
-
-    pub fn set_wire(&mut self, wire: Wire, value: F) {
-        self.set_target(Target::Wire(wire), value);
-    }
-
-    pub fn extend(&mut self, other: PartialWitness<F>) {
-        for (target, value) in other.wire_values {
-            self.set_target(target, value);
-        }
-    }
-}
-
-pub struct Witness<F: Field> {
-    wire_values: Vec<Vec<F>>,
-}
-
-impl<F: Field> Witness<F> {
-    pub fn get(&self, wire: Wire) -> F {
-        self.wire_values[wire.gate][wire.input]
-    }
-}
-
-pub trait WitnessGenerator<F: Field>: 'static {
-    fn dependencies(&self) -> Vec<Target>;
-
-    /// Given a partial witness, return any newly generated values. The caller will merge them in.
-    fn generate(&self, constants: &Vec<Vec<F>>, witness: &PartialWitness<F>) -> PartialWitness<F>;
-}
 
 /// Contains all data needed to generate and/or verify proofs.
 pub struct Circuit<C: HaloCurve> {
@@ -180,19 +96,23 @@ impl<C: HaloCurve> Circuit<C> {
         let mut challenger = Challenger::new(self.security_bits);
 
         // Convert the witness both to coefficient form and a degree-8n LDE.
-        let wire_values_by_wire_index = transpose(&witness.wire_values);
-        let wires_coeffs: Vec<Vec<C::ScalarField>> = wire_values_by_wire_index.iter()
+        let wire_values_by_wire_index = &witness.transpose();
+        let wires_coeffs: Vec<Vec<C::ScalarField>> = wire_values_by_wire_index
+            .iter()
             .map(|values| ifft_with_precomputation_power_of_2(values, &self.fft_precomputation_n))
             .collect();
-        let wires_coeffs_8n: Vec<_> = wires_coeffs.iter()
+        let wires_coeffs_8n: Vec<_> = wires_coeffs
+            .iter()
             .map(|coeffs| pad_to_8n(coeffs))
             .collect();
-        let wire_values_8n: Vec<_> = wires_coeffs_8n.iter()
+        let wire_values_8n: Vec<_> = wires_coeffs_8n
+            .iter()
             .map(|coeffs| fft_with_precomputation_power_of_2(coeffs, &self.fft_precomputation_8n))
             .collect();
 
         // Commit to the wire polynomials.
-        let c_wires: Vec<ProjectivePoint<C>> = wires_coeffs.iter()
+        let c_wires: Vec<ProjectivePoint<C>> = wires_coeffs
+            .iter()
             .map(|coeffs| pedersen_hash(coeffs, &self.pedersen_g_msm_precomputation))
             .collect();
         let c_wires = ProjectivePoint::batch_to_affine(&c_wires);
@@ -210,7 +130,7 @@ impl<C: HaloCurve> Circuit<C> {
             let mut numerator = C::ScalarField::ONE;
             let mut denominator = C::ScalarField::ONE;
             for j in 0..NUM_ROUTED_WIRES {
-                let wire_value = witness.wire_values[i - 1][j];
+                let wire_value = witness.get_indices(i - 1, j);
                 let k_i = get_subgroup_shift::<C::ScalarField>(j);
                 let s_id = k_i * x;
                 let s_sigma = self.s_sigma_values_8n[j][8 * i];
@@ -222,8 +142,10 @@ impl<C: HaloCurve> Circuit<C> {
         }
 
         // Commit to Z.
-        let plonk_z_coeffs = ifft_with_precomputation_power_of_2(&plonk_z_points_n, &self.fft_precomputation_n);
-        let c_plonk_z = pedersen_hash::<C>(&plonk_z_coeffs, &self.pedersen_g_msm_precomputation).to_affine();
+        let plonk_z_coeffs =
+            ifft_with_precomputation_power_of_2(&plonk_z_points_n, &self.fft_precomputation_n);
+        let c_plonk_z =
+            pedersen_hash::<C>(&plonk_z_coeffs, &self.pedersen_g_msm_precomputation).to_affine();
 
         // Generate a random alpha from the transcript.
         challenger.observe_affine_point(c_plonk_z);
@@ -232,17 +154,25 @@ impl<C: HaloCurve> Circuit<C> {
 
         // Generate the vanishing polynomial.
         let vanishing_coeffs = self.vanishing_poly_coeffs::<InnerC>(
-            &wire_values_8n, alpha_sf, beta_sf, gamma_sf, &plonk_z_coeffs);
+            &wire_values_8n,
+            alpha_sf,
+            beta_sf,
+            gamma_sf,
+            &plonk_z_coeffs,
+        );
 
         // Compute the quotient polynomial, t(x) = vanishing(x) / Z_H(x).
         let plonk_t_coeffs: Vec<C::ScalarField> = divide_by_z_h(&vanishing_coeffs, self.degree());
 
         // Split t into degree-n chunks.
-        let mut plonk_t_coeff_chunks: Vec<Vec<C::ScalarField>> = plonk_t_coeffs.chunks(self.degree())
-            .map(|chunk| chunk.to_vec()).collect();
+        let mut plonk_t_coeff_chunks: Vec<Vec<C::ScalarField>> = plonk_t_coeffs
+            .chunks(self.degree())
+            .map(|chunk| chunk.to_vec())
+            .collect();
 
         // Commit to the quotient polynomial.
-        let c_plonk_t: Vec<ProjectivePoint<C>> = plonk_t_coeff_chunks.iter()
+        let c_plonk_t: Vec<ProjectivePoint<C>> = plonk_t_coeff_chunks
+            .iter()
             .map(|coeffs| pedersen_hash::<C>(coeffs, &self.pedersen_g_msm_precomputation))
             .collect();
         let c_plonk_t = ProjectivePoint::batch_to_affine(&c_plonk_t);
@@ -250,37 +180,61 @@ impl<C: HaloCurve> Circuit<C> {
         // Generate a random zeta from the transcript.
         challenger.observe_affine_points(&c_plonk_t);
         let zeta_bf = challenger.get_challenge();
-        let zeta_sf = C::try_convert_b2s(zeta_bf).expect("should fit in both fields with high probability");
+        let zeta_sf =
+            C::try_convert_b2s(zeta_bf).expect("should fit in both fields with high probability");
 
         // Open all polynomials at each PublicInputGate index.
         let num_public_input_gates = ceil_div_usize(self.num_public_inputs, NUM_WIRES);
         let o_public_inputs: Vec<OpeningSet<C::ScalarField>> = (0..num_public_input_gates)
             // We place PublicInputGates at indices 0, 2, 4, ...
             .map(|i| i * 2)
-            .map(|i| self.open_all_polynomials(
-                &wires_coeffs, &plonk_z_coeffs, &plonk_t_coeff_chunks,
-                C::ScalarField::from_canonical_usize(i)))
+            .map(|i| {
+                self.open_all_polynomials(
+                    &wires_coeffs,
+                    &plonk_z_coeffs,
+                    &plonk_t_coeff_chunks,
+                    C::ScalarField::from_canonical_usize(i),
+                )
+            })
             .collect();
 
         // Open all polynomials at zeta, zeta * g, and zeta * g^65.
-        let o_local = self.open_all_polynomials(&wires_coeffs, &plonk_z_coeffs, &plonk_t_coeff_chunks,
-                                                zeta_sf);
-        let o_right = self.open_all_polynomials(&wires_coeffs, &plonk_z_coeffs, &plonk_t_coeff_chunks,
-                                                zeta_sf * self.subgroup_generator_n);
-        let o_below = self.open_all_polynomials(&wires_coeffs, &plonk_z_coeffs, &plonk_t_coeff_chunks,
-                                                zeta_sf * self.subgroup_generator_n.exp_usize(GRID_WIDTH));
+        let o_local = self.open_all_polynomials(
+            &wires_coeffs,
+            &plonk_z_coeffs,
+            &plonk_t_coeff_chunks,
+            zeta_sf,
+        );
+        let o_right = self.open_all_polynomials(
+            &wires_coeffs,
+            &plonk_z_coeffs,
+            &plonk_t_coeff_chunks,
+            zeta_sf * self.subgroup_generator_n,
+        );
+        let o_below = self.open_all_polynomials(
+            &wires_coeffs,
+            &plonk_z_coeffs,
+            &plonk_t_coeff_chunks,
+            zeta_sf * self.subgroup_generator_n.exp_usize(GRID_WIDTH),
+        );
 
         // Get a list of all opened values, to append to the transcript.
         let all_opening_sets: Vec<OpeningSet<C::ScalarField>> = [
             o_public_inputs.clone(),
             vec![o_local.clone(), o_right.clone(), o_below.clone()],
-        ].concat();
-        let all_opened_values_sf: Vec<C::ScalarField> = all_opening_sets.iter()
-            .map(|os| os.to_vec()).collect::<Vec<_>>()
+        ]
+        .concat();
+        let all_opened_values_sf: Vec<C::ScalarField> = all_opening_sets
+            .iter()
+            .map(|os| os.to_vec())
+            .collect::<Vec<_>>()
             .concat();
-        let all_opened_values_bf: Vec<_> = all_opened_values_sf.into_iter()
-            .map(|f| C::try_convert_s2b(f)
-                .expect("For now, we assume that all opened values fit in both fields"))
+        let all_opened_values_bf: Vec<_> = all_opened_values_sf
+            .into_iter()
+            .map(|f| {
+                C::try_convert_s2b(f)
+                    .expect("For now, we assume that all opened values fit in both fields")
+            })
             .collect();
 
         // Generate random v, u, and x from the transcript.
@@ -297,27 +251,34 @@ impl<C: HaloCurve> Circuit<C> {
             c_wires.clone(),
             vec![c_plonk_z],
             c_plonk_t.clone(),
-        ].concat();
+        ]
+        .concat();
         let all_coeffs = [
             self.constants_coeffs.clone(),
             self.s_sigma_coeffs.clone(),
             wires_coeffs,
             vec![plonk_z_coeffs],
             plonk_t_coeff_chunks,
-        ].concat();
+        ]
+        .concat();
 
         // Normally we would reduce these lists using powers of u, but for the sake of efficiency
         // (particularly in the recursive verifier) we instead use n(u^i) for each u^i, where n is
         // the injective function related to the Halo endomorphism. Here we compute n(u^i).
-        let actual_scalars: Vec<C::ScalarField> = powers(u_sf, all_commits.len()).iter()
+        let actual_scalars: Vec<C::ScalarField> = powers(u_sf, all_commits.len())
+            .iter()
             .map(|u_power| halo_n::<C>(&u_power.to_canonical_bool_vec()[..self.security_bits]))
             .collect();
 
         // Reduce the commitment list to a single commitment.
         let reduced_commit = msm_parallel(
             &actual_scalars,
-            &all_commits.iter().map(AffinePoint::to_projective).collect::<Vec<_>>(),
-            2);
+            &all_commits
+                .iter()
+                .map(AffinePoint::to_projective)
+                .collect::<Vec<_>>(),
+            2,
+        );
 
         // Reduce the coefficient list to a single set of polynomial coefficients.
         let mut reduced_coeffs = vec![C::ScalarField::ZERO; self.degree()];
@@ -328,8 +289,11 @@ impl<C: HaloCurve> Circuit<C> {
         }
 
         // Reduce each opening set to a single point.
-        let opening_set_reductions: Vec<C::ScalarField> = all_opening_sets.iter()
-            .map(|opening_set| C::ScalarField::inner_product(&actual_scalars, &opening_set.to_vec()))
+        let opening_set_reductions: Vec<C::ScalarField> = all_opening_sets
+            .iter()
+            .map(|opening_set| {
+                C::ScalarField::inner_product(&actual_scalars, &opening_set.to_vec())
+            })
             .collect();
 
         // Then, we reduce the above opening set reductions to a single value.
@@ -374,19 +338,24 @@ impl<C: HaloCurve> Circuit<C> {
 
             challenger.observe_proj_points(&[halo_l_j, halo_r_j]);
             let l_challenge_bf = challenger.get_challenge();
-            let r_challenge_bf = l_challenge_bf.multiplicative_inverse().expect("This is improbable!");
+            let r_challenge_bf = l_challenge_bf
+                .multiplicative_inverse()
+                .expect("This is improbable!");
             let l_challenge_sf = l_challenge_bf.try_convert::<C::ScalarField>()?;
             let r_challenge_sf = r_challenge_bf.try_convert::<C::ScalarField>()?;
 
             halo_a = C::ScalarField::add_slices(
                 &l_challenge_sf.scale_slice(a_lo),
-                &r_challenge_sf.scale_slice(a_hi));
+                &r_challenge_sf.scale_slice(a_hi),
+            );
             halo_b = C::ScalarField::add_slices(
                 &l_challenge_sf.scale_slice(b_lo),
-                &r_challenge_sf.scale_slice(b_hi));
+                &r_challenge_sf.scale_slice(b_hi),
+            );
             halo_g = ProjectivePoint::<C>::add_slices(
                 &l_challenge_sf.scale_proj_point_slice(g_lo),
-                &r_challenge_sf.scale_proj_point_slice(g_hi));
+                &r_challenge_sf.scale_proj_point_slice(g_hi),
+            );
         }
 
         debug_assert_eq!(halo_g.len(), 1);
@@ -406,7 +375,7 @@ impl<C: HaloCurve> Circuit<C> {
         })
     }
 
-    fn vanishing_poly_coeffs<InnerC: HaloCurve<BaseField=C::ScalarField>>(
+    fn vanishing_poly_coeffs<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &self,
         wire_values_8n: &[Vec<C::ScalarField>],
         alpha_sf: C::ScalarField,
@@ -417,7 +386,8 @@ impl<C: HaloCurve> Circuit<C> {
         // Low degree extend Z.
         let plonk_z_points_8n = fft_with_precomputation_power_of_2(
             &pad_to_8n(&plonk_z_coeffs),
-            &self.fft_precomputation_8n);
+            &self.fft_precomputation_8n,
+        );
 
         // We will evaluate the vanishing polynomial at 8n points, then interpolate.
         let mut vanishing_points: Vec<C::ScalarField> = Vec::new();
@@ -443,7 +413,11 @@ impl<C: HaloCurve> Circuit<C> {
             }
 
             let constraint_terms = evaluate_all_constraints::<C, InnerC>(
-                &local_constant_values, &local_wire_values, &right_wire_values, &below_wire_values);
+                &local_constant_values,
+                &local_wire_values,
+                &right_wire_values,
+                &below_wire_values,
+            );
 
             // Evaluate the L_1(x) (Z(x) - 1) vanishing term.
             let z_x = plonk_z_points_8n[i];
@@ -466,8 +440,9 @@ impl<C: HaloCurve> Circuit<C> {
             let vanishing_terms = [
                 vec![vanishing_z_1_term],
                 vec![vanishing_v_shift_term],
-                constraint_terms
-            ].concat();
+                constraint_terms,
+            ]
+            .concat();
 
             vanishing_points.push(reduce_with_powers(&vanishing_terms, alpha_sf));
         }
@@ -489,22 +464,42 @@ impl<C: HaloCurve> Circuit<C> {
         }
 
         OpeningSet {
-            o_constants: self.constants_coeffs.iter().map(|c| C::ScalarField::inner_product(c, &powers_of_zeta)).collect(),
-            o_plonk_sigmas: self.s_sigma_coeffs.iter().map(|c| C::ScalarField::inner_product(c, &powers_of_zeta)).collect(),
-            o_wires: wire_coeffs.iter().map(|c| C::ScalarField::inner_product(c, &powers_of_zeta)).collect(),
+            o_constants: self
+                .constants_coeffs
+                .iter()
+                .map(|c| C::ScalarField::inner_product(c, &powers_of_zeta))
+                .collect(),
+            o_plonk_sigmas: self
+                .s_sigma_coeffs
+                .iter()
+                .map(|c| C::ScalarField::inner_product(c, &powers_of_zeta))
+                .collect(),
+            o_wires: wire_coeffs
+                .iter()
+                .map(|c| C::ScalarField::inner_product(c, &powers_of_zeta))
+                .collect(),
             o_plonk_z: C::ScalarField::inner_product(&plonk_z_coeffs, &powers_of_zeta),
-            o_plonk_t: plonk_t_coeffs.iter().map(|c| C::ScalarField::inner_product(c, &powers_of_zeta)).collect(),
+            o_plonk_t: plonk_t_coeffs
+                .iter()
+                .map(|c| C::ScalarField::inner_product(c, &powers_of_zeta))
+                .collect(),
         }
     }
 
-    pub fn generate_witness(&self, inputs: PartialWitness<C::ScalarField>) -> Witness<C::ScalarField> {
+    pub fn generate_witness(
+        &self,
+        inputs: PartialWitness<C::ScalarField>,
+    ) -> Witness<C::ScalarField> {
         let start = Instant::now();
 
         // Index generator indices by their dependencies.
         let mut generator_indices_by_deps: HashMap<Target, Vec<usize>> = HashMap::new();
         for (i, generator) in self.generators.iter().enumerate() {
             for dep in generator.dependencies() {
-                generator_indices_by_deps.entry(dep).or_insert_with(|| Vec::new()).push(i);
+                generator_indices_by_deps
+                    .entry(dep)
+                    .or_insert_with(|| Vec::new())
+                    .push(i);
             }
         }
 
@@ -533,7 +528,8 @@ impl<C: HaloCurve> Circuit<C> {
             let mut populated_targets: Vec<Target> = Vec::new();
 
             for &generator_idx in &pending_generator_indices {
-                let generator: &dyn WitnessGenerator<C::ScalarField> = self.generators[generator_idx].borrow();
+                let generator: &dyn WitnessGenerator<C::ScalarField> =
+                    self.generators[generator_idx].borrow();
                 let result = generator.generate(&self.gate_constants, &witness);
                 populated_targets.extend(result.all_populated_targets());
                 witness.extend(result);
@@ -548,24 +544,32 @@ impl<C: HaloCurve> Circuit<C> {
             pending_generator_indices.clear();
             for target in populated_targets {
                 let no_indices = Vec::new();
-                let affected_generator_indices = generator_indices_by_deps.get(&target).unwrap_or(&no_indices);
+                let affected_generator_indices = generator_indices_by_deps
+                    .get(&target)
+                    .unwrap_or(&no_indices);
 
                 for &generator_idx in affected_generator_indices {
                     // If this generator is not already pending or completed, and its dependencies
                     // are all satisfied, then add it as a pending generator.
-                    let generator: &dyn WitnessGenerator<C::ScalarField> = self.generators[generator_idx].borrow();
+                    let generator: &dyn WitnessGenerator<C::ScalarField> =
+                        self.generators[generator_idx].borrow();
                     if !pending_generator_indices.contains(&generator_idx)
                         && !completed_generator_indices.contains(&generator_idx)
-                        && witness.contains_all_targets(&generator.dependencies()) {
+                        && witness.contains_all_targets(&generator.dependencies())
+                    {
                         pending_generator_indices.insert(generator_idx);
                     }
                 }
             }
         }
 
-        debug_assert_eq!(completed_generator_indices.len(), self.generators.len(),
-                         "Only {} of {} generators could be run",
-                         completed_generator_indices.len(), self.generators.len());
+        debug_assert_eq!(
+            completed_generator_indices.len(),
+            self.generators.len(),
+            "Only {} of {} generators could be run",
+            completed_generator_indices.len(),
+            self.generators.len()
+        );
 
         let mut wire_values: Vec<Vec<C::ScalarField>> = Vec::new();
         for i in 0..self.degree() {
@@ -584,12 +588,16 @@ impl<C: HaloCurve> Circuit<C> {
         }
 
         println!("Witness generation took {}s", start.elapsed().as_secs_f32());
-        Witness { wire_values }
+        Witness::new(wire_values)
     }
 
     /// For the given set of targets, find any copy constraints involving those targets and populate
     /// the witness with copies as needed.
-    fn generate_copies(&self, witness: &PartialWitness<C::ScalarField>, targets: &[Target]) -> PartialWitness<C::ScalarField> {
+    fn generate_copies(
+        &self,
+        witness: &PartialWitness<C::ScalarField>,
+        targets: &[Target],
+    ) -> PartialWitness<C::ScalarField> {
         let mut result = PartialWitness::new();
 
         for &target in targets {
@@ -608,106 +616,6 @@ impl<C: HaloCurve> Circuit<C> {
 
         result
     }
-}
-
-/// Like `pedersen_commit`, but with no blinding factor.
-pub fn pedersen_hash<C: Curve>(
-    xs: &[C::ScalarField],
-    pedersen_g_msm_precomputation: &MsmPrecomputation<C>,
-) -> ProjectivePoint<C> {
-    msm_execute(pedersen_g_msm_precomputation, xs)
-}
-
-fn pedersen_commit<C: Curve>(
-    xs: &[C::ScalarField],
-    opening: C::ScalarField,
-    h: AffinePoint<C>,
-    pedersen_g_msm_precomputation: &MsmPrecomputation<C>,
-) -> ProjectivePoint<C> {
-    // TODO: Couldn't get this working with *.
-    let h = h.to_projective();
-    let mul_precomputation = h.mul_precompute();
-    let blinding_term = h.mul_with_precomputation(opening, mul_precomputation);
-
-    msm_execute(pedersen_g_msm_precomputation, xs) + blinding_term
-}
-
-/// A sort of proxy wire, in the context of routing and witness generation. It is not an actual
-/// witness element (i.e. wire) itself, but it can be copy-constrained to wires, listed as a
-/// dependency in generators, etc.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
-pub struct VirtualTarget {
-    pub index: usize,
-}
-
-/// Represents a wire in the circuit.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
-pub struct Wire {
-    /// The index of the associated gate.
-    pub gate: usize,
-    /// The index of the gate input wherein this wire is inserted.
-    pub input: usize,
-}
-
-/// A routing target.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
-pub enum Target {
-    VirtualTarget(VirtualTarget),
-    Wire(Wire),
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub struct PublicInput {
-    pub index: usize,
-}
-
-/// See `PublicInputGate` for an explanation of how we make public inputs routable.
-impl PublicInput {
-    fn original_wire(&self) -> Wire {
-        let gate = self.index / NUM_WIRES * 2;
-        let input = self.index % NUM_WIRES;
-        Wire { gate, input }
-    }
-
-    pub fn routable_target(&self) -> Target {
-        let Wire { mut gate, mut input } = self.original_wire();
-        if input > NUM_ROUTED_WIRES {
-            gate += 1;
-            input -= NUM_ROUTED_WIRES;
-        }
-        Target::Wire(Wire { gate, input })
-    }
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub struct AffinePointTarget {
-    pub x: Target,
-    pub y: Target,
-}
-
-impl AffinePointTarget {
-    pub fn to_vec(&self) -> Vec<Target> {
-        vec![self.x, self.y]
-    }
-}
-
-/// Represents a scalar * point multiplication operation.
-pub struct CurveMulOp {
-    pub scalar: Target,
-    pub point: AffinePointTarget,
-}
-
-pub struct CurveMulEndoResult {
-    pub mul_result: AffinePointTarget,
-    pub actual_scalar: Target,
-}
-
-pub struct CurveMsmEndoResult {
-    pub msm_result: AffinePointTarget,
-    /// While `msm` computes a sum of `[s] P` terms, `msm_endo` computes a sum of `[n(s)] P` terms
-    /// for some injective `n`. Here we return each `n(s)`, i.e., the scalar by which the point was
-    /// actually multiplied.
-    pub actual_scalars: Vec<Target>,
 }
 
 #[cfg(test)]
