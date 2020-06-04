@@ -13,7 +13,8 @@ use crate::plonk_gates::{
     PublicInputGate, RescueStepAGate, RescueStepBGate,
 };
 use crate::plonk_util::{
-    eval_l_1, eval_zero_poly, halo_n, pad_to_8n, pedersen_hash, powers, reduce_with_powers,
+    coeffs_to_commitments, coeffs_to_values_padded, eval_coeffs, eval_l_1, eval_zero_poly, halo_n,
+    pad_to_8n, pedersen_hash, permutation_polynomial, powers, reduce_with_powers, values_to_coeffs,
 };
 use crate::target::{Target, Wire};
 use crate::util::{ceil_div_usize, log2_strict, transpose};
@@ -97,25 +98,11 @@ impl<C: HaloCurve> Circuit<C> {
 
         // Convert the witness both to coefficient form and a degree-8n LDE.
         let wire_values_by_wire_index = &witness.transpose();
-        let wires_coeffs: Vec<Vec<C::ScalarField>> = wire_values_by_wire_index
-            .iter()
-            .map(|values| ifft_with_precomputation_power_of_2(values, &self.fft_precomputation_n))
-            .collect();
-        let wires_coeffs_8n: Vec<_> = wires_coeffs
-            .iter()
-            .map(|coeffs| pad_to_8n(coeffs))
-            .collect();
-        let wire_values_8n: Vec<_> = wires_coeffs_8n
-            .iter()
-            .map(|coeffs| fft_with_precomputation_power_of_2(coeffs, &self.fft_precomputation_8n))
-            .collect();
+        let wires_coeffs = values_to_coeffs(&wire_values_by_wire_index, &self.fft_precomputation_n);
+        let wire_values_8n = coeffs_to_values_padded(&wires_coeffs, &self.fft_precomputation_8n);
 
         // Commit to the wire polynomials.
-        let c_wires: Vec<ProjectivePoint<C>> = wires_coeffs
-            .iter()
-            .map(|coeffs| pedersen_hash(coeffs, &self.pedersen_g_msm_precomputation))
-            .collect();
-        let c_wires = ProjectivePoint::batch_to_affine(&c_wires);
+        let c_wires = coeffs_to_commitments(&wires_coeffs, &self.pedersen_g_msm_precomputation);
 
         // Generate a random beta and gamma from the transcript.
         challenger.observe_affine_points(&c_wires);
@@ -123,24 +110,14 @@ impl<C: HaloCurve> Circuit<C> {
         let beta_sf = beta_bf.try_convert::<C::ScalarField>()?;
         let gamma_sf = gamma_bf.try_convert::<C::ScalarField>()?;
 
-        // Generate Z, which is used in Plonk's permutation argument.
-        let mut plonk_z_points_n = vec![C::ScalarField::ONE];
-        for i in 1..self.degree() {
-            let x = self.subgroup_n[i];
-            let mut numerator = C::ScalarField::ONE;
-            let mut denominator = C::ScalarField::ONE;
-            for j in 0..NUM_ROUTED_WIRES {
-                let wire_value = witness.get_indices(i - 1, j);
-                let k_i = get_subgroup_shift::<C::ScalarField>(j);
-                let s_id = k_i * x;
-                let s_sigma = self.s_sigma_values_8n[j][8 * i];
-                numerator = numerator * (wire_value + beta_sf * s_id + gamma_sf);
-                denominator = denominator * (wire_value + beta_sf * s_sigma + gamma_sf);
-            }
-            let last = *plonk_z_points_n.last().unwrap();
-            plonk_z_points_n.push(last * numerator / denominator);
-        }
-
+        let plonk_z_points_n = permutation_polynomial(
+            self.degree(),
+            &self.subgroup_8n,
+            &witness,
+            &self.s_sigma_values_8n,
+            beta_sf,
+            gamma_sf,
+        );
         // Commit to Z.
         let plonk_z_coeffs =
             ifft_with_precomputation_power_of_2(&plonk_z_points_n, &self.fft_precomputation_n);
@@ -165,17 +142,14 @@ impl<C: HaloCurve> Circuit<C> {
         let plonk_t_coeffs: Vec<C::ScalarField> = divide_by_z_h(&vanishing_coeffs, self.degree());
 
         // Split t into degree-n chunks.
-        let mut plonk_t_coeff_chunks: Vec<Vec<C::ScalarField>> = plonk_t_coeffs
+        let plonk_t_coeff_chunks: Vec<Vec<C::ScalarField>> = plonk_t_coeffs
             .chunks(self.degree())
             .map(|chunk| chunk.to_vec())
             .collect();
 
         // Commit to the quotient polynomial.
-        let c_plonk_t: Vec<ProjectivePoint<C>> = plonk_t_coeff_chunks
-            .iter()
-            .map(|coeffs| pedersen_hash::<C>(coeffs, &self.pedersen_g_msm_precomputation))
-            .collect();
-        let c_plonk_t = ProjectivePoint::batch_to_affine(&c_plonk_t);
+        let c_plonk_t =
+            coeffs_to_commitments(&plonk_t_coeff_chunks, &self.pedersen_g_msm_precomputation);
 
         // Generate a random zeta from the transcript.
         challenger.observe_affine_points(&c_plonk_t);
@@ -458,31 +432,14 @@ impl<C: HaloCurve> Circuit<C> {
         plonk_t_coeffs: &Vec<Vec<C::ScalarField>>,
         zeta: C::ScalarField,
     ) -> OpeningSet<C::ScalarField> {
-        let mut powers_of_zeta = vec![C::ScalarField::ONE];
-        for _i in 1..self.degree() {
-            powers_of_zeta.push(*powers_of_zeta.last().unwrap() * zeta);
-        }
+        let powers_of_zeta = powers(zeta, self.degree());
 
         OpeningSet {
-            o_constants: self
-                .constants_coeffs
-                .iter()
-                .map(|c| C::ScalarField::inner_product(c, &powers_of_zeta))
-                .collect(),
-            o_plonk_sigmas: self
-                .s_sigma_coeffs
-                .iter()
-                .map(|c| C::ScalarField::inner_product(c, &powers_of_zeta))
-                .collect(),
-            o_wires: wire_coeffs
-                .iter()
-                .map(|c| C::ScalarField::inner_product(c, &powers_of_zeta))
-                .collect(),
+            o_constants: eval_coeffs(&self.constants_coeffs, &powers_of_zeta),
+            o_plonk_sigmas: eval_coeffs(&self.s_sigma_coeffs, &powers_of_zeta),
+            o_wires: eval_coeffs(&wire_coeffs, &powers_of_zeta),
             o_plonk_z: C::ScalarField::inner_product(&plonk_z_coeffs, &powers_of_zeta),
-            o_plonk_t: plonk_t_coeffs
-                .iter()
-                .map(|c| C::ScalarField::inner_product(c, &powers_of_zeta))
-                .collect(),
+            o_plonk_t: eval_coeffs(&plonk_t_coeffs, &powers_of_zeta),
         }
     }
 
@@ -571,24 +528,8 @@ impl<C: HaloCurve> Circuit<C> {
             self.generators.len()
         );
 
-        let mut wire_values: Vec<Vec<C::ScalarField>> = Vec::new();
-        for i in 0..self.degree() {
-            let mut gate_i_wires = Vec::new();
-            for j in 0..NUM_WIRES {
-                let wire = Wire { gate: i, input: j };
-                let value = if witness.contains_wire(wire) {
-                    witness.get_wire(wire)
-                } else {
-                    // In our circuit model, a lot of wires are unused. We just set them to zero.
-                    C::ScalarField::ZERO
-                };
-                gate_i_wires.push(value);
-            }
-            wire_values.push(gate_i_wires);
-        }
-
         println!("Witness generation took {}s", start.elapsed().as_secs_f32());
-        Witness::new(wire_values)
+        Witness::from_partial(&witness, self.degree())
     }
 
     /// For the given set of targets, find any copy constraints involving those targets and populate
@@ -613,7 +554,6 @@ impl<C: HaloCurve> Circuit<C> {
                 }
             }
         }
-
         result
     }
 }

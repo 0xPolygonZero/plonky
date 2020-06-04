@@ -1,5 +1,5 @@
 use crate::util::transpose;
-use crate::{AffinePoint, AffinePointTarget, Curve, Field, Target, Wire};
+use crate::{AffinePoint, AffinePointTarget, Curve, Field, Target, Wire, NUM_WIRES};
 use std::collections::HashMap;
 
 pub struct PartialWitness<F: Field> {
@@ -111,6 +111,27 @@ impl<F: Field> Witness<F> {
 
     pub fn transpose(&self) -> Vec<Vec<F>> {
         transpose(&self.wire_values)
+    }
+
+    /// Converts a `PartialWitness` to a a `Witness`.
+    /// The partial witness should be sufficiently preprocessed, e.g., it should contain copy constraints.
+    pub fn from_partial(pw: &PartialWitness<F>, degree: usize) -> Self {
+        let mut wire_values: Vec<Vec<F>> = Vec::new();
+        for i in 0..degree {
+            let mut gate_i_wires = Vec::new();
+            for j in 0..NUM_WIRES {
+                let wire = Wire { gate: i, input: j };
+                let value = if pw.contains_wire(wire) {
+                    pw.get_wire(wire)
+                } else {
+                    // In our circuit model, a lot of wires are unused. We just set them to zero.
+                    F::ZERO
+                };
+                gate_i_wires.push(value);
+            }
+            wire_values.push(gate_i_wires);
+        }
+        Witness::new(wire_values)
     }
 }
 

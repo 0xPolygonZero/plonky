@@ -1,7 +1,9 @@
+use crate::partition::get_subgroup_shift;
+use crate::witness::Witness;
 use crate::{
-    fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2,
+    fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_execute,
     AffinePoint, CircuitBuilder, Curve, FftPrecomputation, Field, HaloCurve, MsmPrecomputation,
-    ProjectivePoint, Target, msm_execute
+    ProjectivePoint, Target, NUM_ROUTED_WIRES,
 };
 
 /// Evaluate the polynomial which vanishes on any multiplicative subgroup of a given order `n`.
@@ -104,6 +106,14 @@ pub(crate) fn powers_recursive<C: HaloCurve>(
     powers
 }
 
+/// Returns the evaluation of a list of polynomials at a point.
+pub(crate) fn eval_coeffs<F: Field>(coeffs: &[Vec<F>], powers: &[F]) -> Vec<F> {
+    coeffs
+        .iter()
+        .map(|c| F::inner_product(c, &powers))
+        .collect()
+}
+
 /// Zero-pad a list of `n` polynomial coefficients to a length of `8n`, which is the degree at
 /// which we do most polynomial arithmetic.
 pub(crate) fn pad_to_8n<F: Field>(coeffs: &[F]) -> Vec<F> {
@@ -177,4 +187,32 @@ fn pedersen_commit<C: Curve>(
     let blinding_term = h.mul_with_precomputation(opening, mul_precomputation);
 
     msm_execute(pedersen_g_msm_precomputation, xs) + blinding_term
+}
+
+// Generate Z, which is used in Plonk's permutation argument.
+pub fn permutation_polynomial<F: Field>(
+    degree: usize,
+    subgroup: &[F],
+    witness: &Witness<F>,
+    sigma_values: &[Vec<F>],
+    beta: F,
+    gamma: F,
+) -> Vec<F> {
+    let mut plonk_z_points = vec![F::ONE];
+    for i in 1..degree {
+        let x = subgroup[i];
+        let mut numerator = F::ONE;
+        let mut denominator = F::ONE;
+        for j in 0..NUM_ROUTED_WIRES {
+            let wire_value = witness.get_indices(i - 1, j);
+            let k_i = get_subgroup_shift::<F>(j);
+            let s_id = k_i * x;
+            let s_sigma = sigma_values[j][8 * i];
+            numerator = numerator * (wire_value + beta * s_id + gamma);
+            denominator = denominator * (wire_value + beta * s_sigma + gamma);
+        }
+        let last = *plonk_z_points.last().unwrap();
+        plonk_z_points.push(last * numerator / denominator);
+    }
+    plonk_z_points
 }
