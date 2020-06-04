@@ -224,7 +224,7 @@ fn verify_ipa<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>(
         q_muls.push(CurveMulOp { scalar: r_challenge, point: r_i });
     }
     let q_msm_result = builder.curve_msm_endo::<InnerC>(&q_muls);
-    let q = builder.curve_add::<InnerC>(p_prime, q_msm_result.msm_result);
+    let _q = builder.curve_add::<InnerC>(p_prime, q_msm_result.msm_result);
 
     // TODO: Perform ZK opening protocol.
 
@@ -255,7 +255,7 @@ fn make_opening_set<C: HaloCurve>(builder: &mut CircuitBuilder<C>) -> OpeningSet
 }
 
 fn make_opening_sets<C: HaloCurve>(builder: &mut CircuitBuilder<C>, n: usize) -> Vec<OpeningSetTarget> {
-    (0..n).map(|i| make_opening_set(builder)).collect()
+    (0..n).map(|_i| make_opening_set(builder)).collect()
 }
 
 /// In our recursion scheme, to avoid non-native field arithmetic, each proof in a recursive chain

@@ -1,4 +1,4 @@
-use crate::{rescue_sponge, util::ceil_div_usize, AffinePoint, Curve, Field};
+use crate::{rescue_sponge, AffinePoint, Curve, Field};
 use blake3;
 
 pub fn hash_u32_to_curve<C: Curve>(seed: u32, security_bits: usize) -> AffinePoint<C> {
@@ -78,7 +78,7 @@ pub fn blake_hash_base_field_to_curve<C: Curve>(seed: C::BaseField) -> AffinePoi
 
 // TODO: This is rather slow! Should use ChaCha20 or something instead of Rescue.
 pub fn hash_base_field_to_curve<C: Curve>(
-    mut seed: C::BaseField,
+    seed: C::BaseField,
     security_bits: usize,
 ) -> AffinePoint<C> {
     // Based on the MapToGroup method of BLS.

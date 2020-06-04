@@ -121,7 +121,7 @@ pub fn msm_execute_parallel<C: Curve>(
 
     // For each digit, we add up the powers associated with all occurrences that digit.
     let digits: Vec<usize> = (0..base).collect();
-    let start = Instant::now();
+    let _start = Instant::now();
     let digit_acc: Vec<ProjectivePoint<C>> = digits.par_chunks(DIGITS_PER_CHUNK)
         .flat_map(|chunk| {
             let summations: Vec<Vec<AffinePoint<C>>> = chunk.iter()
@@ -134,7 +134,7 @@ pub fn msm_execute_parallel<C: Curve>(
         .collect();
     // println!("Computing the per-digit summations (in parallel) took {}s", start.elapsed().as_secs_f64());
 
-    let start = Instant::now();
+    let _start = Instant::now();
     let mut y = ProjectivePoint::ZERO;
     let mut u = ProjectivePoint::ZERO;
     for digit in (1..base).rev() {

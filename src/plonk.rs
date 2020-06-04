@@ -1,26 +1,20 @@
 use std::borrow::Borrow;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use anyhow::Result;
-use rand_chacha::rand_core::SeedableRng;
-use rand_chacha::ChaCha8Rng;
 
 use crate::partition::{get_subgroup_shift, TargetPartitions};
 use crate::plonk_challenger::Challenger;
-use crate::plonk_gates::{
-    ArithmeticGate, Base4SumGate, BufferGate, CurveAddGate, CurveDblGate, CurveEndoGate, Gate,
-    PublicInputGate, RescueStepAGate, RescueStepBGate,
-};
 use crate::plonk_util::{
-    coeffs_to_commitments, coeffs_to_values_padded, eval_coeffs, eval_l_1, eval_zero_poly, halo_n,
+    coeffs_to_commitments, coeffs_to_values_padded, eval_coeffs, eval_l_1, halo_n,
     pad_to_8n, pedersen_hash, permutation_polynomial, powers, reduce_with_powers, values_to_coeffs,
 };
-use crate::target::{Target, Wire};
-use crate::util::{ceil_div_usize, log2_strict, transpose};
+use crate::target::{Target};
+use crate::util::{ceil_div_usize, log2_strict};
 use crate::witness::{PartialWitness, Witness, WitnessGenerator};
 use crate::{
-    blake_hash_usize_to_curve, divide_by_z_h, evaluate_all_constraints, fft_precompute,
+    divide_by_z_h, evaluate_all_constraints, fft_precompute,
     fft_with_precomputation_power_of_2, generate_rescue_constants,
     ifft_with_precomputation_power_of_2, msm_execute, msm_parallel, msm_precompute,
     rescue_hash_n_to_1, rescue_hash_n_to_2, rescue_hash_n_to_3, AffinePoint, CircuitBuilder,
@@ -213,7 +207,7 @@ impl<C: HaloCurve> Circuit<C> {
 
         // Generate random v, u, and x from the transcript.
         challenger.observe_elements(&all_opened_values_bf);
-        let (v_bf, u_bf, x) = challenger.get_3_challenges();
+        let (v_bf, u_bf, _x) = challenger.get_3_challenges();
         let v_sf = v_bf.try_convert::<C::ScalarField>()?;
         let u_sf = u_bf.try_convert::<C::ScalarField>()?;
 
@@ -245,7 +239,7 @@ impl<C: HaloCurve> Circuit<C> {
             .collect();
 
         // Reduce the commitment list to a single commitment.
-        let reduced_commit = msm_parallel(
+        let _reduced_commit = msm_parallel(
             &actual_scalars,
             &all_commits
                 .iter()
@@ -271,7 +265,7 @@ impl<C: HaloCurve> Circuit<C> {
             .collect();
 
         // Then, we reduce the above opening set reductions to a single value.
-        let reduced_opening = reduce_with_powers(&opening_set_reductions, v_sf);
+        let _reduced_opening = reduce_with_powers(&opening_set_reductions, v_sf);
 
         // Final IPA proof.
         let mut halo_a = reduced_coeffs;
@@ -571,7 +565,7 @@ mod tests {
         partial_witness.set_target(t, <Tweedledee as Curve>::ScalarField::ZERO);
         let circuit = builder.build();
         let witness = circuit.generate_witness(partial_witness);
-        let proof = circuit.generate_proof::<Tweedledum>(witness);
+        let _proof = circuit.generate_proof::<Tweedledum>(witness);
     }
 
     #[test]
@@ -586,6 +580,6 @@ mod tests {
         partial_witness.set_target(t2, <Tweedledee as Curve>::ScalarField::ZERO);
         let circuit = builder.build();
         let witness = circuit.generate_witness(partial_witness);
-        let proof = circuit.generate_proof::<Tweedledum>(witness);
+        let _proof = circuit.generate_proof::<Tweedledum>(witness);
     }
 }

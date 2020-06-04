@@ -143,7 +143,7 @@ impl<C: Curve> ProjectivePoint<C> {
 
         let mut result = Vec::with_capacity(n);
         for i in 0..n {
-            let Self { x, y, z, zero } = proj_points[i];
+            let Self { x, y, z: _, zero } = proj_points[i];
             result.push(if zero {
                 AffinePoint::ZERO
             } else {

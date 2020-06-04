@@ -4,7 +4,7 @@ use crate::{
 };
 
 // Store polynomial as a list of coefficient starting with the constant coefficient.
-type Polynomial<F: Field> = Vec<F>;
+type Polynomial<F> = Vec<F>;
 
 fn degree<F: Field>(a: &Polynomial<F>) -> usize {
     let mut ans = 0;
@@ -115,7 +115,7 @@ fn inv_mod_xn<F: Field>(h: &Polynomial<F>, n: usize) -> Polynomial<F> {
     a.push(hh[0].multiplicative_inverse_assuming_nonzero());
     for i in 0..log2_ceil(n) {
         let l = 1 << i;
-        let mut h0 = hh[..l].to_vec();
+        let h0 = hh[..l].to_vec();
         let mut h1 = hh[l..].to_vec();
         let mut c = polynomial_multiplication(&a, &h0);
         c.drain(0..l);

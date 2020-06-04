@@ -45,7 +45,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     pub fn stage_public_inputs(&mut self, n: usize) -> Vec<PublicInput> {
-        (0..n).map(|i| self.stage_public_input()).collect()
+        (0..n).map(|_i| self.stage_public_input()).collect()
     }
 
     /// Add `PublicInputGate`s which enable public inputs to be routed. Should be called after all
@@ -70,7 +70,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     pub fn add_virtual_targets(&mut self, n: usize) -> Vec<Target> {
-        (0..n).map(|i| self.add_virtual_target()).collect()
+        (0..n).map(|_i| self.add_virtual_target()).collect()
     }
 
     pub fn add_virtual_point_target(&mut self) -> AffinePointTarget {
@@ -80,7 +80,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     pub fn add_virtual_point_targets(&mut self, n: usize) -> Vec<AffinePointTarget> {
-        (0..n).map(|i| self.add_virtual_point_target()).collect()
+        (0..n).map(|_i| self.add_virtual_point_target()).collect()
     }
 
     pub fn zero_wire(&mut self) -> Target {
@@ -141,7 +141,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     pub fn assert_binary(&mut self, x: Target) {
-        let zero = self.zero_wire();
+        let _zero = self.zero_wire();
         let one = self.one_wire();
 
         let x_minus_1 = self.sub(x, one);
@@ -328,7 +328,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                constants: &Vec<Vec<F>>,
+                _constants: &Vec<Vec<F>>,
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
                 let x_value = witness.get_target(self.x);
@@ -446,7 +446,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                constants: &Vec<Vec<F>>,
+                _constants: &Vec<Vec<F>>,
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
                 let x_value = witness.get_target(self.x);
@@ -585,7 +585,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                constants: &Vec<Vec<F>>,
+                _constants: &Vec<Vec<F>>,
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
                 let x = witness.get_target(self.x);
@@ -766,8 +766,8 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
     pub fn curve_add<InnerC: Curve<BaseField = C::ScalarField>>(
         &mut self,
-        p_1: AffinePointTarget,
-        p_2: AffinePointTarget,
+        _p_1: AffinePointTarget,
+        _p_2: AffinePointTarget,
     ) -> AffinePointTarget {
         let add_index = self.num_gates();
         self.add_gate_no_constants(CurveAddGate::<C, InnerC>::new(add_index));
@@ -1251,8 +1251,8 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                constants: &Vec<Vec<F>>,
-                witness: &PartialWitness<F>,
+                _constants: &Vec<Vec<F>>,
+                _witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
                 let mut result = PartialWitness::new();
                 result.set_target(self.target, F::rand());
