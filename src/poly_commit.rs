@@ -82,7 +82,7 @@ impl<C: Curve> PolynomialCommitment for DLPC<C> {
             let mut s_r = &gs[n/2..].to_vec();
             s_l.push(h);
             s_r.push(h);
-            let l = Self::commit(&s_l, coeffs, randomness)
+            let l = Self::commit(&s_l, coeffs, randomness);
         }
         todo!()
     }

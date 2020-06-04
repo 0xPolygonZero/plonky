@@ -7,19 +7,16 @@ use anyhow::Result;
 use crate::partition::{get_subgroup_shift, TargetPartitions};
 use crate::plonk_challenger::Challenger;
 use crate::plonk_util::{
-    coeffs_to_commitments, coeffs_to_values_padded, eval_coeffs, eval_l_1, halo_n,
-    pad_to_8n, pedersen_hash, permutation_polynomial, powers, reduce_with_powers, values_to_coeffs,
+    coeffs_to_commitments, coeffs_to_values_padded, eval_coeffs, eval_l_1, halo_n, pad_to_8n,
+    pedersen_hash, permutation_polynomial, powers, reduce_with_powers, values_to_coeffs,
 };
-use crate::target::{Target};
+use crate::target::Target;
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::witness::{PartialWitness, Witness, WitnessGenerator};
 use crate::{
-    divide_by_z_h, evaluate_all_constraints, fft_precompute,
-    fft_with_precomputation_power_of_2, generate_rescue_constants,
-    ifft_with_precomputation_power_of_2, msm_execute, msm_parallel, msm_precompute,
-    rescue_hash_n_to_1, rescue_hash_n_to_2, rescue_hash_n_to_3, AffinePoint, CircuitBuilder,
-    ConstantGate, Curve, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, OpeningSet,
-    ProjectivePoint, Proof,
+    divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2,
+    ifft_with_precomputation_power_of_2, msm_parallel, AffinePoint, CircuitBuilder, Curve,
+    FftPrecomputation, Field, HaloCurve, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof,
 };
 
 pub(crate) const NUM_WIRES: usize = 9;
