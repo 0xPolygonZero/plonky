@@ -1615,6 +1615,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         let subgroup_n = C::ScalarField::cyclic_subgroup_known_order(subgroup_generator_n, degree);
         let subgroup_8n = C::ScalarField::cyclic_subgroup_known_order(subgroup_generator_n, 8 * degree);
 
+        // TODO: Shouldn't this be random?
         let pedersen_g: Vec<_> = (0..degree).map(|i| blake_hash_usize_to_curve::<C>(i)).collect();
         let pedersen_h = blake_hash_usize_to_curve::<C>(degree);
         let u = blake_hash_usize_to_curve::<C>(degree + 1);
@@ -1850,6 +1851,21 @@ mod tests {
         builder.assert_zero(t);
         let mut partial_witness = PartialWitness::new();
         partial_witness.set_target(t, <Tweedledee as Curve>::ScalarField::ZERO);
+        let circuit = builder.build();
+        let witness = circuit.generate_witness(partial_witness);
+        let proof = circuit.generate_proof::<Tweedledum>(witness);
+    }
+
+    #[test]
+    fn test_generate_sum() {
+        let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+        let t1 = builder.add_virtual_target();
+        let t2 = builder.add_virtual_target();
+        let s = builder.add(t1, t2);
+        builder.assert_zero(s);
+        let mut partial_witness = PartialWitness::new();
+        partial_witness.set_target(t1, <Tweedledee as Curve>::ScalarField::ZERO);
+        partial_witness.set_target(t2, <Tweedledee as Curve>::ScalarField::ZERO);
         let circuit = builder.build();
         let witness = circuit.generate_witness(partial_witness);
         let proof = circuit.generate_proof::<Tweedledum>(witness);
