@@ -35,6 +35,7 @@ pub use tweedledee_base::*;
 pub use tweedledee_curve::*;
 pub use tweedledum_base::*;
 pub use tweedledum_curve::*;
+pub use verifier::*;
 pub use witness::*;
 
 mod bigint_arithmetic;
@@ -71,4 +72,5 @@ mod tweedledee_curve;
 mod tweedledum_base;
 mod tweedledum_curve;
 mod util;
+mod verifier;
 mod witness;

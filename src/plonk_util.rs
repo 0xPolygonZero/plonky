@@ -76,6 +76,16 @@ pub(crate) fn halo_n<C: HaloCurve>(s_bits: &[bool]) -> C::ScalarField {
     a * C::ZETA_SCALAR + b
 }
 
+pub(crate) fn eval_poly<F: Field>(coeffs: &[F], x: F) -> F {
+    let mut ans = F::ZERO;
+    let mut x_pow = F::ONE;
+    for &c in coeffs {
+        ans = ans + (c * x_pow);
+        x_pow = x_pow * x;
+    }
+    ans
+}
+
 /// Compute `[x^0, x^1, ..., x^(n - 1)]`.
 pub(crate) fn powers<F: Field>(x: F, n: usize) -> Vec<F> {
     let mut powers = Vec::new();

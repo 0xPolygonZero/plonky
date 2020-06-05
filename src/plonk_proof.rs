@@ -27,6 +27,15 @@ pub struct Proof<C: Curve> {
     pub halo_g: AffinePoint<C>,
 }
 
+impl<C: Curve> Proof<C> {
+    pub fn all_opening_sets(&self) -> Vec<OpeningSet<C::ScalarField>> {
+        [
+            self.o_public_inputs.as_slice(),
+            &[self.o_local.clone(), self.o_right.clone(), self.o_below.clone()],
+        ].concat()
+    }
+}
+
 pub struct ProofTarget {
     /// A commitment to each wire polynomial.
     pub c_wires: Vec<AffinePointTarget>,
@@ -97,7 +106,7 @@ impl ProofTarget {
 }
 
 /// The opening of each Plonk polynomial at a particular point.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct OpeningSet<F: Field> {
     /// The purported opening of each constant polynomial.
     pub o_constants: Vec<F>,

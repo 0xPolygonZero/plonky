@@ -158,6 +158,7 @@ impl<C: HaloCurve> Circuit<C> {
                     &wires_coeffs,
                     &plonk_z_coeffs,
                     &plonk_t_coeff_chunks,
+                    // TODO: Why is this not g^i?
                     C::ScalarField::from_canonical_usize(i),
                 )
             })
@@ -566,7 +567,7 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_sum() {
+    fn test_generate_proof_sum() {
         let mut builder = CircuitBuilder::<Tweedledee>::new(128);
         let t1 = builder.add_virtual_target();
         let t2 = builder.add_virtual_target();
@@ -577,6 +578,7 @@ mod tests {
         partial_witness.set_target(t2, <Tweedledee as Curve>::ScalarField::ZERO);
         let circuit = builder.build();
         let witness = circuit.generate_witness(partial_witness);
-        let _proof = circuit.generate_proof::<Tweedledum>(witness);
+        let proof = circuit.generate_proof::<Tweedledum>(witness).unwrap();
+        dbg!(proof.o_local.o_plonk_t.len());
     }
 }
