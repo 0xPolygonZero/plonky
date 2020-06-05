@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use plonky::{BufferGate, Circuit, CircuitBuilder, PartialWitness, recursive_verification_circuit, Tweedledee, Tweedledum};
 
-const INNER_PROOF_DEGREE_POW: usize = 13;
+const INNER_PROOF_DEGREE_POW: usize = 14;
 const INNER_PROOF_DEGREE: usize = 1 << INNER_PROOF_DEGREE_POW;
 const SECURITY_BITS: usize = 128;
 
