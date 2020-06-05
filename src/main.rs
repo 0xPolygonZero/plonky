@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use plonky::{recursive_verification_circuit, Tweedledum, Tweedledee, PartialWitness, Circuit, CircuitBuilder, BufferGate};
+use plonky::{BufferGate, Circuit, CircuitBuilder, PartialWitness, recursive_verification_circuit, Tweedledee, Tweedledum};
 
 const INNER_PROOF_DEGREE_POW: usize = 14;
 const INNER_PROOF_DEGREE: usize = 1 << INNER_PROOF_DEGREE_POW;
@@ -35,7 +35,9 @@ fn main() {
 
     // Populate inputs.
     let mut recursion_inputs = PartialWitness::new();
-    recursion_circuit.proof.populate_witness(&mut recursion_inputs, inner_proof);
+    if let Err(e) = recursion_circuit.proof.populate_witness(&mut recursion_inputs, inner_proof) {
+        panic!("Failed to populate inputs: {:?}", e);
+    }
 
     println!("Generating recursion witness...");
     let start = Instant::now();

@@ -76,23 +76,25 @@ impl ProofTarget {
         &self,
         witness: &mut PartialWitness<C::BaseField>,
         values: Proof<C>,
-    ) {
+    ) -> Result<()> {
         witness.set_point_targets(&self.c_wires, &values.c_wires);
         witness.set_point_target(self.c_plonk_z, values.c_plonk_z);
         witness.set_point_targets(&self.c_plonk_t, &values.c_plonk_t);
 
         debug_assert_eq!(self.o_public_inputs.len(), values.o_public_inputs.len());
         for (o_pi_targets, o_pi_values) in self.o_public_inputs.iter().zip(values.o_public_inputs) {
-            o_pi_targets.populate_witness(witness, o_pi_values);
+            o_pi_targets.populate_witness(witness, o_pi_values)?;
         }
 
-        self.o_local.populate_witness(witness, values.o_local);
-        self.o_right.populate_witness(witness, values.o_right);
-        self.o_below.populate_witness(witness, values.o_below);
+        self.o_local.populate_witness(witness, values.o_local)?;
+        self.o_right.populate_witness(witness, values.o_right)?;
+        self.o_below.populate_witness(witness, values.o_below)?;
 
         witness.set_point_targets(&self.halo_l_i, &values.halo_l);
         witness.set_point_targets(&self.halo_r_i, &values.halo_r);
         witness.set_point_target(self.halo_g, values.halo_g);
+
+        Ok(())
     }
 }
 

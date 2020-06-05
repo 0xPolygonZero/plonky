@@ -4,6 +4,11 @@ use std::time::Instant;
 
 use anyhow::Result;
 
+use crate::{
+    AffinePoint, divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2,
+    FftPrecomputation, Field, HaloCurve, ifft_with_precomputation_power_of_2, msm_parallel,
+    MsmPrecomputation, OpeningSet, ProjectivePoint, Proof,
+};
 use crate::partition::{get_subgroup_shift, TargetPartitions};
 use crate::plonk_challenger::Challenger;
 use crate::plonk_util::{
@@ -13,11 +18,6 @@ use crate::plonk_util::{
 use crate::target::Target;
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::witness::{PartialWitness, Witness, WitnessGenerator};
-use crate::{
-    divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2,
-    ifft_with_precomputation_power_of_2, msm_parallel, AffinePoint, CircuitBuilder, Curve,
-    FftPrecomputation, Field, HaloCurve, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof,
-};
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
