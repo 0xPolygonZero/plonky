@@ -998,6 +998,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for RescueStepAGate<C> {
         vec![
             Target::Wire(Wire { gate: self.index, input: Self::WIRE_INPUT_0 }),
             Target::Wire(Wire { gate: self.index, input: Self::WIRE_INPUT_1 }),
+            Target::Wire(Wire { gate: self.index, input: Self::WIRE_INPUT_2 }),
         ]
     }
 

@@ -1,11 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
-use crate::{
-    AffinePoint, AffinePointTarget, blake_hash_usize_to_curve, Circuit, Curve, CurveMsmEndoResult,
-    CurveMulEndoResult, CurveMulOp, fft_precompute, Field, generate_rescue_constants, HaloCurve,
-    msm_precompute, NUM_CONSTANTS, NUM_WIRES, PartialWitness, PublicInput, Target, TargetPartitions,
-    VirtualTarget, Wire, WitnessGenerator,
-};
+use crate::{AffinePoint, AffinePointTarget, blake_hash_usize_to_curve, Circuit, Curve, CurveMsmEndoResult, CurveMulEndoResult, CurveMulOp, fft_precompute, Field, generate_rescue_constants, HaloCurve, msm_precompute, NUM_CONSTANTS, NUM_WIRES, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, blake_hash_base_field_to_curve};
 use crate::plonk_gates::*;
 use crate::plonk_util::{coeffs_to_commitments, coeffs_to_values_padded, values_to_coeffs};
 use crate::util::{ceil_div_usize, log2_strict, transpose};
@@ -862,11 +857,11 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             .collect();
 
         // Normally we would start with zero, but to avoid exceptional cases, we start with some
-        // arbitrary nonzero point and subtract it later. This avoids exception with high
-        // probability provided that the scalars and points are random. (We don't worry about
-        // non-random inputs from malicious provers, since our curve gates will be unsatisfiable in
-        // exceptional cases.)
-        let mut filler = InnerC::GENERATOR_AFFINE;
+        // random nonzero point and subtract it later. This avoids exceptional cases with high
+        // probability. A malicious prover may be able to craft an input which leads to an
+        // exceptional case, but this isn't a problem as our curve gates will be unsatisfiable in
+        // exceptional cases.
+        let mut filler = blake_hash_base_field_to_curve::<InnerC>(InnerC::BaseField::ZERO);
         let mut acc = self.constant_affine_point(filler);
         let mut scalar_accs = vec![self.zero_wire(); parts.len()];
 
@@ -1000,11 +995,11 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             .unzip();
 
         // Normally we would start with zero, but to avoid exceptional cases, we start with some
-        // arbitrary nonzero point and subtract it later. This avoids exception with high
-        // probability provided that the scalars and points are random. (We don't worry about
-        // non-random inputs from malicious provers, since our curve gates will be unsatisfiable in
-        // exceptional cases.)
-        let mut filler = InnerC::GENERATOR_AFFINE;
+        // random nonzero point and subtract it later. This avoids exceptional cases with high
+        // probability. A malicious prover may be able to craft an input which leads to an
+        // exceptional case, but this isn't a problem as our curve gates will be unsatisfiable in
+        // exceptional cases.
+        let mut filler = blake_hash_base_field_to_curve::<InnerC>(InnerC::BaseField::ZERO);
         let mut acc = self.constant_affine_point(filler);
 
         // For each scalar, we maintain two accumulators. The unsigned one is for computing a

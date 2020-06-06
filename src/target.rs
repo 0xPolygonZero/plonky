@@ -17,6 +17,12 @@ pub struct Wire {
     pub input: usize,
 }
 
+impl Wire {
+    pub fn is_routable(&self) -> bool {
+        self.input < NUM_ROUTED_WIRES
+    }
+}
+
 /// A routing target.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum Target {
@@ -42,7 +48,7 @@ impl PublicInput {
             mut gate,
             mut input,
         } = self.original_wire();
-        if input > NUM_ROUTED_WIRES {
+        if input >= NUM_ROUTED_WIRES {
             gate += 1;
             input -= NUM_ROUTED_WIRES;
         }
