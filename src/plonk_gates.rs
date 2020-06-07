@@ -15,8 +15,7 @@
 
 use std::marker::PhantomData;
 
-use crate::{AffinePoint, CircuitBuilder, Curve, Field, GRID_WIDTH, HaloCurve, NUM_ADVICE_WIRES, NUM_ROUTED_WIRES, NUM_WIRES, PartialWitness, Target, Wire, WitnessGenerator};
-use crate::mds::mds;
+use crate::{AffinePoint, CircuitBuilder, Curve, Field, GRID_WIDTH, HaloCurve, NUM_ADVICE_WIRES, NUM_ROUTED_WIRES, NUM_WIRES, PartialWitness, Target, Wire, WitnessGenerator, mds_matrix};
 
 pub fn evaluate_all_constraints<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>(
     local_constant_values: &[C::ScalarField],
@@ -923,9 +922,10 @@ impl<C: HaloCurve> Gate<C> for RescueStepAGate<C> {
         let root_1 = local_wire_values[Self::WIRE_ROOT_1];
         let root_2 = local_wire_values[Self::WIRE_ROOT_2];
 
-        let computed_out_0 = mds::<C::ScalarField>(3, 0, 0) * root_0 + mds::<C::ScalarField>(3, 0, 1) * root_1 + mds::<C::ScalarField>(3, 0, 2) * root_2 + local_constant_values[Self::PREFIX.len()];
-        let computed_out_1 = mds::<C::ScalarField>(3, 1, 0) * root_0 + mds::<C::ScalarField>(3, 1, 1) * root_1 + mds::<C::ScalarField>(3, 1, 2) * root_2 + local_constant_values[Self::PREFIX.len() + 1];
-        let computed_out_2 = mds::<C::ScalarField>(3, 2, 0) * root_0 + mds::<C::ScalarField>(3, 2, 1) * root_1 + mds::<C::ScalarField>(3, 2, 2) * root_2 + local_constant_values[Self::PREFIX.len() + 2];
+        let mds = mds_matrix::<C::ScalarField>(3);
+        let computed_out_0 = mds.get(0, 0) * root_0 + mds.get(0, 1) * root_1 + mds.get(0, 2) * root_2 + local_constant_values[Self::PREFIX.len()];
+        let computed_out_1 = mds.get(1, 0) * root_0 + mds.get(1, 1) * root_1 + mds.get(1, 2) * root_2 + local_constant_values[Self::PREFIX.len() + 1];
+        let computed_out_2 = mds.get(2, 0) * root_0 + mds.get(2, 1) * root_1 + mds.get(2, 2) * root_2 + local_constant_values[Self::PREFIX.len() + 2];
 
         vec![
             root_0.exp_u32(5) - in_0,
@@ -958,15 +958,16 @@ impl<C: HaloCurve> Gate<C> for RescueStepAGate<C> {
         let computed_in_1 = builder.exp_constant_usize(root_1, 5);
         let computed_in_2 = builder.exp_constant_usize(root_2, 5);
 
-        let mds_00 = builder.constant_wire(mds::<C::ScalarField>(3, 0, 0));
-        let mds_01 = builder.constant_wire(mds::<C::ScalarField>(3, 0, 1));
-        let mds_02 = builder.constant_wire(mds::<C::ScalarField>(3, 0, 2));
-        let mds_10 = builder.constant_wire(mds::<C::ScalarField>(3, 1, 0));
-        let mds_11 = builder.constant_wire(mds::<C::ScalarField>(3, 1, 1));
-        let mds_12 = builder.constant_wire(mds::<C::ScalarField>(3, 1, 2));
-        let mds_20 = builder.constant_wire(mds::<C::ScalarField>(3, 2, 0));
-        let mds_21 = builder.constant_wire(mds::<C::ScalarField>(3, 2, 1));
-        let mds_22 = builder.constant_wire(mds::<C::ScalarField>(3, 2, 2));
+        let mds = mds_matrix::<C::ScalarField>(3);
+        let mds_00 = builder.constant_wire(mds.get(0, 0));
+        let mds_01 = builder.constant_wire(mds.get(0, 1));
+        let mds_02 = builder.constant_wire(mds.get(0, 2));
+        let mds_10 = builder.constant_wire(mds.get(1, 0));
+        let mds_11 = builder.constant_wire(mds.get(1, 1));
+        let mds_12 = builder.constant_wire(mds.get(1, 2));
+        let mds_20 = builder.constant_wire(mds.get(2, 0));
+        let mds_21 = builder.constant_wire(mds.get(2, 1));
+        let mds_22 = builder.constant_wire(mds.get(2, 2));
 
         let mds_00_root_0 = builder.mul(mds_00, root_0);
         let mds_01_root_1 = builder.mul(mds_01, root_1);
@@ -1025,9 +1026,10 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for RescueStepAGate<C> {
         let root_1 = in_1.kth_root_u32(5);
         let root_2 = in_2.kth_root_u32(5);
 
-        let out_0 = mds::<C::ScalarField>(3, 0, 0) * root_0 + mds::<C::ScalarField>(3, 0, 1) * root_1 + mds::<C::ScalarField>(3, 0, 2) * root_2 + constants[Self::PREFIX.len()];
-        let out_1 = mds::<C::ScalarField>(3, 1, 0) * root_0 + mds::<C::ScalarField>(3, 1, 1) * root_1 + mds::<C::ScalarField>(3, 1, 2) * root_2 + constants[Self::PREFIX.len() + 1];
-        let out_2 = mds::<C::ScalarField>(3, 2, 0) * root_0 + mds::<C::ScalarField>(3, 2, 1) * root_1 + mds::<C::ScalarField>(3, 2, 2) * root_2 + constants[Self::PREFIX.len() + 2];
+        let mds = mds_matrix::<C::ScalarField>(3);
+        let out_0 = mds.get(0, 0) * root_0 + mds.get(0, 1) * root_1 + mds.get(0, 2) * root_2 + constants[Self::PREFIX.len()];
+        let out_1 = mds.get(1, 0) * root_0 + mds.get(1, 1) * root_1 + mds.get(1, 2) * root_2 + constants[Self::PREFIX.len() + 1];
+        let out_2 = mds.get(2, 0) * root_0 + mds.get(2, 1) * root_1 + mds.get(2, 2) * root_2 + constants[Self::PREFIX.len() + 2];
 
         let mut result = PartialWitness::new();
         result.set_wire(root_0_target, root_0);
@@ -1081,9 +1083,10 @@ impl<C: HaloCurve> Gate<C> for RescueStepBGate<C> {
         let in_1_exp_5 = in_1.exp_u32(5);
         let in_2_exp_5 = in_2.exp_u32(5);
 
-        let computed_out_0 = mds::<C::ScalarField>(3, 0, 0) * in_0_exp_5 + mds::<C::ScalarField>(3, 0, 1) * in_1_exp_5 + mds::<C::ScalarField>(3, 0, 2) * in_2_exp_5 + local_constant_values[Self::PREFIX.len()];
-        let computed_out_1 = mds::<C::ScalarField>(3, 1, 0) * in_0_exp_5 + mds::<C::ScalarField>(3, 1, 1) * in_1_exp_5 + mds::<C::ScalarField>(3, 1, 2) * in_2_exp_5 + local_constant_values[Self::PREFIX.len() + 1];
-        let computed_out_2 = mds::<C::ScalarField>(3, 2, 0) * in_0_exp_5 + mds::<C::ScalarField>(3, 2, 1) * in_1_exp_5 + mds::<C::ScalarField>(3, 2, 2) * in_2_exp_5 + local_constant_values[Self::PREFIX.len() + 2];
+        let mds = mds_matrix::<C::ScalarField>(3);
+        let computed_out_0 = mds.get(0, 0) * in_0_exp_5 + mds.get(0, 1) * in_1_exp_5 + mds.get(0, 2) * in_2_exp_5 + local_constant_values[Self::PREFIX.len()];
+        let computed_out_1 = mds.get(1, 0) * in_0_exp_5 + mds.get(1, 1) * in_1_exp_5 + mds.get(1, 2) * in_2_exp_5 + local_constant_values[Self::PREFIX.len() + 1];
+        let computed_out_2 = mds.get(2, 0) * in_0_exp_5 + mds.get(2, 1) * in_1_exp_5 + mds.get(2, 2) * in_2_exp_5 + local_constant_values[Self::PREFIX.len() + 2];
 
         vec![
             computed_out_0 - out_0,
@@ -1110,15 +1113,16 @@ impl<C: HaloCurve> Gate<C> for RescueStepBGate<C> {
         let in_1_exp_5 = builder.exp_constant_usize(in_1, 5);
         let in_2_exp_5 = builder.exp_constant_usize(in_2, 5);
 
-        let mds_00 = builder.constant_wire(mds::<C::ScalarField>(3, 0, 0));
-        let mds_01 = builder.constant_wire(mds::<C::ScalarField>(3, 0, 1));
-        let mds_02 = builder.constant_wire(mds::<C::ScalarField>(3, 0, 2));
-        let mds_10 = builder.constant_wire(mds::<C::ScalarField>(3, 1, 0));
-        let mds_11 = builder.constant_wire(mds::<C::ScalarField>(3, 1, 1));
-        let mds_12 = builder.constant_wire(mds::<C::ScalarField>(3, 1, 2));
-        let mds_20 = builder.constant_wire(mds::<C::ScalarField>(3, 2, 0));
-        let mds_21 = builder.constant_wire(mds::<C::ScalarField>(3, 2, 1));
-        let mds_22 = builder.constant_wire(mds::<C::ScalarField>(3, 2, 2));
+        let mds = mds_matrix::<C::ScalarField>(3);
+        let mds_00 = builder.constant_wire(mds.get(0, 0));
+        let mds_01 = builder.constant_wire(mds.get(0, 1));
+        let mds_02 = builder.constant_wire(mds.get(0, 2));
+        let mds_10 = builder.constant_wire(mds.get(1, 0));
+        let mds_11 = builder.constant_wire(mds.get(1, 1));
+        let mds_12 = builder.constant_wire(mds.get(1, 2));
+        let mds_20 = builder.constant_wire(mds.get(2, 0));
+        let mds_21 = builder.constant_wire(mds.get(2, 1));
+        let mds_22 = builder.constant_wire(mds.get(2, 2));
 
         let mds_00_in_0_exp_5 = builder.mul(mds_00, in_0_exp_5);
         let mds_01_in_1_exp_5 = builder.mul(mds_01, in_1_exp_5);
@@ -1170,9 +1174,10 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for RescueStepBGate<C> {
         let exp_1 = in_1.exp_u32(5);
         let exp_2 = in_2.exp_u32(5);
 
-        let out_0 = mds::<C::ScalarField>(3, 0, 0) * exp_0 + mds::<C::ScalarField>(3, 0, 1) * exp_1 + mds::<C::ScalarField>(3, 0, 2) * exp_2 + constants[Self::PREFIX.len()];
-        let out_1 = mds::<C::ScalarField>(3, 1, 0) * exp_0 + mds::<C::ScalarField>(3, 1, 1) * exp_1 + mds::<C::ScalarField>(3, 1, 2) * exp_2 + constants[Self::PREFIX.len() + 1];
-        let out_2 = mds::<C::ScalarField>(3, 2, 0) * exp_0 + mds::<C::ScalarField>(3, 2, 1) * exp_1 + mds::<C::ScalarField>(3, 2, 2) * exp_2 + constants[Self::PREFIX.len() + 2];
+        let mds = mds_matrix::<C::ScalarField>(3);
+        let out_0 = mds.get(0, 0) * exp_0 + mds.get(0, 1) * exp_1 + mds.get(0, 2) * exp_2 + constants[Self::PREFIX.len()];
+        let out_1 = mds.get(1, 0) * exp_0 + mds.get(1, 1) * exp_1 + mds.get(1, 2) * exp_2 + constants[Self::PREFIX.len() + 1];
+        let out_2 = mds.get(2, 0) * exp_0 + mds.get(2, 1) * exp_1 + mds.get(2, 2) * exp_2 + constants[Self::PREFIX.len() + 2];
 
         let mut result = PartialWitness::new();
         result.set_wire(out_0_target, out_0);
