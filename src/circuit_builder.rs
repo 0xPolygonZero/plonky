@@ -623,114 +623,62 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     pub fn rescue_sponge(&mut self, inputs: &[Target], num_outputs: usize) -> Vec<Target> {
-        // This is a r=2, c=1 sponge function with a single absorption and a single squeeze.
         let zero = self.zero_wire();
-        let mut state = [zero, zero, zero];
+        let mut state = vec![zero; RESCUE_SPONGE_WIDTH];
 
         // Absorb all input chunks.
-        for input_chunk in inputs.chunks(2) {
+        for input_chunk in inputs.chunks(RESCUE_SPONGE_WIDTH - 1) {
             for i in 0..input_chunk.len() {
                 state[i] = self.add(state[i], input_chunk[i]);
             }
-            state = self.rescue_permutation_3x3(state);
+            state = self.rescue_permutation(&state);
         }
 
         // Squeeze until we have the desired number of outputs.
         let mut outputs = Vec::new();
-        while outputs.len() < num_outputs {
-            outputs.push(state[0]);
-            if outputs.len() < num_outputs {
-                outputs.push(state[1]);
+        loop {
+            for i in 0..(RESCUE_SPONGE_WIDTH - 1) {
+                outputs.push(state[i]);
+                if outputs.len() == num_outputs {
+                    return outputs;
+                }
             }
-            if outputs.len() < num_outputs {
-                state = self.rescue_permutation_3x3(state);
-            }
+            state = self.rescue_permutation(&state);
         }
-
         outputs
     }
 
-    pub fn rescue_permutation_3x3(&mut self, inputs: [Target; 3]) -> [Target; 3] {
-        let all_constants = generate_rescue_constants(3, self.security_bits);
-        let mut state = inputs;
-        for (a_constants, b_constants) in all_constants.into_iter() {
-            state = self.rescue_round(state, a_constants, b_constants);
+    pub fn rescue_permutation(&mut self, inputs: &[Target]) -> Vec<Target> {
+        assert_eq!(inputs.len(), RESCUE_SPONGE_WIDTH);
+
+        // Route the input wires.
+        for i in 0..RESCUE_SPONGE_WIDTH {
+            self.copy(inputs[i], Target::Wire(Wire {
+                gate: self.num_gates(),
+                input: RescueStepAGate::<C>::wire_acc(i),
+            }));
         }
-        state
-    }
 
-    fn rescue_round(
-        &mut self,
-        inputs: [Target; 3],
-        a_constants: Vec<C::ScalarField>,
-        b_constants: Vec<C::ScalarField>,
-    ) -> [Target; 3] {
-        let a_index = self.num_gates();
-        let a_gate = RescueStepAGate::new(a_index);
-        self.add_gate(a_gate, a_constants);
+        let all_constants = generate_rescue_constants(RESCUE_SPONGE_WIDTH, self.security_bits);
+        for (a_constants, b_constants) in all_constants.into_iter() {
+            let a_index = self.num_gates();
+            let a_gate = RescueStepAGate::new(a_index);
+            self.add_gate(a_gate, a_constants);
 
-        let b_index = self.num_gates();
-        let b_gate = RescueStepBGate::new(b_index);
-        self.add_gate(b_gate, b_constants);
+            let b_index = self.num_gates();
+            let b_gate = RescueStepBGate::new(b_index);
+            self.add_gate(b_gate, b_constants);
+        }
 
-        let a_in_0_target = Target::Wire(Wire {
-            gate: a_index,
-            input: RescueStepAGate::<C>::WIRE_INPUT_0,
-        });
-        let a_in_1_target = Target::Wire(Wire {
-            gate: a_index,
-            input: RescueStepAGate::<C>::WIRE_INPUT_1,
-        });
-        let a_in_2_target = Target::Wire(Wire {
-            gate: a_index,
-            input: RescueStepAGate::<C>::WIRE_INPUT_2,
-        });
-        let a_out_0_target = Target::Wire(Wire {
-            gate: a_index,
-            input: RescueStepAGate::<C>::WIRE_OUTPUT_0,
-        });
-        let a_out_1_target = Target::Wire(Wire {
-            gate: a_index,
-            input: RescueStepAGate::<C>::WIRE_OUTPUT_1,
-        });
-        let a_out_2_target = Target::Wire(Wire {
-            gate: a_index,
-            input: RescueStepAGate::<C>::WIRE_OUTPUT_2,
-        });
-
-        let b_in_0_target = Target::Wire(Wire {
-            gate: b_index,
-            input: RescueStepBGate::<C>::WIRE_INPUT_0,
-        });
-        let b_in_1_target = Target::Wire(Wire {
-            gate: b_index,
-            input: RescueStepBGate::<C>::WIRE_INPUT_1,
-        });
-        let b_in_2_target = Target::Wire(Wire {
-            gate: b_index,
-            input: RescueStepBGate::<C>::WIRE_INPUT_2,
-        });
-        let b_out_0_target = Target::Wire(Wire {
-            gate: b_index,
-            input: RescueStepBGate::<C>::WIRE_OUTPUT_0,
-        });
-        let b_out_1_target = Target::Wire(Wire {
-            gate: b_index,
-            input: RescueStepBGate::<C>::WIRE_OUTPUT_1,
-        });
-        let b_out_2_target = Target::Wire(Wire {
-            gate: b_index,
-            input: RescueStepBGate::<C>::WIRE_OUTPUT_2,
-        });
-
-        self.copy(inputs[0], a_in_0_target);
-        self.copy(inputs[1], a_in_1_target);
-        self.copy(inputs[2], a_in_2_target);
-        self.copy(a_out_0_target, b_in_0_target);
-        self.copy(a_out_1_target, b_in_1_target);
-        self.copy(a_out_2_target, b_in_2_target);
-
-        [b_out_0_target, b_out_1_target, b_out_2_target]
+        // Use a BufferGate to receive the final accumulator states.
+        let gate = self.num_gates();
+        self.add_gate_no_constants(BufferGate::new(gate));
+        (0..RESCUE_SPONGE_WIDTH)
+            .map(|i| Target::Wire(Wire {
+                gate,
+                input: RescueStepBGate::<C>::wire_acc(i),
+            }))
+            .collect()
     }
 
     /// Assert that a given coordinate pair is on the curve `C`.

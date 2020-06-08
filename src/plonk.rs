@@ -23,7 +23,7 @@ use crate::witness::{PartialWitness, Witness, WitnessGenerator};
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
 pub(crate) const NUM_ADVICE_WIRES: usize = NUM_WIRES - NUM_ROUTED_WIRES;
-pub(crate) const NUM_CONSTANTS: usize = 5;
+pub(crate) const NUM_CONSTANTS: usize = 6;
 pub(crate) const GRID_WIDTH: usize = 65;
 // This is currently dominated by Base4SumGate. It has degree-4n constraints, and its prefix is 4
 // bits long, so its filtered constraints are degree-8n. Dividing by Z_H makes t degree-7n.

@@ -60,7 +60,7 @@ fn main() {
 fn generate_trivial_circuit() -> Circuit<Tweedledum> {
     let mut builder = CircuitBuilder::new(SECURITY_BITS);
     builder.route_public_inputs();
-    while builder.num_gates() < INNER_PROOF_DEGREE {
+    while builder.num_gates() < INNER_PROOF_DEGREE - 3 {
         builder.add_gate_no_constants(BufferGate::new(builder.num_gates()));
     }
     builder.build()
