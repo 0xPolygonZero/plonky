@@ -42,7 +42,7 @@ impl PublicInput {
             mut gate,
             mut input,
         } = self.original_wire();
-        if input > NUM_ROUTED_WIRES {
+        if input >= NUM_ROUTED_WIRES {
             gate += 1;
             input -= NUM_ROUTED_WIRES;
         }
