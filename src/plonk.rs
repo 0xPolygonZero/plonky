@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use anyhow::Result;
+use rayon::prelude::*;
 
 use crate::{
     AffinePoint, divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2,
@@ -317,10 +318,12 @@ impl<C: HaloCurve> Circuit<C> {
                 &l_challenge_sf.scale_slice(b_lo),
                 &r_challenge_sf.scale_slice(b_hi),
             );
-            halo_g = ProjectivePoint::<C>::add_slices(
-                &l_challenge_sf.scale_proj_point_slice(g_lo),
-                &r_challenge_sf.scale_proj_point_slice(g_hi),
-            );
+            halo_g = g_lo.into_par_iter().zip(g_hi)
+                .map(|(&g_lo_i, &g_hi_i)| msm_parallel(
+                    &[l_challenge_sf, r_challenge_sf],
+                    &[g_lo_i, g_hi_i],
+                    4))
+                .collect();
         }
 
         debug_assert_eq!(halo_g.len(), 1);
