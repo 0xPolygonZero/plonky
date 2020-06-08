@@ -547,7 +547,7 @@ impl<C: HaloCurve> Circuit<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{CircuitBuilder, Curve, Field, PartialWitness, Tweedledee, Tweedledum};
+    use crate::{CircuitBuilder, Curve, Field, PartialWitness, Tweedledee, Tweedledum, NUM_WIRES};
 
     #[test]
     fn test_generate_proof() {
@@ -606,14 +606,14 @@ mod tests {
             .map(|_| builder.stage_public_input())
             .collect::<Vec<_>>();
         builder.route_public_inputs();
-        let tis = pis.iter().map(|p| p.routable_target()).collect::<Vec<_>>();
+        let tis = pis.iter().map(|p| p.original_wire()).collect::<Vec<_>>();
         let mut partial_witness = PartialWitness::new();
         let values = tis
             .iter()
             .map(|&_t| <Tweedledee as Curve>::ScalarField::rand())
             .collect::<Vec<_>>();
         tis.iter().zip(values.iter()).for_each(|(&t, &v)| {
-            partial_witness.set_target(t, v);
+            partial_witness.set_wire(t, v);
         });
         let circuit = builder.build();
         let witness = circuit.generate_witness(partial_witness);
@@ -626,7 +626,7 @@ mod tests {
         values.iter().enumerate().for_each(|(i, &v)| {
             assert_eq!(
                 v,
-                proof.o_public_inputs[i/7].o_wires[i % 7],
+                proof.o_public_inputs[i / NUM_WIRES].o_wires[i % NUM_WIRES],
                 "{}",
                 i
             )
