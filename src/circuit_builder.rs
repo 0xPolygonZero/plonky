@@ -1304,7 +1304,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         let subgroup_generator_8n = C::ScalarField::primitive_root_of_unity(degree_pow + 3);
         let subgroup_n = C::ScalarField::cyclic_subgroup_known_order(subgroup_generator_n, degree);
         let subgroup_8n =
-            C::ScalarField::cyclic_subgroup_known_order(subgroup_generator_n, 8 * degree);
+            C::ScalarField::cyclic_subgroup_known_order(subgroup_generator_8n, 8 * degree);
 
         // TODO: Shouldn't this be random?
         let pedersen_g: Vec<_> = (0..degree)
