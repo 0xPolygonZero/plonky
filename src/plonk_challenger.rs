@@ -23,9 +23,12 @@ impl<F: Field> Challenger<F> {
     }
 
     pub(crate) fn observe_affine_point<C: Curve<BaseField = F>>(&mut self, point: AffinePoint<C>) {
-        debug_assert!(!point.zero);
+        if !point.zero {
         self.observe_element(point.x);
         self.observe_element(point.y);
+        } else {
+            self.observe_element(F::ZERO);
+        }
     }
 
     pub(crate) fn observe_affine_points<C: Curve<BaseField = F>>(&mut self, points: &[AffinePoint<C>]) {
