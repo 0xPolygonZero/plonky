@@ -3,6 +3,7 @@ use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use std::collections::HashMap;
 
+#[derive(Debug, Clone)]
 pub struct TargetPartitions {
     partitions: Vec<Vec<Target>>,
     indices: HashMap<Target, usize>,

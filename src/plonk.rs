@@ -6,7 +6,7 @@ use anyhow::Result;
 
 use crate::partition::{get_subgroup_shift, TargetPartitions};
 use crate::plonk_challenger::Challenger;
-use crate::plonk_util::{coeffs_to_commitments, coeffs_to_values_padded, eval_coeffs, eval_l_1, halo_n, pad_to_8n, pedersen_hash, permutation_polynomial, powers, reduce_with_powers, values_to_coeffs};
+use crate::plonk_util::{coeffs_to_commitments, coeffs_to_values_padded, eval_coeffs, eval_l_1, eval_poly, eval_zero_poly, halo_n, pad_to_8n, pedersen_hash, permutation_polynomial, powers, reduce_with_powers, values_to_coeffs};
 use crate::target::Target;
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::witness::{PartialWitness, Witness, WitnessGenerator};
@@ -96,7 +96,7 @@ impl<C: HaloCurve> Circuit<C> {
 
         let plonk_z_points_n = permutation_polynomial(
             self.degree(),
-            &self.subgroup_8n,
+            &self.subgroup_n,
             &witness,
             &self.s_sigma_values_8n,
             beta_sf,
@@ -122,8 +122,29 @@ impl<C: HaloCurve> Circuit<C> {
             &plonk_z_coeffs,
         );
 
+        if cfg!(debug_assertions) {
+            // Check that the vanishing polynomial indeed vanishes.
+            self.subgroup_n.iter().for_each(|&x| {
+                assert!(eval_poly(&vanishing_coeffs, x).is_zero());
+            });
+        }
+
         // Compute the quotient polynomial, t(x) = vanishing(x) / Z_H(x).
         let plonk_t_coeffs: Vec<C::ScalarField> = divide_by_z_h(&vanishing_coeffs, self.degree());
+
+        // TODO: Remove this for performance. This check is done above in debug mode.
+        self.subgroup_n.iter().enumerate().for_each(|(i, &x)| {
+            assert!(eval_poly(&vanishing_coeffs, x).is_zero(), "bad {}", i);
+        });
+
+        if cfg!(debug_assertions) {
+            // Check that division was performed correctly by evaluating at a random point.
+            let xxx = C::ScalarField::rand();
+            assert_eq!(
+                eval_poly(&plonk_t_coeffs, xxx),
+                eval_poly(&vanishing_coeffs, xxx) / eval_zero_poly(self.degree(), xxx)
+            );
+        }
 
         // Split t into degree-n chunks.
         let plonk_t_coeff_chunks: Vec<Vec<C::ScalarField>> = plonk_t_coeffs
@@ -151,8 +172,6 @@ impl<C: HaloCurve> Circuit<C> {
                     &wires_coeffs,
                     &plonk_z_coeffs,
                     &plonk_t_coeff_chunks,
-                    // TODO: Why is this not g^i?
-                    // C::ScalarField::from_canonical_usize(i),
                     self.subgroup_generator_n.exp_usize(i),
                 )
             })
@@ -393,10 +412,17 @@ impl<C: HaloCurve> Circuit<C> {
                 let s_id = k_i * x;
                 let s_sigma = self.s_sigma_values_8n[j][i];
                 f_prime = f_prime * (wire_value + beta_sf * s_id + gamma_sf);
-                g_prime = g_prime * (wire_value + beta_sf * s_sigma + gamma_sf);
+                g_prime = g_prime * (wire_value + beta_sf * k_i * s_sigma + gamma_sf);
             }
             let vanishing_v_shift_term = f_prime * z_x - g_prime * z_gz;
 
+            // if i % 8 == 0 {
+            //     dbg!(&vanishing_v_shift_term);
+            //     dbg!(&vanishing_z_1_term);
+            //     dbg!(&constraint_terms);
+            //     dbg!(z_x, z_gz);
+            //     dbg!(f_prime, g_prime);
+            // }
             let vanishing_terms = [
                 vec![vanishing_z_1_term],
                 vec![vanishing_v_shift_term],
@@ -547,18 +573,23 @@ impl<C: HaloCurve> Circuit<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{CircuitBuilder, Curve, Field, PartialWitness, Tweedledee, Tweedledum, NUM_WIRES};
+    use crate::{verify_proof_circuit, CircuitBuilder, Curve, Field, PartialWitness, Tweedledee, Tweedledum, NUM_WIRES};
 
     #[test]
-    fn test_generate_proof() {
+    fn test_generate_proof_trivial() {
         let mut builder = CircuitBuilder::<Tweedledee>::new(128);
-        let t = builder.add_virtual_target();
-        builder.assert_zero(t);
+        let t = builder.constant_wire(<Tweedledee as Curve>::ScalarField::ZERO);
+        // builder.assert_zero(t);
         let mut partial_witness = PartialWitness::new();
         partial_witness.set_target(t, <Tweedledee as Curve>::ScalarField::ZERO);
         let circuit = builder.build();
         let witness = circuit.generate_witness(partial_witness);
-        let _proof = circuit.generate_proof::<Tweedledum>(witness);
+        let proof = circuit.generate_proof::<Tweedledum>(witness).unwrap();
+        dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
+            &[],
+            &proof,
+            &circuit
+        ));
     }
 
     #[test]
@@ -619,16 +650,10 @@ mod tests {
         let witness = circuit.generate_witness(partial_witness);
         let proof = circuit.generate_proof::<Tweedledum>(witness).unwrap();
         // Check that the public inputs are set correctly in the proof.
-        dbg!(&proof.o_public_inputs[0].o_wires);
-        dbg!(&proof.o_public_inputs[1].o_wires);
-        dbg!(&values[..12]);
-        // TODO: Fix this
         values.iter().enumerate().for_each(|(i, &v)| {
             assert_eq!(
                 v,
                 proof.o_public_inputs[i / NUM_WIRES].o_wires[i % NUM_WIRES],
-                "{}",
-                i
             )
         });
     }

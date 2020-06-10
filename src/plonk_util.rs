@@ -1,10 +1,6 @@
 use crate::partition::get_subgroup_shift;
 use crate::witness::Witness;
-use crate::{
-    fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_execute,
-    AffinePoint, CircuitBuilder, Curve, FftPrecomputation, Field, HaloCurve, MsmPrecomputation,
-    ProjectivePoint, Target, NUM_ROUTED_WIRES,
-};
+use crate::{fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_execute, AffinePoint, CircuitBuilder, Curve, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, ProjectivePoint, Target, NUM_ROUTED_WIRES};
 
 /// Evaluate the polynomial which vanishes on any multiplicative subgroup of a given order `n`.
 pub(crate) fn eval_zero_poly<F: Field>(n: usize, x: F) -> F {
@@ -219,7 +215,7 @@ pub fn permutation_polynomial<F: Field>(
             let s_id = k_i * x;
             let s_sigma = sigma_values[j][8 * i];
             numerator = numerator * (wire_value + beta * s_id + gamma);
-            denominator = denominator * (wire_value + beta * s_sigma + gamma);
+            denominator = denominator * (wire_value + beta * k_i * s_sigma + gamma);
         }
         let last = *plonk_z_points.last().unwrap();
         plonk_z_points.push(last * numerator / denominator);

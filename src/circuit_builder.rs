@@ -1328,7 +1328,8 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         // Convert sigma's values to scalar field elements and split it into degree-n chunks.
         let sigma_chunks: Vec<Vec<C::ScalarField>> = sigma
             .into_iter()
-            .map(|x| C::ScalarField::from_canonical_usize(x))
+            // .map(|x| C::ScalarField::from_canonical_usize(x))
+            .map(|x| subgroup_generator_n.exp_usize(x))
             .collect::<Vec<_>>()
             .chunks(degree)
             .map(|chunk| chunk.to_vec())
