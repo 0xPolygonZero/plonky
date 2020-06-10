@@ -205,20 +205,100 @@ pub fn permutation_polynomial<F: Field>(
     gamma: F,
 ) -> Vec<F> {
     let mut plonk_z_points = vec![F::ONE];
+    let k_is = (0..NUM_ROUTED_WIRES)
+        .map(|j| get_subgroup_shift::<F>(j))
+        .collect::<Vec<_>>();
     for i in 1..degree {
-        let x = subgroup[i];
+        let x = subgroup[i - 1];
         let mut numerator = F::ONE;
         let mut denominator = F::ONE;
         for j in 0..NUM_ROUTED_WIRES {
             let wire_value = witness.get_indices(i - 1, j);
-            let k_i = get_subgroup_shift::<F>(j);
+            let k_i = k_is[j];
             let s_id = k_i * x;
-            let s_sigma = sigma_values[j][8 * i];
+            let s_sigma = sigma_values[j][8 * (i - 1)];
             numerator = numerator * (wire_value + beta * s_id + gamma);
-            denominator = denominator * (wire_value + beta * k_i * s_sigma + gamma);
+            denominator = denominator * (wire_value + beta * s_sigma + gamma);
         }
         let last = *plonk_z_points.last().unwrap();
         plonk_z_points.push(last * numerator / denominator);
     }
     plonk_z_points
+}
+
+pub fn sigma_polynomials<F: Field>(
+    sigma: Vec<usize>,
+    degree: usize,
+    subgroup_generator: F,
+) -> Vec<Vec<F>> {
+    sigma
+        .chunks(degree)
+        .map(|chunk| {
+            chunk
+                .iter()
+                .map(|&x| {
+                    get_subgroup_shift::<F>(x / degree) * subgroup_generator.exp_usize(x % degree)
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::{Circuit, CircuitBuilder, Curve, Field, PartialWitness, Tweedledee};
+
+    #[test]
+    fn test_permutation_polynomial() {
+        let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+        let one = builder.one_wire();
+        let t = builder.add_virtual_target();
+        let t_sq = builder.square(t);
+        let quad = builder.add_many(&[one, t, t_sq]);
+        let seven =
+            builder.constant_wire(<Tweedledee as Curve>::ScalarField::from_canonical_usize(7));
+        let res = builder.sub(quad, seven);
+        builder.assert_zero(res);
+        let mut partial_witness = PartialWitness::new();
+        partial_witness.set_target(t, <Tweedledee as Curve>::ScalarField::TWO);
+        let circuit = builder.build();
+        let witness = circuit.generate_witness(partial_witness);
+        let beta = <Tweedledee as Curve>::ScalarField::rand();
+        let gamma = <Tweedledee as Curve>::ScalarField::rand();
+        let plonk_z_points_n = permutation_polynomial(
+            circuit.degree(),
+            &circuit.subgroup_n,
+            &witness,
+            &circuit.s_sigma_values_8n,
+            beta,
+            gamma,
+        );
+        // Verify that the permutation polynomial is well-formed.
+        let k_is = (0..NUM_ROUTED_WIRES)
+            .map(|j| get_subgroup_shift::<<Tweedledee as Curve>::ScalarField>(j))
+            .collect::<Vec<_>>();
+        let wire_values = &witness.transpose();
+        for (i, &x) in circuit.subgroup_n.iter().enumerate() {
+            let (z_x, z_gz) = (
+                plonk_z_points_n[i],
+                plonk_z_points_n[(i + 1) % circuit.degree()],
+            );
+            let mut f_prime = <Tweedledee as Curve>::ScalarField::ONE;
+            let mut g_prime = <Tweedledee as Curve>::ScalarField::ONE;
+            for j in 0..NUM_ROUTED_WIRES {
+                let wire_value = wire_values[j][i];
+                let k_i = k_is[j];
+                let s_id = k_i * x;
+                let s_sigma = circuit.s_sigma_values_8n[j][8 * i];
+                f_prime = f_prime * (wire_value + beta * s_id + gamma);
+                g_prime = g_prime * (wire_value + beta * s_sigma + gamma);
+            }
+            let vanishing_v_shift_term = f_prime * z_x - g_prime * z_gz;
+            assert_eq!(
+                vanishing_v_shift_term,
+                <Tweedledee as Curve>::ScalarField::ZERO
+            );
+        }
+    }
 }

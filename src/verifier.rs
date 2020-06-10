@@ -76,7 +76,7 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::Scala
         let k_i = get_subgroup_shift::<C::ScalarField>(i);
         let s_id = k_i * challs.zeta;
         let beta_s_id = challs.beta * s_id;
-        let beta_s_sigma = challs.beta * k_i * o_local.o_plonk_sigmas[i];
+        let beta_s_sigma = challs.beta * o_local.o_plonk_sigmas[i];
         let f_prime_part = o_local.o_wires[i] + beta_s_id + challs.gamma;
         let g_prime_part = o_local.o_wires[i] + beta_s_sigma + challs.gamma;
         f_prime = f_prime * f_prime_part;
@@ -100,6 +100,7 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::Scala
 
     // If the two values differ, the proof is invalid.
     if computed_t_opening != purported_t_opening {
+        println!("Incorrect opening");
         return Ok(false);
     }
 
@@ -108,84 +109,84 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::Scala
     todo!()
 }
 
-pub fn verify_proof_vk<C: Curve>(
-    public_inputs: &[C::ScalarField],
-    proof: &Proof<C>,
-    vk: &VerificationKey<C>,
-) -> Result<bool> {
-    let Proof {
-        c_wires,
-        c_plonk_z,
-        c_plonk_t,
-        o_public_inputs,
-        o_local,
-        o_right,
-        o_below,
-        halo_l,
-        halo_r,
-        halo_g,
-    } = proof;
-    // Verify that the proof parameters are valid.
-    check_proof_parameters(proof);
+// pub fn verify_proof_vk<C: Curve>(
+//     public_inputs: &[C::ScalarField],
+//     proof: &Proof<C>,
+//     vk: &VerificationKey<C>,
+// ) -> Result<bool> {
+//     let Proof {
+//         c_wires,
+//         c_plonk_z,
+//         c_plonk_t,
+//         o_public_inputs,
+//         o_local,
+//         o_right,
+//         o_below,
+//         halo_l,
+//         halo_r,
+//         halo_g,
+//     } = proof;
+//     // Verify that the proof parameters are valid.
+//     check_proof_parameters(proof);
 
-    // Check public inputs.
-    if !verify_public_inputs(public_inputs, proof) {
-        return Ok(false);
-    }
+//     // Check public inputs.
+//     if !verify_public_inputs(public_inputs, proof) {
+//         return Ok(false);
+//     }
 
-    // Observe the transcript and generate the associated challenge points using Fiat-Shamir.
-    let challs = get_challenges(proof, Challenger::new(SECURITY_BITS));
+//     // Observe the transcript and generate the associated challenge points using Fiat-Shamir.
+//     let challs = get_challenges(proof, Challenger::new(SECURITY_BITS));
 
-    // Evaluate zeta^degree.
-    let mut zeta_power_d = challs.zeta.exp_usize(vk.degree_pow);
-    // Evaluate Z_H(zeta).
-    let one = <C::ScalarField as Field>::ONE;
-    let z_of_zeta = zeta_power_d - one;
-    // Evaluate L_1(zeta) = (zeta^degree - 1) / (degree * (zeta - 1)).
-    let lagrange_1_eval =
-        z_of_zeta / (C::ScalarField::from_canonical_usize(vk.degree_pow) * (challs.zeta - one));
+//     // Evaluate zeta^degree.
+//     let mut zeta_power_d = challs.zeta.exp_usize(vk.degree_pow);
+//     // Evaluate Z_H(zeta).
+//     let one = <C::ScalarField as Field>::ONE;
+//     let z_of_zeta = zeta_power_d - one;
+//     // Evaluate L_1(zeta) = (zeta^degree - 1) / (degree * (zeta - 1)).
+//     let lagrange_1_eval =
+//         z_of_zeta / (C::ScalarField::from_canonical_usize(vk.degree_pow) * (challs.zeta - one));
 
 
-    // Get z(zeta), z(g.zeta) from the proof openings.
-    let (z_x, z_gx) = (proof.o_local.o_plonk_z, proof.o_right.o_plonk_z);
-    // Compute Z(zeta) f'(zeta) - Z(g * zeta) g'(zeta), which should vanish on H.
-    let mut f_prime = one;
-    let mut g_prime = one;
-    for i in 0..NUM_ROUTED_WIRES {
-        let k_i = get_subgroup_shift::<C::ScalarField>(i);
-        let s_id = k_i * challs.zeta;
-        let beta_s_id = challs.beta * s_id;
-        let beta_s_sigma = challs.beta * o_local.o_plonk_sigmas[i];
-        let f_prime_part = o_local.o_wires[i] + beta_s_id + challs.gamma;
-        let g_prime_part = o_local.o_wires[i] + beta_s_sigma + challs.gamma;
-        f_prime = f_prime * f_prime_part;
-        g_prime = g_prime * g_prime_part;
-    }
-    let vanishing_v_shift_term = f_prime * z_x - g_prime * z_gx;
+//     // Get z(zeta), z(g.zeta) from the proof openings.
+//     let (z_x, z_gx) = (proof.o_local.o_plonk_z, proof.o_right.o_plonk_z);
+//     // Compute Z(zeta) f'(zeta) - Z(g * zeta) g'(zeta), which should vanish on H.
+//     let mut f_prime = one;
+//     let mut g_prime = one;
+//     for i in 0..NUM_ROUTED_WIRES {
+//         let k_i = get_subgroup_shift::<C::ScalarField>(i);
+//         let s_id = k_i * challs.zeta;
+//         let beta_s_id = challs.beta * s_id;
+//         let beta_s_sigma = challs.beta * o_local.o_plonk_sigmas[i];
+//         let f_prime_part = o_local.o_wires[i] + beta_s_id + challs.gamma;
+//         let g_prime_part = o_local.o_wires[i] + beta_s_sigma + challs.gamma;
+//         f_prime = f_prime * f_prime_part;
+//         g_prime = g_prime * g_prime_part;
+//     }
+//     let vanishing_v_shift_term = f_prime * z_x - g_prime * z_gx;
 
-    // Evaluate the L_1(x) (Z(x) - 1) vanishing term.
-    let vanishing_z_1_term = lagrange_1_eval * (z_x - one);
+//     // Evaluate the L_1(x) (Z(x) - 1) vanishing term.
+//     let vanishing_z_1_term = lagrange_1_eval * (z_x - one);
 
-    // TODO: Evaluate constraint polynomial
-    let constraint_term = one;
+//     // TODO: Evaluate constraint polynomial
+//     let constraint_term = one;
 
-    // Compute t(zeta).
-    let computed_t_opening = reduce_with_powers(
-        &[vanishing_z_1_term, vanishing_v_shift_term, constraint_term],
-        challs.alpha,
-    );
-    // Compute the purported opening of t(zeta).
-    let purported_t_opening = reduce_with_powers(&proof.o_local.o_plonk_t, zeta_power_d);
+//     // Compute t(zeta).
+//     let computed_t_opening = reduce_with_powers(
+//         &[vanishing_z_1_term, vanishing_v_shift_term, constraint_term],
+//         challs.alpha,
+//     );
+//     // Compute the purported opening of t(zeta).
+//     let purported_t_opening = reduce_with_powers(&proof.o_local.o_plonk_t, zeta_power_d);
 
-    // If the two values differ, the proof is invalid.
-    if computed_t_opening != purported_t_opening {
-        return Ok(false);
-    }
+//     // If the two values differ, the proof is invalid.
+//     if computed_t_opening != purported_t_opening {
+//         return Ok(false);
+//     }
 
-    // Verify polynomial commitment openings.
-    // let (u_l, u_r) = verify_all_ipas::<C, InnerC>(&proof, u, v, x, ipa_challenges);
-    todo!()
-}
+//     // Verify polynomial commitment openings.
+//     // let (u_l, u_r) = verify_all_ipas::<C, InnerC>(&proof, u, v, x, ipa_challenges);
+//     todo!()
+// }
 
 fn public_input_polynomial<F: Field>(public_input: &[F], degree: usize) -> Vec<F> {
     let mut values = vec![F::ZERO; degree];

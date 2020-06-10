@@ -362,6 +362,10 @@ impl<C: HaloCurve> Circuit<C> {
         gamma_sf: C::ScalarField,
         plonk_z_coeffs: &[C::ScalarField],
     ) -> Vec<C::ScalarField> {
+        let degree = self.degree();
+        let k_is = (0..NUM_ROUTED_WIRES)
+            .map(|j| get_subgroup_shift::<C::ScalarField>(j))
+            .collect::<Vec<_>>();
         // Low degree extend Z.
         let plonk_z_points_8n = fft_with_precomputation_power_of_2(
             &pad_to_8n(&plonk_z_coeffs),
@@ -380,8 +384,8 @@ impl<C: HaloCurve> Circuit<C> {
             // Load the wire polynomials' values at x, g x (the "right" position), and g^WIDTH x
             // (the "below" position). Note that a shift of 1 in the degree-n subgroup corresponds
             // to a shift of 8 in the degree-8n subgroup.
-            let i_right = (i + 8) % (8 * self.degree());
-            let i_below = (i + 8 * GRID_WIDTH) % (8 * self.degree());
+            let i_right = (i + 8) % (8 * degree);
+            let i_below = (i + 8 * GRID_WIDTH) % (8 * degree);
             let mut local_wire_values = Vec::new();
             let mut right_wire_values = Vec::new();
             let mut below_wire_values = Vec::new();
@@ -401,28 +405,22 @@ impl<C: HaloCurve> Circuit<C> {
             // Evaluate the L_1(x) (Z(x) - 1) vanishing term.
             let z_x = plonk_z_points_8n[i];
             let z_gz = plonk_z_points_8n[i_right];
-            let vanishing_z_1_term = eval_l_1(self.degree(), x) * (z_x - C::ScalarField::ONE);
+            let vanishing_z_1_term = eval_l_1(degree, x) * (z_x - C::ScalarField::ONE);
 
             // Evaluate the Z(x) f'(x) - g'(x) Z(g x) term.
             let mut f_prime = C::ScalarField::ONE;
             let mut g_prime = C::ScalarField::ONE;
             for j in 0..NUM_ROUTED_WIRES {
                 let wire_value = wire_values_8n[j][i];
-                let k_i = get_subgroup_shift::<C::ScalarField>(j);
+                let k_i = k_is[j];
                 let s_id = k_i * x;
                 let s_sigma = self.s_sigma_values_8n[j][i];
                 f_prime = f_prime * (wire_value + beta_sf * s_id + gamma_sf);
-                g_prime = g_prime * (wire_value + beta_sf * k_i * s_sigma + gamma_sf);
+                g_prime = g_prime * (wire_value + beta_sf * s_sigma + gamma_sf);
             }
             let vanishing_v_shift_term = f_prime * z_x - g_prime * z_gz;
 
-            // if i % 8 == 0 {
-            //     dbg!(&vanishing_v_shift_term);
-            //     dbg!(&vanishing_z_1_term);
-            //     dbg!(&constraint_terms);
-            //     dbg!(z_x, z_gz);
-            //     dbg!(f_prime, g_prime);
-            // }
+
             let vanishing_terms = [
                 vec![vanishing_z_1_term],
                 vec![vanishing_v_shift_term],
@@ -576,6 +574,7 @@ mod tests {
     use crate::{verify_proof_circuit, CircuitBuilder, Curve, Field, PartialWitness, Tweedledee, Tweedledum, NUM_WIRES};
 
     #[test]
+    #[should_panic(expected = "not yet implemented")]
     fn test_generate_proof_trivial() {
         let mut builder = CircuitBuilder::<Tweedledee>::new(128);
         let t = builder.constant_wire(<Tweedledee as Curve>::ScalarField::ZERO);
@@ -593,10 +592,11 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "not yet implemented")]
     fn test_generate_proof_sum() {
         let mut builder = CircuitBuilder::<Tweedledee>::new(128);
-        let t1 = builder.add_virtual_target();
-        let t2 = builder.add_virtual_target();
+        let t1 = builder.constant_wire(<Tweedledee as Curve>::ScalarField::ZERO);
+        let t2 = builder.constant_wire(<Tweedledee as Curve>::ScalarField::ZERO);
         let s = builder.add(t1, t2);
         builder.assert_zero(s);
         let mut partial_witness = PartialWitness::new();
@@ -605,9 +605,39 @@ mod tests {
         let circuit = builder.build();
         let witness = circuit.generate_witness(partial_witness);
         let proof = circuit.generate_proof::<Tweedledum>(witness).unwrap();
+        dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
+            &[],
+            &proof,
+            &circuit
+        ));
     }
 
     #[test]
+    #[should_panic(expected = "not yet implemented")]
+    fn test_generate_proof_quadratic() {
+        let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+        let one = builder.one_wire();
+        let t = builder.add_virtual_target();
+        let t_sq = builder.square(t);
+        let quad = builder.add_many(&[one, t, t_sq]);
+        let seven =
+            builder.constant_wire(<Tweedledee as Curve>::ScalarField::from_canonical_usize(7));
+        let res = builder.sub(quad, seven);
+        builder.assert_zero(res);
+        let mut partial_witness = PartialWitness::new();
+        partial_witness.set_target(t, <Tweedledee as Curve>::ScalarField::TWO);
+        let circuit = builder.build();
+        let witness = circuit.generate_witness(partial_witness);
+        let proof = circuit.generate_proof::<Tweedledum>(witness).unwrap();
+        dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
+            &[],
+            &proof,
+            &circuit
+        ));
+    }
+
+    #[test]
+    #[should_panic(expected = "not yet implemented")]
     fn test_generate_proof_public_input1() {
         // Set public inputs pi1 = 2 and check that pi1 - 2 == 0.
         let mut builder = CircuitBuilder::<Tweedledee>::new(128);
@@ -627,9 +657,15 @@ mod tests {
             proof.o_public_inputs[0].o_wires[0],
             <Tweedledee as Curve>::ScalarField::TWO
         );
+        dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
+            &[<Tweedledee as Curve>::ScalarField::TWO],
+            &proof,
+            &circuit
+        ));
     }
 
     #[test]
+    #[should_panic(expected = "not yet implemented")]
     fn test_generate_proof_public_input2() {
         // Set many random public inputs
         let mut builder = CircuitBuilder::<Tweedledee>::new(128);
@@ -656,5 +692,10 @@ mod tests {
                 proof.o_public_inputs[i / NUM_WIRES].o_wires[i % NUM_WIRES],
             )
         });
+        dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
+            &values,
+            &proof,
+            &circuit
+        ));
     }
 }

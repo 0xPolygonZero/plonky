@@ -1,7 +1,7 @@
 use crate::plonk_gates::*;
 use crate::plonk_util::{
     coeffs_to_commitments, coeffs_to_values, coeffs_to_values_padded, pad_to_8n, pedersen_hash,
-    values_to_coeffs,
+    values_to_coeffs, sigma_polynomials
 };
 use crate::util::{ceil_div_usize, log2_strict, transpose};
 use crate::{
@@ -1326,14 +1326,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         let c_constants = coeffs_to_commitments(&constants_coeffs, &pedersen_g_msm_precomputation);
 
         // Convert sigma's values to scalar field elements and split it into degree-n chunks.
-        let sigma_chunks: Vec<Vec<C::ScalarField>> = sigma
-            .into_iter()
-            // .map(|x| C::ScalarField::from_canonical_usize(x))
-            .map(|x| subgroup_generator_n.exp_usize(x))
-            .collect::<Vec<_>>()
-            .chunks(degree)
-            .map(|chunk| chunk.to_vec())
-            .collect();
+        let sigma_chunks = sigma_polynomials(sigma, degree, subgroup_generator_n);
 
         // Compute S_sigma, then a commitment to it.
         let s_sigma_coeffs = values_to_coeffs(&sigma_chunks, &fft_precomputation_n);
