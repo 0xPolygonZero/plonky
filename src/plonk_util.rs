@@ -249,7 +249,7 @@ pub(crate) fn polynomial_degree<F: Field>(
     fft_precomputation: &FftPrecomputation<F>,
 ) -> usize {
     let coeffs = ifft_with_precomputation_power_of_2(&points, fft_precomputation);
-    coeffs.iter().rev().skip_while(|c| c.is_zero()).count()
+    coeffs.iter().rev().skip_while(|c| c.is_zero()).count() - 1
 }
 
 #[cfg(test)]

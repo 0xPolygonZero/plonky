@@ -1408,10 +1408,10 @@ macro_rules! test_gate_low_degree {
 
             // Make sure each extended polynomial is still degree n.
             for values_8n in &constant_values_8n {
-                assert_eq!($crate::plonk_util::polynomial_degree(values_8n, &fft_precomputation_8n), n);
+                assert_eq!($crate::plonk_util::polynomial_degree(values_8n, &fft_precomputation_8n), n - 1);
             }
             for values_8n in &wire_values_8n {
-                assert_eq!($crate::plonk_util::polynomial_degree(values_8n, &fft_precomputation_8n), n);
+                assert_eq!($crate::plonk_util::polynomial_degree(values_8n, &fft_precomputation_8n), n - 1);
             }
 
             let constant_values_8n_t = $crate::util::transpose(&constant_values_8n);
@@ -1438,7 +1438,7 @@ macro_rules! test_gate_low_degree {
                 .map(|c| $crate::plonk_util::polynomial_degree(c, &fft_precomputation_8n))
                 .collect::<Vec<_>>();
             for (i, &deg) in constraint_degrees.iter().enumerate() {
-                assert!(deg <= 8 * n, "{}'th constraint's degree exceeds 8n: {}", i, deg);
+                assert!(deg < 8 * n, "{}'th constraint's degree is >=8n: {}", i, deg);
             }
         }
     };
