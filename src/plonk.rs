@@ -132,11 +132,6 @@ impl<C: HaloCurve> Circuit<C> {
         // Compute the quotient polynomial, t(x) = vanishing(x) / Z_H(x).
         let plonk_t_coeffs: Vec<C::ScalarField> = divide_by_z_h(&vanishing_coeffs, self.degree());
 
-        // TODO: Remove this for performance. This check is done above in debug mode.
-        self.subgroup_n.iter().enumerate().for_each(|(i, &x)| {
-            assert!(eval_poly(&vanishing_coeffs, x).is_zero(), "bad {}", i);
-        });
-
         if cfg!(debug_assertions) {
             // Check that division was performed correctly by evaluating at a random point.
             let xxx = C::ScalarField::rand();

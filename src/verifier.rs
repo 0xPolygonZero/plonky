@@ -3,8 +3,8 @@ use crate::partition::get_subgroup_shift;
 use crate::plonk_challenger::Challenger;
 use crate::plonk_gates::evaluate_all_constraints;
 use crate::plonk_proof::OpeningSet;
-use crate::plonk_util::{eval_poly, reduce_with_powers};
-use crate::{AffinePoint, Circuit, Curve, Field, HaloCurve, Proof, NUM_ROUTED_WIRES, NUM_WIRES};
+use crate::plonk_util::{eval_poly, reduce_with_powers, powers, halo_n};
+use crate::{AffinePoint, Circuit, Curve, Field, HaloCurve, Proof, NUM_ROUTED_WIRES, NUM_WIRES, msm_precompute, ProjectivePoint, msm_execute_parallel, msm_execute};
 use anyhow::Result;
 
 const SECURITY_BITS: usize = 128;
@@ -188,134 +188,87 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::Scala
 //     todo!()
 // }
 
-fn public_input_polynomial<F: Field>(public_input: &[F], degree: usize) -> Vec<F> {
-    let mut values = vec![F::ZERO; degree];
-    (0..public_input.len()).for_each(|i| values[i] = public_input[i]);
-    let fft_precomputation = fft_precompute(degree);
-    ifft_with_precomputation_power_of_2(&values, &fft_precomputation)
+// fn public_input_polynomial<F: Field>(public_input: &[F], degree: usize) -> Vec<F> {
+//     let mut values = vec![F::ZERO; degree];
+//     (0..public_input.len()).for_each(|i| values[i] = public_input[i]);
+//     let fft_precomputation = fft_precompute(degree);
+//     ifft_with_precomputation_power_of_2(&values, &fft_precomputation)
+// }
+
+/// Verify all IPAs in the given proof using a reduction to a single polynomial.
+fn verify_all_ipas<C: HaloCurve>(
+    circuit: &Circuit<C>,
+    proof: &Proof<C>,
+    u: C::ScalarField,
+    v: C::ScalarField,
+    x: C::ScalarField,
+    ipa_challenges: Vec<C::ScalarField>,
+) -> bool {
+    // Reduce all polynomial commitments to a single one, i.e. a random combination of them.
+    let c_all: Vec<AffinePoint<C>> = [
+        circuit.c_constants.clone(),
+        circuit.c_s_sigmas.clone(),
+        proof.c_wires.clone(),
+        vec![proof.c_plonk_z],
+        proof.c_plonk_t.clone(),
+    ]
+    .concat();
+    let powers_of_u = powers(u, c_all.len());
+    let actual_scalars = powers_of_u.iter().map(|u_pow| halo_n::<C>(&u_pow.to_canonical_bool_vec()[..circuit.security_bits])).collect::<Vec<_>>();
+    let precomputation = msm_precompute(&AffinePoint::batch_to_projective(&c_all), 8);
+    let c_reduction = msm_execute_parallel(&precomputation, &actual_scalars);
+
+    // For each opening set, we do a similar reduction, using the actual scalars above.
+    let opening_set_reductions: Vec<C::ScalarField> = proof
+        .all_opening_sets()
+        .iter()
+        .map(|opening_set| {
+            C::ScalarField::inner_product(&opening_set.to_vec(), &actual_scalars)
+        })
+        .collect();
+
+    // Then, we reduce the above opening set reductions to a single value.
+    let reduced_opening = reduce_with_powers(&opening_set_reductions, v);
+
+    verify_ipa::<C>(
+        proof,
+        c_reduction,
+        reduced_opening,
+        x,
+        ipa_challenges,
+    )
 }
 
-// /// Verify all IPAs in the given proof. Return `(u_l, u_r)`, which roughly correspond to `u` and
-// /// `u^{-1}` in the Halo paper, respectively.
-// fn verify_all_ipas<C: HaloCurve>(
-//     proof: &Proof<C>,
-//     u: C::ScalarField,
-//     v: C::ScalarField,
-//     x: C::ScalarField,
-//     ipa_challenges: Vec<C::ScalarField>,
-// ) -> (Vec<C::ScalarField>, Vec<C::ScalarField>) {
-//     // Reduce all polynomial commitments to a single one, i.e. a random combination of them.
-//     // TODO: Configure the actual constants and permutations of whatever circuit we wish to verify.
-//     // For now, we use a dummy point for each of those polynomial commitments.
-//     let dummy_point = builder.constant_affine_point(InnerC::GENERATOR_AFFINE);
-//     let c_constants = vec![dummy_point; NUM_CONSTANTS];
-//     let c_s_sigmas = vec![dummy_point; NUM_ROUTED_WIRES];
-//     let c_all: Vec<AffinePointTarget> = [
-//         c_constants,
-//         c_s_sigmas,
-//         proof.c_wires.clone(),
-//         vec![proof.c_plonk_z],
-//         proof.c_plonk_t.clone(),
-//     ]
-//     .concat();
-//     let mut c_reduction_muls = Vec::new();
-//     let powers_of_u = powers_recursive(builder, u, c_all.len());
-//     for (&c, &power) in c_all.iter().zip(powers_of_u.iter()) {
-//         let mul = CurveMulOp {
-//             scalar: power,
-//             point: c,
-//         };
-//         c_reduction_muls.push(mul);
-//     }
-//     let c_reduction_msm_result = builder.curve_msm_endo::<InnerC>(&c_reduction_muls);
-//     let actual_scalars = c_reduction_msm_result.actual_scalars;
-//     let c_reduction = c_reduction_msm_result.msm_result;
+/// Verify the final IPA.
+fn verify_ipa<C: HaloCurve>(
+    proof: &Proof<C>,
+    p: ProjectivePoint<C>,
+    c: C::ScalarField,
+    x: C::ScalarField,
+    ipa_challenges: Vec<C::ScalarField>,
+) -> bool {
+    // Now we begin IPA verification by computing P' and u' as in Protocol 1 of Bulletproofs.
+    // In Protocol 1 we compute u' = [x] u, but we leverage to endomorphism, instead computing
+    // u' = [n(x)] u.
+    let u = C::GENERATOR_PROJECTIVE;
+    let u_prime = C::convert(halo_n::<C>(&x.to_canonical_bool_vec()[..SECURITY_BITS])) * u;
 
-//     // For each opening set, we do a similar reduction, using the actual scalars above.
-//     let opening_set_reductions: Vec<Target> = proof
-//         .all_opening_sets()
-//         .iter()
-//         .map(|opening_set| {
-//             reduce_with_coefficients(builder, &opening_set.to_vec(), &actual_scalars)
-//         })
-//         .collect();
+    // Compute [c] [n(x)] u = [c] u'.
+    let u_n_x_c = C::convert(c) * u_prime;
+    let p_prime = p + u_n_x_c;
 
-//     // Then, we reduce the above opening set reductions to a single value.
-//     let reduced_opening = reduce_with_powers_recursive(builder, &opening_set_reductions, v);
+    // Compute Q as defined in the Halo paper.
+    let mut points = proof.halo_l.clone();
+    points.extend(proof.halo_r.iter());
+    let mut scalars = ipa_challenges.clone();
+    scalars.extend(ipa_challenges.iter().map(|chal| halo_n::<C>(&chal.multiplicative_inverse_assuming_nonzero().to_canonical_bool_vec()[..SECURITY_BITS])));
+    let precomputation = msm_precompute(&AffinePoint::batch_to_projective(&points), 8);
+    let q = msm_execute_parallel(&precomputation, &scalars);
 
-//     verify_ipa::<C, InnerC>(
-//         builder,
-//         proof,
-//         c_reduction,
-//         reduced_opening,
-//         x,
-//         ipa_challenges,
-//     )
-// }
+    // Performing ZK opening protocol.
 
-// /// Verify the final IPA. Return `(u_l, u_r)`, which roughly correspond to `u` and `u^{-1}` in the
-// /// Halo paper, respectively.
-// fn verify_ipa<C: HaloCurve>(
-//     proof: &Proof,
-//     p: AffinePoint<C>,
-//     c: C::ScalarField,
-//     x: C::ScalarField,
-//     ipa_challenges: Vec<C::ScalarField>,
-// ) -> (Vec<C::ScalarField>, Vec<C::ScalarField>) {
-//     // Now we begin IPA verification by computing P' and u' as in Protocol 1 of Bulletproofs.
-//     // In Protocol 1 we compute u' = [x] u, but we leverage to endomorphism, instead computing
-//     // u' = [n(x)] u.
-//     let u = C::GENERATOR_AFFINE;
-//     let u_prime = builder
-//         .curve_mul_endo::<InnerC>(CurveMulOp {
-//             scalar: x,
-//             point: u,
-//         })
-//         .mul_result;
-
-//     // Compute [c] [n(x)] u = [c] u'.
-//     let u_n_x_c = builder.curve_mul::<InnerC>(CurveMulOp {
-//         scalar: c,
-//         point: u_prime,
-//     });
-//     let p_prime = builder.curve_add::<InnerC>(p, u_n_x_c);
-
-//     // Compute Q as defined in the Halo paper.
-//     let mut q_muls = Vec::new();
-//     for i in 0..proof.halo_l_i.len() {
-//         let l_i = proof.halo_l_i[i];
-//         let r_i = proof.halo_r_i[i];
-//         let l_challenge = ipa_challenges[i];
-//         let r_challenge = builder.inv(l_challenge);
-//         q_muls.push(CurveMulOp {
-//             scalar: l_challenge,
-//             point: l_i,
-//         });
-//         q_muls.push(CurveMulOp {
-//             scalar: r_challenge,
-//             point: r_i,
-//         });
-//     }
-//     let q_msm_result = builder.curve_msm_endo::<InnerC>(&q_muls);
-//     let _q = builder.curve_add::<InnerC>(p_prime, q_msm_result.msm_result);
-
-//     // TODO: Perform ZK opening protocol.
-
-//     // Take the square roots of the actual scalars as u_l and u_r, which will be used elsewhere
-//     // in the protocol.
-//     let mut u_l = Vec::new();
-//     let mut u_r = Vec::new();
-//     for (i, &scalar) in q_msm_result.actual_scalars.iter().enumerate() {
-//         let sqrt = builder.deterministic_square_root(scalar);
-//         if i % 2 == 0 {
-//             u_l.push(sqrt);
-//         } else {
-//             u_r.push(sqrt);
-//         }
-//     }
-
-//     (u_l, u_r)
-// }
+    todo!()
+}
 
 /// Verifies that the purported public inputs in a proof match a given set of scalars.
 fn verify_public_inputs<C: Curve>(public_inputs: &[C::ScalarField], proof: &Proof<C>) -> bool {

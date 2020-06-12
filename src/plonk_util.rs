@@ -302,3 +302,16 @@ mod test {
         }
     }
 }
+
+/// Evaluate `g(X, {u_i})` as defined in the Halo paper.
+fn halo_g<F: Field>(x: F, us: &[F]) -> F {
+    let mut product = F::ONE;
+    let mut x_power = x;
+    for &u_i in us {
+        let u_i_inv = u_i.multiplicative_inverse_assuming_nonzero();
+        let term = u_i_inv * x_power + u_i;
+        product = product * term;
+        x_power = x_power.square();
+    }
+    product
+}

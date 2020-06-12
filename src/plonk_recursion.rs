@@ -367,7 +367,7 @@ fn eval_composite_poly<C: HaloCurve>(
 }
 
 /// Evaluate `g(X, {u_i})` as defined in the Halo paper.
-fn halo_g<C: HaloCurve>(builder: &mut CircuitBuilder<C>, x: Target, us: &[Target]) -> Target {
+fn halo_g_recursive<C: HaloCurve>(builder: &mut CircuitBuilder<C>, x: Target, us: &[Target]) -> Target {
     let mut product = builder.one_wire();
     let mut x_power = x;
     for &u_i in us {
