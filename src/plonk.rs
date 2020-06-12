@@ -6,11 +6,19 @@ use anyhow::Result;
 
 use crate::partition::{get_subgroup_shift, TargetPartitions};
 use crate::plonk_challenger::Challenger;
-use crate::plonk_util::{coeffs_to_commitments, coeffs_to_values_padded, eval_coeffs, eval_l_1, eval_poly, eval_zero_poly, halo_n, pad_to_8n, pedersen_hash, permutation_polynomial, powers, reduce_with_powers, values_to_coeffs};
+use crate::plonk_util::{
+    coeffs_to_commitments, coeffs_to_values_padded, eval_coeffs, eval_l_1, eval_poly,
+    eval_zero_poly, halo_n, pad_to_8n, pedersen_hash, permutation_polynomial, powers,
+    reduce_with_powers, values_to_coeffs,
+};
 use crate::target::Target;
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::witness::{PartialWitness, Witness, WitnessGenerator};
-use crate::{divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_parallel, AffinePoint, CircuitBuilder, Curve, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof};
+use crate::{
+    divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2,
+    ifft_with_precomputation_power_of_2, msm_parallel, AffinePoint, CircuitBuilder, Curve,
+    FftPrecomputation, Field, HaloCurve, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof,
+};
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
@@ -213,9 +221,10 @@ impl<C: HaloCurve> Circuit<C> {
 
         // Generate random v, u, and x from the transcript.
         challenger.observe_elements(&all_opened_values_bf);
-        let (v_bf, u_bf, _x) = challenger.get_3_challenges();
+        let (v_bf, u_bf) = challenger.get_2_challenges();
         let v_sf = v_bf.try_convert::<C::ScalarField>()?;
         let u_sf = u_bf.try_convert::<C::ScalarField>()?;
+        let u_curve = challenger.get_affine_point::<C>();
 
         // Make a list of all polynomials' commitments and coefficients, to be reduced later.
         // This must match the order of OpeningSet::to_vec.
@@ -279,6 +288,8 @@ impl<C: HaloCurve> Circuit<C> {
         let mut halo_g = AffinePoint::batch_to_projective(&self.pedersen_g);
         let mut halo_l = Vec::new();
         let mut halo_r = Vec::new();
+        // TODO: Change this to the real randomness used in the polynomial commitments.
+        let mut randomness = C::ScalarField::ZERO;
         for j in (1..=self.degree_pow()).rev() {
             let n = 1 << j;
             let middle = n / 2;
@@ -318,6 +329,10 @@ impl<C: HaloCurve> Circuit<C> {
             let l_challenge_sf = l_challenge_bf.try_convert::<C::ScalarField>()?;
             let r_challenge_sf = r_challenge_bf.try_convert::<C::ScalarField>()?;
 
+            randomness = randomness
+                + l_challenge_sf.square() * l_j_blinding_factor
+                + r_challenge_sf.square() * r_j_blinding_factor;
+
             halo_a = C::ScalarField::add_slices(
                 &l_challenge_sf.scale_slice(a_lo),
                 &r_challenge_sf.scale_slice(a_hi),
@@ -335,6 +350,10 @@ impl<C: HaloCurve> Circuit<C> {
         debug_assert_eq!(halo_g.len(), 1);
         let halo_g = halo_g[0].to_affine();
 
+        debug_assert_eq!(halo_a.len(), 1);
+        debug_assert_eq!(halo_b.len(), 1);
+        let schnorr_proof = self.schnorr_protocol(halo_a[0], halo_b[0], halo_g, randomness, u_curve, &mut challenger);
+
         Ok(Proof {
             c_wires,
             c_plonk_z,
@@ -346,6 +365,7 @@ impl<C: HaloCurve> Circuit<C> {
             halo_l: ProjectivePoint::batch_to_affine(&halo_l),
             halo_r: ProjectivePoint::batch_to_affine(&halo_r),
             halo_g,
+            schnorr_proof
         })
     }
 
@@ -414,7 +434,6 @@ impl<C: HaloCurve> Circuit<C> {
                 g_prime = g_prime * (wire_value + beta_sf * s_sigma + gamma_sf);
             }
             let vanishing_v_shift_term = f_prime * z_x - g_prime * z_gz;
-
 
             let vanishing_terms = [
                 vec![vanishing_z_1_term],
@@ -562,14 +581,37 @@ impl<C: HaloCurve> Circuit<C> {
         }
         result
     }
+
+    fn schnorr_protocol(
+        &self,
+        halo_a: C::ScalarField,
+        halo_b: C::ScalarField,
+        halo_g: AffinePoint<C>,
+        randomness: C::ScalarField,
+        u_curve: AffinePoint<C>,
+        challenger: &mut Challenger<C::BaseField>,
+    ) -> (C::ScalarField, C::ScalarField) {
+        let (d, s) = (C::ScalarField::rand(), C::ScalarField::rand());
+        let r_curve = C::convert(d)
+            * (halo_g.to_projective() + C::convert(halo_b) * u_curve.to_projective())
+            + C::convert(s) * self.pedersen_h.to_projective();
+        challenger.observe_proj_point(r_curve);
+        let chall_bf = challenger.get_challenge();
+        let chall = chall_bf.try_convert::<C::ScalarField>().expect("Improbable");
+        let z1 = halo_a * chall + d;
+        let z2 = randomness * chall + s;
+        (z1, z2)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{verify_proof_circuit, CircuitBuilder, Curve, Field, PartialWitness, Tweedledee, Tweedledum, NUM_WIRES};
+    use crate::{
+        verify_proof_circuit, CircuitBuilder, Curve, Field, PartialWitness, Tweedledee, Tweedledum,
+        NUM_WIRES,
+    };
 
     #[test]
-    #[should_panic(expected = "not yet implemented")]
     fn test_generate_proof_trivial() {
         let mut builder = CircuitBuilder::<Tweedledee>::new(128);
         let t = builder.constant_wire(<Tweedledee as Curve>::ScalarField::ZERO);
@@ -582,12 +624,11 @@ mod tests {
         dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
             &[],
             &proof,
-            &circuit
+            &circuit,
         ));
     }
 
     #[test]
-    #[should_panic(expected = "not yet implemented")]
     fn test_generate_proof_sum() {
         let mut builder = CircuitBuilder::<Tweedledee>::new(128);
         let t1 = builder.constant_wire(<Tweedledee as Curve>::ScalarField::ZERO);
@@ -603,12 +644,11 @@ mod tests {
         dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
             &[],
             &proof,
-            &circuit
+            &circuit,
         ));
     }
 
     #[test]
-    #[should_panic(expected = "not yet implemented")]
     fn test_generate_proof_quadratic() {
         let mut builder = CircuitBuilder::<Tweedledee>::new(128);
         let one = builder.one_wire();
@@ -627,12 +667,11 @@ mod tests {
         dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
             &[],
             &proof,
-            &circuit
+            &circuit,
         ));
     }
 
     #[test]
-    #[should_panic(expected = "not yet implemented")]
     fn test_generate_proof_public_input1() {
         // Set public inputs pi1 = 2 and check that pi1 - 2 == 0.
         let mut builder = CircuitBuilder::<Tweedledee>::new(128);
@@ -655,12 +694,11 @@ mod tests {
         dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
             &[<Tweedledee as Curve>::ScalarField::TWO],
             &proof,
-            &circuit
+            &circuit,
         ));
     }
 
     #[test]
-    #[should_panic(expected = "not yet implemented")]
     fn test_generate_proof_public_input2() {
         // Set many random public inputs
         let mut builder = CircuitBuilder::<Tweedledee>::new(128);
@@ -688,9 +726,7 @@ mod tests {
             )
         });
         dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
-            &values,
-            &proof,
-            &circuit
+            &values, &proof, &circuit,
         ));
     }
 }

@@ -1,6 +1,10 @@
 use crate::partition::get_subgroup_shift;
 use crate::witness::Witness;
-use crate::{fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_execute, AffinePoint, CircuitBuilder, Curve, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, ProjectivePoint, Target, NUM_ROUTED_WIRES};
+use crate::{
+    fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_execute,
+    AffinePoint, CircuitBuilder, Curve, FftPrecomputation, Field, HaloCurve, MsmPrecomputation,
+    ProjectivePoint, Target, NUM_ROUTED_WIRES,
+};
 
 /// Evaluate the polynomial which vanishes on any multiplicative subgroup of a given order `n`.
 pub(crate) fn eval_zero_poly<F: Field>(n: usize, x: F) -> F {
@@ -304,7 +308,7 @@ mod test {
 }
 
 /// Evaluate `g(X, {u_i})` as defined in the Halo paper.
-fn halo_g<F: Field>(x: F, us: &[F]) -> F {
+pub fn halo_g<F: Field>(x: F, us: &[F]) -> F {
     let mut product = F::ONE;
     let mut x_power = x;
     for &u_i in us {
