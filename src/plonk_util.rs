@@ -248,6 +248,14 @@ pub fn sigma_polynomials<F: Field>(
         .collect()
 }
 
+pub(crate) fn polynomial_degree<F: Field>(
+    points: &[F],
+    fft_precomputation: &FftPrecomputation<F>,
+) -> usize {
+    let coeffs = ifft_with_precomputation_power_of_2(&points, fft_precomputation);
+    coeffs.iter().rev().skip_while(|c| c.is_zero()).count() - 1
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

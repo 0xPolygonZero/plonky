@@ -15,7 +15,7 @@
 
 use std::marker::PhantomData;
 
-use crate::{AffinePoint, CircuitBuilder, Curve, Field, GRID_WIDTH, HaloCurve, NUM_ADVICE_WIRES, NUM_ROUTED_WIRES, NUM_WIRES, PartialWitness, Target, Wire, WitnessGenerator};
+use crate::{AffinePoint, CircuitBuilder, Curve, Field, GRID_WIDTH, HaloCurve, NUM_ADVICE_WIRES, NUM_ROUTED_WIRES, NUM_WIRES, PartialWitness, Target, Wire, WitnessGenerator, ifft_with_precomputation_power_of_2, fft_precompute};
 use crate::mds::mds;
 
 pub fn evaluate_all_constraints<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>(
@@ -1372,4 +1372,103 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for ArithmeticGate<C> {
         result.set_wire(output_target, output);
         result
     }
+}
+
+/// Test that a gate's constraints are within degree 8n, including the gate prefix filter.
+#[macro_export]
+macro_rules! test_gate_low_degree {
+    ($method:ident, $curve:ty, $gate:ty) => {
+        #[test]
+        #[ignore] // Too slow to run regularly.
+        fn $method() {
+            type C = $curve;
+            type SF = <C as $crate::curve::Curve>::ScalarField;
+
+            let n = 1024;
+            let fft_precomputation_n = $crate::fft::fft_precompute::<SF>(n);
+            let fft_precomputation_8n = $crate::fft::fft_precompute::<SF>(8 * n);
+            let fft_precomputation_16n = $crate::fft::fft_precompute::<SF>(16 * n);
+
+            // Generate random constant and wire polynomials.
+            let mut constant_values_n: Vec<Vec<SF>> = vec![Vec::new(); $crate::plonk::NUM_CONSTANTS];
+            let mut wire_values_n: Vec<Vec<SF>> = vec![Vec::new(); $crate::plonk::NUM_WIRES];
+            for i in 0..n {
+                for points in constant_values_n.iter_mut() {
+                    points.push(<SF as $crate::field::Field>::rand())
+                }
+                for points in wire_values_n.iter_mut() {
+                    points.push(<SF as $crate::field::Field>::rand())
+                }
+            }
+
+            // Low-degree extend them to 16n values.
+            let mut constant_coeffs_16n = $crate::plonk_util::values_to_coeffs(&constant_values_n, &fft_precomputation_n);
+            let mut wire_coeffs_16n = $crate::plonk_util::values_to_coeffs(&wire_values_n, &fft_precomputation_n);
+            for coeffs in constant_coeffs_16n.iter_mut().chain(wire_coeffs_16n.iter_mut()) {
+                while coeffs.len() < 16 * n {
+                    coeffs.push(<SF as $crate::field::Field>::ZERO);
+                }
+            }
+            let constant_values_16n: Vec<Vec<SF>> = constant_coeffs_16n.iter()
+                .map(|coeffs| $crate::fft::fft_with_precomputation_power_of_2(coeffs, &fft_precomputation_16n))
+                .collect();
+            let wire_values_16n: Vec<Vec<SF>> = wire_coeffs_16n.iter()
+                .map(|coeffs| $crate::fft::fft_with_precomputation_power_of_2(coeffs, &fft_precomputation_16n))
+                .collect();
+
+            // Make sure each extended polynomial is still degree n.
+            for values_16n in constant_values_16n.iter().chain(wire_values_16n.iter()) {
+                assert!($crate::plonk_util::polynomial_degree(values_16n, &fft_precomputation_16n) < n);
+            }
+
+            let constant_values_16n_t = $crate::util::transpose(&constant_values_16n);
+            let wire_values_16n_t = $crate::util::transpose(&wire_values_16n);
+
+            // Evaluate constraints at each of our 16n points.
+            let mut constraint_values_16n: Vec<Vec<SF>> = Vec::new();
+            for i in 0..16 * n {
+                let constraints: Vec<SF> = <$gate as $crate::plonk_gates::Gate<C>>::evaluate_filtered(
+                    &constant_values_16n_t[i],
+                    &wire_values_16n_t[i],
+                    &wire_values_16n_t[(i + 16) % (16 * n)],
+                    &wire_values_16n_t[(i + 16 * $crate::plonk::GRID_WIDTH) % (16 * n)]);
+                for (j, &c) in constraints.iter().enumerate() {
+                    if constraint_values_16n.len() <= j {
+                        constraint_values_16n.push(Vec::new());
+                    }
+                    constraint_values_16n[j].push(c);
+                }
+            }
+
+            // Check that the degree of each constraint is within the limit.
+            let constraint_degrees = constraint_values_16n.iter()
+                .map(|c| $crate::plonk_util::polynomial_degree(c, &fft_precomputation_16n))
+                .collect::<Vec<_>>();
+            let max_degree_excl = (crate::plonk::QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER + 1) * n;
+            for (i, &deg) in constraint_degrees.iter().enumerate() {
+                assert!(deg < max_degree_excl,
+                "Constraint at index {} has degree {}; should be less than {}n = {}",
+                i,
+                deg,
+                crate::plonk::QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER + 1,
+                max_degree_excl);
+            }
+        }
+    };
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{Tweedledum, Tweedledee, PublicInputGate, CurveAddGate, CurveDblGate, CurveEndoGate, Base4SumGate, BufferGate, ConstantGate, ArithmeticGate, RescueStepAGate, RescueStepBGate};
+
+    test_gate_low_degree!(low_degree_PublicInputGate, Tweedledum, PublicInputGate<Tweedledum>);
+    test_gate_low_degree!(low_degree_CurveAddGate, Tweedledum, CurveAddGate<Tweedledum, Tweedledee>);
+    test_gate_low_degree!(low_degree_CurveDblGate, Tweedledum, CurveDblGate<Tweedledum, Tweedledee>);
+    test_gate_low_degree!(low_degree_CurveEndoGate, Tweedledum, CurveEndoGate<Tweedledum, Tweedledee>);
+    test_gate_low_degree!(low_degree_Base4SumGate, Tweedledum, Base4SumGate<Tweedledum>);
+    test_gate_low_degree!(low_degree_BufferGate, Tweedledum, BufferGate<Tweedledum>);
+    test_gate_low_degree!(low_degree_ConstantGate, Tweedledum, ConstantGate<Tweedledum>);
+    test_gate_low_degree!(low_degree_ArithmeticGate, Tweedledum, ArithmeticGate<Tweedledum>);
+    test_gate_low_degree!(low_degree_RescueStepAGate, Tweedledum, RescueStepAGate<Tweedledum>);
+    test_gate_low_degree!(low_degree_RescueStepBGate, Tweedledum, RescueStepBGate<Tweedledum>);
 }
