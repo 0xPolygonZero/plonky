@@ -139,7 +139,7 @@ impl<C: HaloCurve> Circuit<C> {
         }
 
         // Compute the quotient polynomial, t(x) = vanishing(x) / Z_H(x).
-        let plonk_t_coeffs: Vec<C::ScalarField> = divide_by_z_h(&vanishing_coeffs, self.degree());
+        let mut plonk_t_coeffs: Vec<C::ScalarField> = divide_by_z_h(&vanishing_coeffs, self.degree());
 
         if cfg!(debug_assertions) {
             // Check that division was performed correctly by evaluating at a random point.
@@ -150,6 +150,10 @@ impl<C: HaloCurve> Circuit<C> {
             );
         }
 
+        // Pad the coeffiecients to length a multiple of the degree.
+        if plonk_t_coeffs.len() % self.degree() != 0 {
+            plonk_t_coeffs.extend((0..self.degree()-plonk_t_coeffs.len()%self.degree()).map(|_| C::ScalarField::ZERO));
+        }
         // Split t into degree-n chunks.
         let plonk_t_coeff_chunks: Vec<Vec<C::ScalarField>> = plonk_t_coeffs
             .chunks(self.degree())
@@ -619,7 +623,7 @@ mod tests {
     fn test_generate_proof_trivial() {
         let mut builder = CircuitBuilder::<Tweedledee>::new(128);
         let t = builder.constant_wire(<Tweedledee as Curve>::ScalarField::ZERO);
-        // builder.assert_zero(t);
+        builder.assert_zero(t);
         let mut partial_witness = PartialWitness::new();
         partial_witness.set_target(t, <Tweedledee as Curve>::ScalarField::ZERO);
         let circuit = builder.build();
