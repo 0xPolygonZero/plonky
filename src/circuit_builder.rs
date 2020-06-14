@@ -165,7 +165,6 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             vec![
                 C::ScalarField::ONE,
                 C::ScalarField::ONE,
-                C::ScalarField::ZERO,
             ],
         );
         self.copy(
@@ -220,7 +219,6 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             vec![
                 C::ScalarField::ONE,
                 C::ScalarField::NEG_ONE,
-                C::ScalarField::ZERO,
             ],
         );
         self.copy(
@@ -265,7 +263,6 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             ArithmeticGate::new(index),
             vec![
                 C::ScalarField::ONE,
-                C::ScalarField::ZERO,
                 C::ScalarField::ZERO,
             ],
         );
@@ -482,7 +479,6 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             vec![
                 C::ScalarField::ONE,
                 C::ScalarField::ONE,
-                C::ScalarField::ZERO,
             ],
         );
         self.copy(
@@ -520,7 +516,6 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             vec![
                 C::ScalarField::ONE,
                 C::ScalarField::NEG_ONE,
-                C::ScalarField::ZERO,
             ],
         );
         self.copy(
