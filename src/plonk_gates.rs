@@ -384,6 +384,7 @@ CurveAddGate<C, InnerC> {
     pub const WIRE_ADDEND_Y: usize = 5;
     pub const WIRE_SCALAR_BIT: usize = 6;
     pub const WIRE_INVERSE: usize = 7;
+    pub const WIRE_LAMBDA: usize = 8;
 }
 
 impl<C: HaloCurve, InnerC: Curve<BaseField=C::ScalarField>>
@@ -409,12 +410,14 @@ Gate<C> for CurveAddGate<C, InnerC> {
         let y2 = local_wire_values[Self::WIRE_ADDEND_Y];
         let scalar_bit = local_wire_values[Self::WIRE_SCALAR_BIT];
         let inverse = local_wire_values[Self::WIRE_INVERSE];
+        let lambda = local_wire_values[Self::WIRE_LAMBDA];
 
-        let lambda = (y1 - y2) * inverse;
+        let computed_lambda = (y1 - y2) * inverse;
         let computed_x3 = lambda.square() - x1 - x2;
         let computed_y3 = lambda * (x1 - x3) - y1;
 
         vec![
+            computed_lambda - lambda,
             computed_x3 - x3,
             computed_y3 - y3,
             scalar_acc_new - scalar_acc_old.double() + scalar_bit,
@@ -441,13 +444,14 @@ Gate<C> for CurveAddGate<C, InnerC> {
         let y2 = local_wire_values[Self::WIRE_ADDEND_Y];
         let scalar_bit = local_wire_values[Self::WIRE_SCALAR_BIT];
         let inverse = local_wire_values[Self::WIRE_INVERSE];
+        let lambda = local_wire_values[Self::WIRE_LAMBDA];
 
         let x1_minus_x2 = builder.sub(x1, x2);
         let x1_plus_x2 = builder.add(x1, x2);
         let x1_minus_x3 = builder.sub(x1, x3);
         let y1_minus_y2 = builder.sub(y1, y2);
 
-        let lambda = builder.mul(y1_minus_y2, inverse);
+        let computed_lambda = builder.mul(y1_minus_y2, inverse);
         let computed_x3 = builder.mul_sub(lambda, lambda, x1_plus_x2);
         let computed_y3 = builder.mul_sub(lambda, x1_minus_x3, y1);
 
@@ -455,6 +459,7 @@ Gate<C> for CurveAddGate<C, InnerC> {
         let computed_scalar_acc_new = builder.add(double_scalar_acc_old, scalar_bit);
 
         vec![
+            builder.sub(computed_lambda, lambda),
             builder.sub(computed_x3, x3),
             builder.sub(computed_y3, y3),
             builder.sub(computed_scalar_acc_new, scalar_acc_new),
@@ -488,37 +493,42 @@ WitnessGenerator<C::ScalarField> for CurveAddGate<C, InnerC> {
         let addend_y_target = Wire { gate: self.index, input: Self::WIRE_ADDEND_Y };
         let scalar_bit_target = Wire { gate: self.index, input: Self::WIRE_SCALAR_BIT };
         let inverse_target = Wire { gate: self.index, input: Self::WIRE_INVERSE };
+        let lambda_target = Wire { gate: self.index, input: Self::WIRE_LAMBDA };
 
         let group_acc_old_x = witness.get_wire(group_acc_old_x_target);
         let group_acc_old_y = witness.get_wire(group_acc_old_y_target);
-        let group_acc_old = AffinePoint::<InnerC>::nonzero(group_acc_old_x, group_acc_old_y);
 
         let scalar_acc_old = witness.get_wire(scalar_acc_old_target);
 
         let addend_x = witness.get_wire(addend_x_target);
         let addend_y = witness.get_wire(addend_y_target);
-        let addend = AffinePoint::<InnerC>::nonzero(addend_x, addend_y);
 
         let scalar_bit = witness.get_wire(scalar_bit_target);
         debug_assert!(scalar_bit.is_zero() || scalar_bit.is_one());
-
-        let mut group_acc_new = group_acc_old;
-        if scalar_bit.is_one() {
-            group_acc_new = (group_acc_new + addend).to_affine();
-        }
 
         let scalar_acc_new = scalar_acc_old.double() + scalar_bit;
 
         // Here's where our abstraction leaks a bit. Although we already have the sum, we need to
         // redo part of the computation in order to populate the purported inverse wire.
         let dx = group_acc_old_x - addend_x;
+        let dy = group_acc_old_y - addend_y;
         let inverse = dx.multiplicative_inverse().expect("x_1 = x_2");
+        let lambda = dy * inverse;
+
+        let x_3 = lambda.square() - group_acc_old_x - addend_x;
+        let y_3 = lambda * (group_acc_old_x - x_3) - group_acc_old_y;
+        let (group_acc_new_x, group_acc_new_y) = if scalar_bit.is_one() {
+            (x_3, y_3)
+        } else {
+            (group_acc_old_x, group_acc_old_y)
+        };
 
         let mut result = PartialWitness::new();
-        result.set_wire(group_acc_new_x_target, group_acc_new.x);
-        result.set_wire(group_acc_new_y_target, group_acc_new.y);
+        result.set_wire(group_acc_new_x_target, group_acc_new_x);
+        result.set_wire(group_acc_new_y_target, group_acc_new_y);
         result.set_wire(scalar_acc_new_target, scalar_acc_new);
         result.set_wire(inverse_target, inverse);
+        result.set_wire(lambda_target, lambda);
         result
     }
 }
