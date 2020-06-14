@@ -18,8 +18,9 @@
 
 use std::marker::PhantomData;
 
-use crate::{AffinePoint, CircuitBuilder, Curve, Field, GRID_WIDTH, HaloCurve, NUM_ADVICE_WIRES, NUM_ROUTED_WIRES, NUM_WIRES, PartialWitness, Target, Wire, WitnessGenerator, ifft_with_precomputation_power_of_2, fft_precompute};
-use crate::mds::mds;
+use crate::{AffinePoint, CircuitBuilder, Curve, Field, GRID_WIDTH, HaloCurve, NUM_ADVICE_WIRES, NUM_ROUTED_WIRES, NUM_WIRES, PartialWitness, Target, Wire, WitnessGenerator, mds_matrix};
+
+pub const RESCUE_SPONGE_WIDTH: usize = 4;
 
 pub fn evaluate_all_constraints<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>(
     local_constant_values: &[C::ScalarField],
@@ -912,15 +913,15 @@ impl<C: HaloCurve> RescueStepAGate<C> {
         RescueStepAGate { index, _phantom: PhantomData }
     }
 
-    pub const WIRE_INPUT_0: usize = 0;
-    pub const WIRE_INPUT_1: usize = 1;
-    pub const WIRE_INPUT_2: usize = 2;
-    pub const WIRE_OUTPUT_0: usize = 3;
-    pub const WIRE_OUTPUT_1: usize = 4;
-    pub const WIRE_OUTPUT_2: usize = 5;
-    pub const WIRE_ROOT_0: usize = 6;
-    pub const WIRE_ROOT_1: usize = 7;
-    pub const WIRE_ROOT_2: usize = 8;
+    /// Returns the index of the `i`th accumulator wire.
+    pub fn wire_acc(i: usize) -> usize {
+        return i;
+    }
+
+    /// Returns the index of the `i`th root wire.
+    pub fn wire_root(i: usize) -> usize {
+        return RESCUE_SPONGE_WIDTH + i;
+    }
 }
 
 impl<C: HaloCurve> Gate<C> for RescueStepAGate<C> {
@@ -931,131 +932,103 @@ impl<C: HaloCurve> Gate<C> for RescueStepAGate<C> {
     fn evaluate_unfiltered(
         local_constant_values: &[C::ScalarField],
         local_wire_values: &[C::ScalarField],
-        _right_wire_values: &[C::ScalarField],
+        right_wire_values: &[C::ScalarField],
         _below_wire_values: &[C::ScalarField],
     ) -> Vec<C::ScalarField> {
-        let in_0 = local_wire_values[Self::WIRE_INPUT_0];
-        let in_1 = local_wire_values[Self::WIRE_INPUT_1];
-        let in_2 = local_wire_values[Self::WIRE_INPUT_2];
-        let out_0 = local_wire_values[Self::WIRE_OUTPUT_0];
-        let out_1 = local_wire_values[Self::WIRE_OUTPUT_1];
-        let out_2 = local_wire_values[Self::WIRE_OUTPUT_2];
-        let root_0 = local_wire_values[Self::WIRE_ROOT_0];
-        let root_1 = local_wire_values[Self::WIRE_ROOT_1];
-        let root_2 = local_wire_values[Self::WIRE_ROOT_2];
+        let ins: Vec<C::ScalarField> = (0..RESCUE_SPONGE_WIDTH)
+            .map(|i| local_wire_values[Self::wire_acc(i)])
+            .collect();
+        let outs: Vec<C::ScalarField> = (0..RESCUE_SPONGE_WIDTH)
+            .map(|i| right_wire_values[Self::wire_acc(i)])
+            .collect();
+        let roots: Vec<C::ScalarField> = (0..RESCUE_SPONGE_WIDTH)
+            .map(|i| local_wire_values[Self::wire_root(i)])
+            .collect();
 
-        let computed_out_0 = mds::<C::ScalarField>(3, 0, 0) * root_0 + mds::<C::ScalarField>(3, 0, 1) * root_1 + mds::<C::ScalarField>(3, 0, 2) * root_2 + local_constant_values[Self::PREFIX.len()];
-        let computed_out_1 = mds::<C::ScalarField>(3, 1, 0) * root_0 + mds::<C::ScalarField>(3, 1, 1) * root_1 + mds::<C::ScalarField>(3, 1, 2) * root_2 + local_constant_values[Self::PREFIX.len() + 1];
-        let computed_out_2 = mds::<C::ScalarField>(3, 2, 0) * root_0 + mds::<C::ScalarField>(3, 2, 1) * root_1 + mds::<C::ScalarField>(3, 2, 2) * root_2 + local_constant_values[Self::PREFIX.len() + 2];
+        let mds = mds_matrix::<C::ScalarField>(RESCUE_SPONGE_WIDTH);
 
-        vec![
-            root_0.exp_u32(5) - in_0,
-            root_1.exp_u32(5) - in_1,
-            root_2.exp_u32(5) - in_2,
-            computed_out_0 - out_0,
-            computed_out_1 - out_1,
-            computed_out_2 - out_2,
-        ]
+        let mut constraints = Vec::new();
+        for i in 0..RESCUE_SPONGE_WIDTH {
+            constraints.push(roots[i].exp_usize(5) - ins[i]);
+
+            let mut computed_out_i = local_constant_values[Self::PREFIX.len() + i];
+            for j in 0..RESCUE_SPONGE_WIDTH {
+                computed_out_i = computed_out_i + mds.get(i, j) * roots[j];
+            }
+            constraints.push(computed_out_i - outs[i]);
+        }
+        constraints
     }
 
     fn evaluate_unfiltered_recursively(
         builder: &mut CircuitBuilder<C>,
         local_constant_values: &[Target],
         local_wire_values: &[Target],
-        _right_wire_values: &[Target],
+        right_wire_values: &[Target],
         _below_wire_values: &[Target],
     ) -> Vec<Target> {
-        let in_0 = local_wire_values[Self::WIRE_INPUT_0];
-        let in_1 = local_wire_values[Self::WIRE_INPUT_1];
-        let in_2 = local_wire_values[Self::WIRE_INPUT_2];
-        let out_0 = local_wire_values[Self::WIRE_OUTPUT_0];
-        let out_1 = local_wire_values[Self::WIRE_OUTPUT_1];
-        let out_2 = local_wire_values[Self::WIRE_OUTPUT_2];
-        let root_0 = local_wire_values[Self::WIRE_ROOT_0];
-        let root_1 = local_wire_values[Self::WIRE_ROOT_1];
-        let root_2 = local_wire_values[Self::WIRE_ROOT_2];
+        let ins: Vec<Target> = (0..RESCUE_SPONGE_WIDTH)
+            .map(|i| local_wire_values[Self::wire_acc(i)])
+            .collect();
 
-        let computed_in_0 = builder.exp_constant_usize(root_0, 5);
-        let computed_in_1 = builder.exp_constant_usize(root_1, 5);
-        let computed_in_2 = builder.exp_constant_usize(root_2, 5);
+        let outs: Vec<Target> = (0..RESCUE_SPONGE_WIDTH)
+            .map(|i| right_wire_values[Self::wire_acc(i)])
+            .collect();
 
-        let mds_00 = builder.constant_wire(mds::<C::ScalarField>(3, 0, 0));
-        let mds_01 = builder.constant_wire(mds::<C::ScalarField>(3, 0, 1));
-        let mds_02 = builder.constant_wire(mds::<C::ScalarField>(3, 0, 2));
-        let mds_10 = builder.constant_wire(mds::<C::ScalarField>(3, 1, 0));
-        let mds_11 = builder.constant_wire(mds::<C::ScalarField>(3, 1, 1));
-        let mds_12 = builder.constant_wire(mds::<C::ScalarField>(3, 1, 2));
-        let mds_20 = builder.constant_wire(mds::<C::ScalarField>(3, 2, 0));
-        let mds_21 = builder.constant_wire(mds::<C::ScalarField>(3, 2, 1));
-        let mds_22 = builder.constant_wire(mds::<C::ScalarField>(3, 2, 2));
+        let roots: Vec<Target> = (0..RESCUE_SPONGE_WIDTH)
+            .map(|i| local_wire_values[Self::wire_root(i)])
+            .collect();
 
-        let mds_00_root_0 = builder.mul(mds_00, root_0);
-        let mds_01_root_1 = builder.mul(mds_01, root_1);
-        let mds_02_root_2 = builder.mul(mds_02, root_2);
-        let mds_10_root_0 = builder.mul(mds_10, root_0);
-        let mds_11_root_1 = builder.mul(mds_11, root_1);
-        let mds_12_root_2 = builder.mul(mds_12, root_2);
-        let mds_20_root_0 = builder.mul(mds_20, root_0);
-        let mds_21_root_1 = builder.mul(mds_21, root_1);
-        let mds_22_root_2 = builder.mul(mds_22, root_2);
+        let mds = mds_matrix::<C::ScalarField>(RESCUE_SPONGE_WIDTH);
 
-        let computed_out_0 = builder.add_many(&[mds_00_root_0, mds_01_root_1, mds_02_root_2, local_constant_values[Self::PREFIX.len()]]);
-        let computed_out_1 = builder.add_many(&[mds_10_root_0, mds_11_root_1, mds_12_root_2, local_constant_values[Self::PREFIX.len() + 1]]);
-        let computed_out_2 = builder.add_many(&[mds_20_root_0, mds_21_root_1, mds_22_root_2, local_constant_values[Self::PREFIX.len() + 2]]);
+        let mut constraints = Vec::new();
+        for i in 0..RESCUE_SPONGE_WIDTH {
+            let computed_in_i = builder.exp_constant_usize(roots[i], 5);
+            constraints.push(builder.sub(computed_in_i, ins[i]));
 
-        vec![
-            builder.sub(computed_in_0, in_0),
-            builder.sub(computed_in_1, in_1),
-            builder.sub(computed_in_2, in_2),
-            builder.sub(computed_out_0, out_0),
-            builder.sub(computed_out_1, out_1),
-            builder.sub(computed_out_2, out_2),
-        ]
+            let mut computed_out_i = local_constant_values[Self::PREFIX.len() + i];
+            for j in 0..RESCUE_SPONGE_WIDTH {
+                let mds_entry = builder.constant_wire(mds.get(i, j));
+                computed_out_i = builder.mul_add(mds_entry, roots[j], computed_out_i);
+            }
+            constraints.push(builder.sub(computed_out_i, outs[i]));
+        }
+        constraints
     }
 }
 
 impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for RescueStepAGate<C> {
     fn dependencies(&self) -> Vec<Target> {
-        vec![
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_INPUT_0 }),
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_INPUT_1 }),
-        ]
+        (0..RESCUE_SPONGE_WIDTH)
+            .map(|i| Target::Wire(Wire { gate: self.index, input: Self::wire_acc(i) }))
+            .collect()
     }
 
     fn generate(&self, constants: &Vec<Vec<C::ScalarField>>, witness: &PartialWitness<C::ScalarField>) -> PartialWitness<C::ScalarField> {
         let constants = &constants[self.index];
 
-        let in_0_target = Wire { gate: self.index, input: Self::WIRE_INPUT_0 };
-        let in_1_target = Wire { gate: self.index, input: Self::WIRE_INPUT_1 };
-        let in_2_target = Wire { gate: self.index, input: Self::WIRE_INPUT_2 };
+        let ins: Vec<C::ScalarField> = (0..RESCUE_SPONGE_WIDTH)
+            .map(|i| witness.get_wire(Wire { gate: self.index, input: Self::wire_acc(i) }))
+            .collect();
 
-        let root_0_target = Wire { gate: self.index, input: Self::WIRE_ROOT_0 };
-        let root_1_target = Wire { gate: self.index, input: Self::WIRE_ROOT_1 };
-        let root_2_target = Wire { gate: self.index, input: Self::WIRE_ROOT_2 };
+        let roots: Vec<C::ScalarField> = ins.iter()
+            .map(|n| n.kth_root_u32(5))
+            .collect();
 
-        let out_0_target = Wire { gate: self.index + 1, input: Self::WIRE_INPUT_0 };
-        let out_1_target = Wire { gate: self.index + 1, input: Self::WIRE_INPUT_1 };
-        let out_2_target = Wire { gate: self.index + 1, input: Self::WIRE_INPUT_2 };
-
-        let in_0 = witness.get_wire(in_0_target);
-        let in_1 = witness.get_wire(in_1_target);
-        let in_2 = witness.get_wire(in_2_target);
-
-        let root_0 = in_0.kth_root_u32(5);
-        let root_1 = in_1.kth_root_u32(5);
-        let root_2 = in_2.kth_root_u32(5);
-
-        let out_0 = mds::<C::ScalarField>(3, 0, 0) * root_0 + mds::<C::ScalarField>(3, 0, 1) * root_1 + mds::<C::ScalarField>(3, 0, 2) * root_2 + constants[Self::PREFIX.len()];
-        let out_1 = mds::<C::ScalarField>(3, 1, 0) * root_0 + mds::<C::ScalarField>(3, 1, 1) * root_1 + mds::<C::ScalarField>(3, 1, 2) * root_2 + constants[Self::PREFIX.len() + 1];
-        let out_2 = mds::<C::ScalarField>(3, 2, 0) * root_0 + mds::<C::ScalarField>(3, 2, 1) * root_1 + mds::<C::ScalarField>(3, 2, 2) * root_2 + constants[Self::PREFIX.len() + 2];
+        let mds = mds_matrix::<C::ScalarField>(RESCUE_SPONGE_WIDTH);
 
         let mut result = PartialWitness::new();
-        result.set_wire(root_0_target, root_0);
-        result.set_wire(root_1_target, root_1);
-        result.set_wire(root_2_target, root_2);
-        result.set_wire(out_0_target, out_0);
-        result.set_wire(out_1_target, out_1);
-        result.set_wire(out_2_target, out_2);
+        for i in 0..RESCUE_SPONGE_WIDTH {
+            let wire_root_i = Wire { gate: self.index, input: Self::wire_root(i) };
+            result.set_wire(wire_root_i, roots[i]);
+
+            let mut out_i = constants[Self::PREFIX.len() + i];
+            for j in 0..RESCUE_SPONGE_WIDTH {
+                out_i = out_i + mds.get(i, j) * roots[j];
+            }
+            let wire_out_i = Wire { gate: self.index + 1, input: Self::wire_acc(i) };
+            result.set_wire(wire_out_i, out_i);
+        }
         result
     }
 }
@@ -1071,12 +1044,10 @@ impl<C: HaloCurve> RescueStepBGate<C> {
         RescueStepBGate { index, _phantom: PhantomData }
     }
 
-    pub const WIRE_INPUT_0: usize = 0;
-    pub const WIRE_INPUT_1: usize = 1;
-    pub const WIRE_INPUT_2: usize = 2;
-    pub const WIRE_OUTPUT_0: usize = 3;
-    pub const WIRE_OUTPUT_1: usize = 4;
-    pub const WIRE_OUTPUT_2: usize = 5;
+    /// Returns the index of the `i`th accumulator wire.
+    pub fn wire_acc(i: usize) -> usize {
+        return i;
+    }
 }
 
 impl<C: HaloCurve> Gate<C> for RescueStepBGate<C> {
@@ -1087,117 +1058,97 @@ impl<C: HaloCurve> Gate<C> for RescueStepBGate<C> {
     fn evaluate_unfiltered(
         local_constant_values: &[C::ScalarField],
         local_wire_values: &[C::ScalarField],
-        _right_wire_values: &[C::ScalarField],
+        right_wire_values: &[C::ScalarField],
         _below_wire_values: &[C::ScalarField],
     ) -> Vec<C::ScalarField> {
-        let in_0 = local_wire_values[Self::WIRE_INPUT_0];
-        let in_1 = local_wire_values[Self::WIRE_INPUT_1];
-        let in_2 = local_wire_values[Self::WIRE_INPUT_2];
-        let out_0 = local_wire_values[Self::WIRE_OUTPUT_0];
-        let out_1 = local_wire_values[Self::WIRE_OUTPUT_1];
-        let out_2 = local_wire_values[Self::WIRE_OUTPUT_2];
+        let ins: Vec<C::ScalarField> = (0..RESCUE_SPONGE_WIDTH)
+            .map(|i| local_wire_values[Self::wire_acc(i)])
+            .collect();
 
-        let in_0_exp_5 = in_0.exp_u32(5);
-        let in_1_exp_5 = in_1.exp_u32(5);
-        let in_2_exp_5 = in_2.exp_u32(5);
+        let exps: Vec<C::ScalarField> = ins.into_iter()
+            .map(|n| n.exp_usize(5))
+            .collect();
 
-        let computed_out_0 = mds::<C::ScalarField>(3, 0, 0) * in_0_exp_5 + mds::<C::ScalarField>(3, 0, 1) * in_1_exp_5 + mds::<C::ScalarField>(3, 0, 2) * in_2_exp_5 + local_constant_values[Self::PREFIX.len()];
-        let computed_out_1 = mds::<C::ScalarField>(3, 1, 0) * in_0_exp_5 + mds::<C::ScalarField>(3, 1, 1) * in_1_exp_5 + mds::<C::ScalarField>(3, 1, 2) * in_2_exp_5 + local_constant_values[Self::PREFIX.len() + 1];
-        let computed_out_2 = mds::<C::ScalarField>(3, 2, 0) * in_0_exp_5 + mds::<C::ScalarField>(3, 2, 1) * in_1_exp_5 + mds::<C::ScalarField>(3, 2, 2) * in_2_exp_5 + local_constant_values[Self::PREFIX.len() + 2];
+        let outs: Vec<C::ScalarField> = (0..RESCUE_SPONGE_WIDTH)
+            .map(|i| right_wire_values[Self::wire_acc(i)])
+            .collect();
 
-        vec![
-            computed_out_0 - out_0,
-            computed_out_1 - out_1,
-            computed_out_2 - out_2,
-        ]
+        let mds = mds_matrix::<C::ScalarField>(RESCUE_SPONGE_WIDTH);
+
+        let mut constraints = Vec::new();
+        for i in 0..RESCUE_SPONGE_WIDTH {
+            let mut computed_out_i = local_constant_values[Self::PREFIX.len() + i];
+            for j in 0..RESCUE_SPONGE_WIDTH {
+                computed_out_i = computed_out_i + mds.get(i, j) * exps[i];
+            }
+            constraints.push(computed_out_i - outs[i]);
+        }
+        constraints
     }
 
     fn evaluate_unfiltered_recursively(
         builder: &mut CircuitBuilder<C>,
         local_constant_values: &[Target],
         local_wire_values: &[Target],
-        _right_wire_values: &[Target],
+        right_wire_values: &[Target],
         _below_wire_values: &[Target],
     ) -> Vec<Target> {
-        let in_0 = local_wire_values[Self::WIRE_INPUT_0];
-        let in_1 = local_wire_values[Self::WIRE_INPUT_1];
-        let in_2 = local_wire_values[Self::WIRE_INPUT_2];
-        let out_0 = local_wire_values[Self::WIRE_OUTPUT_0];
-        let out_1 = local_wire_values[Self::WIRE_OUTPUT_1];
-        let out_2 = local_wire_values[Self::WIRE_OUTPUT_2];
+        let ins: Vec<Target> = (0..RESCUE_SPONGE_WIDTH)
+            .map(|i| local_wire_values[Self::wire_acc(i)])
+            .collect();
 
-        let in_0_exp_5 = builder.exp_constant_usize(in_0, 5);
-        let in_1_exp_5 = builder.exp_constant_usize(in_1, 5);
-        let in_2_exp_5 = builder.exp_constant_usize(in_2, 5);
+        let exps: Vec<Target> = ins.into_iter()
+            .map(|n| builder.exp_constant_usize(n, 5))
+            .collect();
 
-        let mds_00 = builder.constant_wire(mds::<C::ScalarField>(3, 0, 0));
-        let mds_01 = builder.constant_wire(mds::<C::ScalarField>(3, 0, 1));
-        let mds_02 = builder.constant_wire(mds::<C::ScalarField>(3, 0, 2));
-        let mds_10 = builder.constant_wire(mds::<C::ScalarField>(3, 1, 0));
-        let mds_11 = builder.constant_wire(mds::<C::ScalarField>(3, 1, 1));
-        let mds_12 = builder.constant_wire(mds::<C::ScalarField>(3, 1, 2));
-        let mds_20 = builder.constant_wire(mds::<C::ScalarField>(3, 2, 0));
-        let mds_21 = builder.constant_wire(mds::<C::ScalarField>(3, 2, 1));
-        let mds_22 = builder.constant_wire(mds::<C::ScalarField>(3, 2, 2));
+        let outs: Vec<Target> = (0..RESCUE_SPONGE_WIDTH)
+            .map(|i| right_wire_values[Self::wire_acc(i)])
+            .collect();
 
-        let mds_00_in_0_exp_5 = builder.mul(mds_00, in_0_exp_5);
-        let mds_01_in_1_exp_5 = builder.mul(mds_01, in_1_exp_5);
-        let mds_02_in_2_exp_5 = builder.mul(mds_02, in_2_exp_5);
-        let mds_10_in_0_exp_5 = builder.mul(mds_10, in_0_exp_5);
-        let mds_11_in_1_exp_5 = builder.mul(mds_11, in_1_exp_5);
-        let mds_12_in_2_exp_5 = builder.mul(mds_12, in_2_exp_5);
-        let mds_20_in_0_exp_5 = builder.mul(mds_20, in_0_exp_5);
-        let mds_21_in_1_exp_5 = builder.mul(mds_21, in_1_exp_5);
-        let mds_22_in_2_exp_5 = builder.mul(mds_22, in_2_exp_5);
+        let mds = mds_matrix::<C::ScalarField>(RESCUE_SPONGE_WIDTH);
 
-        let computed_out_0 = builder.add_many(&[mds_00_in_0_exp_5, mds_01_in_1_exp_5, mds_02_in_2_exp_5, local_constant_values[Self::PREFIX.len()]]);
-        let computed_out_1 = builder.add_many(&[mds_10_in_0_exp_5, mds_11_in_1_exp_5, mds_12_in_2_exp_5, local_constant_values[Self::PREFIX.len() + 1]]);
-        let computed_out_2 = builder.add_many(&[mds_20_in_0_exp_5, mds_21_in_1_exp_5, mds_22_in_2_exp_5, local_constant_values[Self::PREFIX.len() + 2]]);
-
-        vec![
-            builder.sub(computed_out_0, out_0),
-            builder.sub(computed_out_1, out_1),
-            builder.sub(computed_out_2, out_2),
-        ]
+        let mut constraints = Vec::new();
+        for i in 0..RESCUE_SPONGE_WIDTH {
+            let mut computed_out_i = local_constant_values[Self::PREFIX.len() + i];
+            for j in 0..RESCUE_SPONGE_WIDTH {
+                let mds_entry = builder.constant_wire(mds.get(i, j));
+                computed_out_i = builder.mul_add(mds_entry, exps[i], computed_out_i);
+            }
+            constraints.push(builder.sub(computed_out_i, outs[i]));
+        }
+        constraints
     }
 }
 
 impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for RescueStepBGate<C> {
     fn dependencies(&self) -> Vec<Target> {
-        vec![
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_INPUT_0 }),
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_INPUT_1 }),
-            Target::Wire(Wire { gate: self.index, input: Self::WIRE_INPUT_2 }),
-        ]
+        (0..RESCUE_SPONGE_WIDTH)
+            .map(|i| Target::Wire(Wire { gate: self.index, input: Self::wire_acc(i) }))
+            .collect()
     }
 
     fn generate(&self, constants: &Vec<Vec<C::ScalarField>>, witness: &PartialWitness<C::ScalarField>) -> PartialWitness<C::ScalarField> {
         let constants = &constants[self.index];
 
-        let in_0_target = Wire { gate: self.index, input: Self::WIRE_INPUT_0 };
-        let in_1_target = Wire { gate: self.index, input: Self::WIRE_INPUT_1 };
-        let in_2_target = Wire { gate: self.index, input: Self::WIRE_INPUT_2 };
+        let ins: Vec<C::ScalarField> = (0..RESCUE_SPONGE_WIDTH)
+            .map(|i| witness.get_wire(Wire { gate: self.index, input: Self::wire_acc(i) }))
+            .collect();
 
-        let out_0_target = Wire { gate: self.index + 1, input: Self::WIRE_INPUT_0 };
-        let out_1_target = Wire { gate: self.index + 1, input: Self::WIRE_INPUT_1 };
-        let out_2_target = Wire { gate: self.index + 1, input: Self::WIRE_INPUT_2 };
+        let exps: Vec<C::ScalarField> = ins.iter()
+            .map(|n| n.exp_usize(5))
+            .collect();
 
-        let in_0 = witness.get_wire(in_0_target);
-        let in_1 = witness.get_wire(in_1_target);
-        let in_2 = witness.get_wire(in_2_target);
-
-        let exp_0 = in_0.exp_u32(5);
-        let exp_1 = in_1.exp_u32(5);
-        let exp_2 = in_2.exp_u32(5);
-
-        let out_0 = mds::<C::ScalarField>(3, 0, 0) * exp_0 + mds::<C::ScalarField>(3, 0, 1) * exp_1 + mds::<C::ScalarField>(3, 0, 2) * exp_2 + constants[Self::PREFIX.len()];
-        let out_1 = mds::<C::ScalarField>(3, 1, 0) * exp_0 + mds::<C::ScalarField>(3, 1, 1) * exp_1 + mds::<C::ScalarField>(3, 1, 2) * exp_2 + constants[Self::PREFIX.len() + 1];
-        let out_2 = mds::<C::ScalarField>(3, 2, 0) * exp_0 + mds::<C::ScalarField>(3, 2, 1) * exp_1 + mds::<C::ScalarField>(3, 2, 2) * exp_2 + constants[Self::PREFIX.len() + 2];
+        let mds = mds_matrix::<C::ScalarField>(RESCUE_SPONGE_WIDTH);
 
         let mut result = PartialWitness::new();
-        result.set_wire(out_0_target, out_0);
-        result.set_wire(out_1_target, out_1);
-        result.set_wire(out_2_target, out_2);
+        for i in 0..RESCUE_SPONGE_WIDTH {
+            let mut out_i = constants[Self::PREFIX.len() + i];
+            for j in 0..RESCUE_SPONGE_WIDTH {
+                out_i = out_i + mds.get(i, j) * exps[j];
+            }
+            let wire_out_i = Wire { gate: self.index + 1, input: Self::wire_acc(i) };
+            result.set_wire(wire_out_i, out_i);
+        }
         result
     }
 }

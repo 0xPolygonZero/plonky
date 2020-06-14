@@ -1,15 +1,15 @@
-use rand::Rng;
+use std::cmp::Ordering;
+use std::cmp::Ordering::Equal;
 use std::collections::HashSet;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
+use anyhow::{Error, Result};
 use num::{BigUint, Integer, One};
-use anyhow::{Result, Error};
+use rand::Rng;
 
-use crate::{biguint_to_field, field_to_biguint, AffinePoint, Curve, ProjectivePoint, msm_parallel};
-use std::cmp::Ordering;
-use std::cmp::Ordering::Equal;
+use crate::{biguint_to_field, Curve, field_to_biguint, ProjectivePoint};
 
 pub trait Field:
     'static

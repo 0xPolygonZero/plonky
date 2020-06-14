@@ -3,7 +3,13 @@ use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use anyhow::Result;
+use rayon::prelude::*;
 
+use crate::{
+    AffinePoint, divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2,
+    FftPrecomputation, Field, HaloCurve, ifft_with_precomputation_power_of_2, msm_parallel,
+    MsmPrecomputation, OpeningSet, ProjectivePoint, Proof,
+};
 use crate::partition::{get_subgroup_shift, TargetPartitions};
 use crate::plonk_challenger::Challenger;
 use crate::plonk_util::{
@@ -14,11 +20,6 @@ use crate::plonk_util::{
 use crate::target::Target;
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::witness::{PartialWitness, Witness, WitnessGenerator};
-use crate::{
-    divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2,
-    ifft_with_precomputation_power_of_2, msm_parallel, AffinePoint, CircuitBuilder, Curve,
-    FftPrecomputation, Field, HaloCurve, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof,
-};
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
@@ -214,6 +215,7 @@ impl<C: HaloCurve> Circuit<C> {
         let all_opened_values_bf: Vec<_> = all_opened_values_sf
             .into_iter()
             .map(|f| {
+                // TODO: Fix this, this can regularly fail if a public input is not in range for example.
                 C::try_convert_s2b(f)
                     .expect("For now, we assume that all opened values fit in both fields")
             })
@@ -341,10 +343,12 @@ impl<C: HaloCurve> Circuit<C> {
                 &l_challenge_sf.scale_slice(b_lo),
                 &r_challenge_sf.scale_slice(b_hi),
             );
-            halo_g = ProjectivePoint::<C>::add_slices(
-                &l_challenge_sf.scale_proj_point_slice(g_lo),
-                &r_challenge_sf.scale_proj_point_slice(g_hi),
-            );
+            halo_g = g_lo.into_par_iter().zip(g_hi)
+                .map(|(&g_lo_i, &g_hi_i)| msm_parallel(
+                    &[l_challenge_sf, r_challenge_sf],
+                    &[g_lo_i, g_hi_i],
+                    4))
+                .collect();
         }
 
         debug_assert_eq!(halo_g.len(), 1);
@@ -699,6 +703,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_generate_proof_public_input2() {
         // Set many random public inputs
         let mut builder = CircuitBuilder::<Tweedledee>::new(128);
