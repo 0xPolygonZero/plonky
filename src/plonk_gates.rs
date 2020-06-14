@@ -1,17 +1,20 @@
 //! For reference, here is our gate prefix tree:
 //!
 //! ```text
-//! 00000* PublicInputGate
-//! 00001* CurveAddGate
-//! 00010* CurveDblGate
-//! 00011* CurveEndoGate
-//! 00100* Base4SumGate
-//! 00101* BufferGate
-//! 0011** ConstantGate
-//! 01**** ArithmeticGate
-//! 10**** RescueStepAGate
-//! 11**** RescueStepBGate
+//! 101001 PublicInputGate
+//! 101000 CurveAddGate
+//! 10111* CurveDblGate
+//! 11**** CurveEndoGate
+//! 1000** Base4SumGate
+//! 101010 BufferGate
+//! 10110* ConstantGate
+//! 1001** ArithmeticGate
+//! 00**** RescueStepAGate
+//! 01**** RescueStepBGate
 //! ```
+//!
+//! The `*`s above represent constants which are not used in the gate prefix, and are thus available
+//! for gate configuration.
 
 use std::marker::PhantomData;
 
@@ -198,7 +201,7 @@ impl<C: HaloCurve> PublicInputGate<C> {
 impl<C: HaloCurve> Gate<C> for PublicInputGate<C> {
     const NAME: &'static str = "PublicInputGate";
 
-    const PREFIX: &'static [bool] = &[false, false, false, false, false];
+    const PREFIX: &'static [bool] = &[true, false, true, false, false, true];
 
     fn evaluate_unfiltered(
         _local_constant_values: &[C::ScalarField],
@@ -267,7 +270,7 @@ impl<C: HaloCurve> BufferGate<C> {
 impl<C: HaloCurve> Gate<C> for BufferGate<C> {
     const NAME: &'static str = "BufferGate";
 
-    const PREFIX: &'static [bool] = &[false, false, true, false, true];
+    const PREFIX: &'static [bool] = &[true, false, true, false, true, false];
 
     fn evaluate_unfiltered(
         _local_constant_values: &[C::ScalarField],
@@ -316,7 +319,7 @@ impl<C: HaloCurve> ConstantGate<C> {
 impl<C: HaloCurve> Gate<C> for ConstantGate<C> {
     const NAME: &'static str = "ConstantGate";
 
-    const PREFIX: &'static [bool] = &[false, false, true, true];
+    const PREFIX: &'static [bool] = &[true, false, true, true, false];
 
     fn evaluate_unfiltered(
         local_constant_values: &[C::ScalarField],
@@ -391,7 +394,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField=C::ScalarField>>
 Gate<C> for CurveAddGate<C, InnerC> {
     const NAME: &'static str = "CurveAddGate";
 
-    const PREFIX: &'static [bool] = &[false, false, false, false, true];
+    const PREFIX: &'static [bool] = &[true, false, true, false, false, false];
 
     fn evaluate_unfiltered(
         _local_constant_values: &[InnerC::BaseField],
@@ -558,7 +561,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField=C::ScalarField>>
 Gate<C> for CurveDblGate<C, InnerC> {
     const NAME: &'static str = "CurveDblGate";
 
-    const PREFIX: &'static [bool] = &[false, false, false, true, false];
+    const PREFIX: &'static [bool] = &[true, false, true, true, true];
 
     fn evaluate_unfiltered(
         _local_constant_values: &[InnerC::BaseField],
@@ -696,7 +699,7 @@ impl<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>
 Gate<C> for CurveEndoGate<C, InnerC> {
     const NAME: &'static str = "CurveEndoGate";
 
-    const PREFIX: &'static [bool] = &[false, false, false, true, true];
+    const PREFIX: &'static [bool] = &[true, true];
 
     fn evaluate_unfiltered(
         _local_constant_values: &[InnerC::BaseField],
@@ -923,7 +926,7 @@ impl<C: HaloCurve> RescueStepAGate<C> {
 impl<C: HaloCurve> Gate<C> for RescueStepAGate<C> {
     const NAME: &'static str = "RescueStepAGate";
 
-    const PREFIX: &'static [bool] = &[true, false];
+    const PREFIX: &'static [bool] = &[false, false];
 
     fn evaluate_unfiltered(
         local_constant_values: &[C::ScalarField],
@@ -1079,7 +1082,7 @@ impl<C: HaloCurve> RescueStepBGate<C> {
 impl<C: HaloCurve> Gate<C> for RescueStepBGate<C> {
     const NAME: &'static str = "RescueStepBGate";
 
-    const PREFIX: &'static [bool] = &[true, true];
+    const PREFIX: &'static [bool] = &[false, true];
 
     fn evaluate_unfiltered(
         local_constant_values: &[C::ScalarField],
@@ -1219,7 +1222,7 @@ impl<C: HaloCurve> Base4SumGate<C> {
 impl<C: HaloCurve> Gate<C> for Base4SumGate<C> {
     const NAME: &'static str = "Base4SumGate";
 
-    const PREFIX: &'static [bool] = &[false, false, true, false, false];
+    const PREFIX: &'static [bool] = &[true, false, false, false];
 
     fn evaluate_unfiltered(
         _local_constant_values: &[C::ScalarField],
@@ -1299,7 +1302,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for Base4SumGate<C> {
 /// A gate which can be configured to perform various arithmetic. In particular, it computes
 ///
 /// ```text
-/// output := const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend + const_2
+/// output := const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend
 /// ```
 pub struct ArithmeticGate<C: HaloCurve> {
     pub index: usize,
@@ -1320,7 +1323,7 @@ impl<C: HaloCurve> ArithmeticGate<C> {
 impl<C: HaloCurve> Gate<C> for ArithmeticGate<C> {
     const NAME: &'static str = "ArithmeticGate";
 
-    const PREFIX: &'static [bool] = &[false, true];
+    const PREFIX: &'static [bool] = &[true, false, false, true];
 
     fn evaluate_unfiltered(
         local_constant_values: &[C::ScalarField],
@@ -1330,12 +1333,11 @@ impl<C: HaloCurve> Gate<C> for ArithmeticGate<C> {
     ) -> Vec<C::ScalarField> {
         let const_0 = local_constant_values[Self::PREFIX.len()];
         let const_1 = local_constant_values[Self::PREFIX.len() + 1];
-        let const_2 = local_constant_values[Self::PREFIX.len() + 2];
         let multiplicand_0 = local_wire_values[Self::WIRE_MULTIPLICAND_0];
         let multiplicand_1 = local_wire_values[Self::WIRE_MULTIPLICAND_1];
         let addend = local_wire_values[Self::WIRE_ADDEND];
         let output = local_wire_values[Self::WIRE_OUTPUT];
-        let computed_output = const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend + const_2;
+        let computed_output = const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend;
         vec![computed_output - output]
     }
 
@@ -1348,7 +1350,6 @@ impl<C: HaloCurve> Gate<C> for ArithmeticGate<C> {
     ) -> Vec<Target> {
         let const_0 = local_constant_values[Self::PREFIX.len()];
         let const_1 = local_constant_values[Self::PREFIX.len() + 1];
-        let const_2 = local_constant_values[Self::PREFIX.len() + 2];
         let multiplicand_0 = local_wire_values[Self::WIRE_MULTIPLICAND_0];
         let multiplicand_1 = local_wire_values[Self::WIRE_MULTIPLICAND_1];
         let addend = local_wire_values[Self::WIRE_ADDEND];
@@ -1356,7 +1357,7 @@ impl<C: HaloCurve> Gate<C> for ArithmeticGate<C> {
 
         let product_term = builder.mul_many(&[const_0, multiplicand_0, multiplicand_1]);
         let addend_term = builder.mul(const_1, addend);
-        let computed_output = builder.add_many(&[product_term, addend_term, const_2]);
+        let computed_output = builder.add_many(&[product_term, addend_term]);
         vec![builder.sub(computed_output, output)]
     }
 }
@@ -1378,13 +1379,12 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for ArithmeticGate<C> {
 
         let const_0 = constants[self.index][Self::PREFIX.len()];
         let const_1 = constants[self.index][Self::PREFIX.len() + 1];
-        let const_2 = constants[self.index][Self::PREFIX.len() + 2];
 
         let multiplicand_0 = witness.get_wire(multiplicand_0_target);
         let multiplicand_1 = witness.get_wire(multiplicand_1_target);
         let addend = witness.get_wire(addend_target);
 
-        let output = const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend + const_2;
+        let output = const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend;
 
         let mut result = PartialWitness::new();
         result.set_wire(output_target, output);
@@ -1402,7 +1402,7 @@ macro_rules! test_gate_low_degree {
             type C = $curve;
             type SF = <C as $crate::curve::Curve>::ScalarField;
 
-            let n = 1024;
+            let n = 256;
             let fft_precomputation_n = $crate::fft::fft_precompute::<SF>(n);
             let fft_precomputation_8n = $crate::fft::fft_precompute::<SF>(8 * n);
             let fft_precomputation_16n = $crate::fft::fft_precompute::<SF>(16 * n);
