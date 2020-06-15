@@ -1,13 +1,13 @@
-use anyhow::{Result, bail};
+use anyhow::{bail, ensure, Result, anyhow};
 
-use crate::{
-    AffinePoint, Circuit, Curve, Field, HaloCurve,  msm_execute_parallel,
-    msm_precompute, NUM_ROUTED_WIRES, NUM_WIRES, ProjectivePoint, Proof,
-};
 use crate::partition::get_subgroup_shift;
 use crate::plonk_challenger::Challenger;
 use crate::plonk_gates::evaluate_all_constraints;
 use crate::plonk_util::{halo_g, halo_n, powers, reduce_with_powers};
+use crate::{
+    msm_execute_parallel, msm_precompute, AffinePoint, Circuit, Curve, Field, HaloCurve,
+    ProjectivePoint, Proof, NUM_ROUTED_WIRES, NUM_WIRES, SchnorrProof
+};
 
 const SECURITY_BITS: usize = 128;
 
@@ -18,21 +18,19 @@ pub struct VerificationKey<C: Curve> {
     degree_log: usize,
 }
 
-pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>(
+pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     public_inputs: &[C::ScalarField],
     proof: &Proof<C>,
     circuit: &Circuit<C>,
 ) -> Result<()> {
     // Verify that the proof parameters are valid.
-    check_proof_parameters(proof);
+    check_proof_parameters(proof)?;
 
     // Check public inputs.
-    if !verify_public_inputs(public_inputs, proof) {
-        bail!("Public inputs don't match.");
-    }
+    verify_public_inputs(public_inputs, proof)?;
 
     // Observe the transcript and generate the associated challenge points using Fiat-Shamir.
-    let challs = get_challenges(proof, Challenger::new(SECURITY_BITS));
+    let challs = get_challenges(proof, Challenger::new(SECURITY_BITS))?;
 
     let degree = circuit.degree();
 
@@ -78,7 +76,7 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarF
         vec![vanishing_v_shift_term],
         constraint_terms,
     ]
-        .concat();
+    .concat();
 
     // Compute t(zeta).
     let computed_t_opening = reduce_with_powers(&vanishing_terms, challs.alpha) / zero_of_zeta;
@@ -202,7 +200,7 @@ fn verify_all_ipas<C: HaloCurve>(
         vec![proof.c_plonk_z],
         proof.c_plonk_t.clone(),
     ]
-        .concat();
+    .concat();
     let powers_of_u = powers(u, c_all.len());
     let actual_scalars = powers_of_u
         .iter()
@@ -221,7 +219,18 @@ fn verify_all_ipas<C: HaloCurve>(
     // Then, we reduce the above opening set reductions to a single value.
     let reduced_opening = reduce_with_powers(&opening_set_reductions, v);
 
-    verify_ipa::<C>(proof, c_reduction, reduced_opening, point, ipa_challenges, circuit.u, circuit.pedersen_h,proof.halo_g, schnorr_challenge, proof.schnorr_proof)
+    verify_ipa::<C>(
+        proof,
+        c_reduction,
+        reduced_opening,
+        point,
+        ipa_challenges,
+        circuit.u,
+        circuit.pedersen_h,
+        proof.halo_g,
+        schnorr_challenge,
+        proof.schnorr_proof,
+    )
 }
 
 /// Verify the final IPA.
@@ -235,7 +244,7 @@ fn verify_ipa<C: HaloCurve>(
     pedersen_h: AffinePoint<C>,
     halo_g_curve: AffinePoint<C>,
     schnorr_challenge: C::ScalarField,
-    schnorr_proof: (C::ScalarField, C::ScalarField),
+    schnorr_proof: SchnorrProof<C>,
 ) -> bool {
     // Now we begin IPA verification by computing P' and u' as in Protocol 1 of Bulletproofs.
     // In Protocol 1 we compute u' = [x] u, but we leverage to endomorphism, instead computing
@@ -244,41 +253,46 @@ fn verify_ipa<C: HaloCurve>(
     // Compute [c] [n(x)] u = [c] u'.
     let u_n_x_c = C::convert(value) * u_curve.to_projective();
     let p_prime = commitment + u_n_x_c;
+    dbg!(p_prime.to_affine());
 
     // Compute Q as defined in the Halo paper.
     let mut points = proof.halo_l.clone();
     points.extend(proof.halo_r.iter());
-    let mut scalars = ipa_challenges.clone();
+    let mut scalars = ipa_challenges.iter().map(|u| u.square()).collect::<Vec<_>>();
     scalars.extend(ipa_challenges.iter().map(|chal| {
-        halo_n::<C>(
-            &chal
-                .multiplicative_inverse_assuming_nonzero()
-                .to_canonical_bool_vec()[..SECURITY_BITS],
-        )
+            chal.multiplicative_inverse_assuming_nonzero().square()
     }));
     let precomputation = msm_precompute(&AffinePoint::batch_to_projective(&points), 8);
     let q = msm_execute_parallel(&precomputation, &scalars) + p_prime;
 
     // Performing ZK opening protocol.
+    dbg!(schnorr_challenge);
+    dbg!(q.to_affine());
     let b = halo_g(point, &ipa_challenges);
-    C::convert(schnorr_challenge) * q == C::convert(schnorr_proof.0) * (halo_g_curve.to_projective() + C::convert(b) * u_curve.to_projective()) + C::convert(schnorr_proof.1) * pedersen_h.to_projective()
+    C::convert(schnorr_challenge) * q + schnorr_proof.r
+        == C::convert(schnorr_proof.z1)
+            * (halo_g_curve.to_projective() + C::convert(b) * u_curve.to_projective())
+            + C::convert(schnorr_proof.z2) * pedersen_h.to_projective()
 }
 
 /// Verifies that the purported public inputs in a proof match a given set of scalars.
-fn verify_public_inputs<C: Curve>(public_inputs: &[C::ScalarField], proof: &Proof<C>) -> bool {
+fn verify_public_inputs<C: Curve>(
+    public_inputs: &[C::ScalarField],
+    proof: &Proof<C>,
+) -> Result<()> {
     for (i, &v) in public_inputs.iter().enumerate() {
         // If the value `v` doesn't match the corresponding wire in the `PublicInputGate`, return false.
         if v != proof.o_public_inputs[i / NUM_WIRES].o_wires[i % NUM_WIRES] {
-            return false;
+            bail!("{}-th public input is incorrect", i);
         }
     }
-    true
+    Ok(())
 }
 
 /// Check that the parameters in a proof are well-formed, i.e,
 /// that curve points are on the curve, and field elements are in range.
 /// Panics otherwise.
-fn check_proof_parameters<C: Curve>(proof: &Proof<C>) {
+fn check_proof_parameters<C: Curve>(proof: &Proof<C>) -> Result<()> {
     let Proof {
         c_wires,
         c_plonk_z,
@@ -290,24 +304,58 @@ fn check_proof_parameters<C: Curve>(proof: &Proof<C>) {
         ..
     } = proof;
     // Verify that the curve points are valid.
-    assert!(c_wires.iter().all(|p| p.is_valid()));
-    assert!(c_plonk_z.is_valid());
-    assert!(c_plonk_t.iter().all(|p| p.is_valid()));
-    assert!(halo_l.iter().all(|p| p.is_valid()));
-    assert!(halo_r.iter().all(|p| p.is_valid()));
-    assert!(halo_g.is_valid());
+    ensure!(
+        c_wires.iter().all(|p| p.is_valid()),
+        "A wire polynomial commitment is not on the curve."
+    );
+    ensure!(
+        c_plonk_z.is_valid(),
+        "The Z polynomial commitment is not on the curve."
+    );
+    ensure!(
+        c_plonk_t.iter().all(|p| p.is_valid()),
+        "A t polynomial commitment is not on the curve."
+    );
+    ensure!(
+        halo_l.iter().all(|p| p.is_valid()),
+        "A Halo left point is not on the curve."
+    );
+    ensure!(
+        halo_r.iter().all(|p| p.is_valid()),
+        "A Halo right point is not on the curve."
+    );
+    ensure!(halo_g.is_valid(), "The Halo G point is not on the curve.");
     // Verify that the field elements are valid.
-    assert!(proof.all_opening_sets().iter().all(|v| {
-        v.to_vec()
-            .iter()
-            .all(|x| <C::ScalarField as Field>::is_valid_canonical_u64(&x.to_canonical_u64_vec()))
-    }));
+    ensure!(
+        proof.all_opening_sets().iter().all(|v| {
+            v.to_vec().iter().all(|x| {
+                <C::ScalarField as Field>::is_valid_canonical_u64(&x.to_canonical_u64_vec())
+            })
+        }),
+        "An opening element is not in the field."
+    );
 
     // Verify that the Halo vectors have same length.
-    assert_eq!(halo_l.len(), halo_r.len());
+    ensure!(
+        halo_l.len() == halo_r.len(),
+        "The Halo L and R vecor don't have the same length."
+    );
 
-    assert!(<C::ScalarField as Field>::is_valid_canonical_u64(&schnorr_proof.0.to_canonical_u64_vec()));
-    assert!(<C::ScalarField as Field>::is_valid_canonical_u64(&schnorr_proof.1.to_canonical_u64_vec()));
+    // Verify that the Schnorr protocol data are valid.
+    ensure!(
+        &schnorr_proof.r.is_valid(),
+        "The Z polynomial commitment is not on the curve."
+    );
+    ensure!(
+        <C::ScalarField as Field>::is_valid_canonical_u64(&schnorr_proof.z1.to_canonical_u64_vec()),
+        "The first element in the Schnorr proof is not in the field."
+    );
+    ensure!(
+        <C::ScalarField as Field>::is_valid_canonical_u64(&schnorr_proof.z2.to_canonical_u64_vec()),
+        "The second element in the Schnorr proof is not in the field."
+    );
+
+    Ok(())
 }
 
 #[derive(Debug, Clone)]
@@ -326,38 +374,41 @@ struct ProofChallenge<C: Curve> {
 fn get_challenges<C: Curve>(
     proof: &Proof<C>,
     mut challenger: Challenger<C::BaseField>,
-) -> ProofChallenge<C> {
+) -> Result<ProofChallenge<C>> {
+    let error_msg = "Conversion from base to scalar field failed.";
     challenger.observe_affine_points(&proof.c_wires);
     let (beta_bf, gamma_bf) = challenger.get_2_challenges();
-    let beta = C::try_convert_b2s(beta_bf).expect("Improbable");
-    let gamma = C::try_convert_b2s(gamma_bf).expect("Improbable");
+    let beta = C::try_convert_b2s(beta_bf).map_err(|_| anyhow!(error_msg))?;
+    let gamma = C::try_convert_b2s(gamma_bf).map_err(|_| anyhow!(error_msg))?;
     challenger.observe_affine_point(proof.c_plonk_z);
     let alpha_bf = challenger.get_challenge();
-    let alpha = C::try_convert_b2s(alpha_bf).expect("Improbable");
+    let alpha = C::try_convert_b2s(alpha_bf).map_err(|_| anyhow!(error_msg))?;
     challenger.observe_affine_points(&proof.c_plonk_t);
     let zeta_bf = challenger.get_challenge();
-    let zeta = C::try_convert_b2s(zeta_bf).expect("Improbable");
-    proof.all_opening_sets().iter().for_each(|os| {
-        os.to_vec().iter().for_each(|&f| {
-            challenger.observe_element(C::try_convert_s2b(f).expect("Improbable"));
-        })
-    });
+    let zeta = C::try_convert_b2s(zeta_bf).map_err(|_| anyhow!(error_msg))?;
+    for os in proof.all_opening_sets().iter() {
+        for &f in os.to_vec().iter() {
+            challenger.observe_element(C::try_convert_s2b(f).map_err(|_| anyhow!(error_msg))?);
+        }
+    }
     let (v_bf, u_bf) = challenger.get_2_challenges();
-    let v = C::try_convert_b2s(v_bf).expect("Improbable");
-    let u = C::try_convert_b2s(u_bf).expect("Improbable");
+    let v = C::try_convert_b2s(v_bf).map_err(|_| anyhow!(error_msg))?;
+    let u = C::try_convert_b2s(u_bf).map_err(|_| anyhow!(error_msg))?;
 
     // Compute IPA challenges.
     let mut ipa_challenges = Vec::new();
     for i in 0..proof.halo_l.len() {
         challenger.observe_affine_points(&[proof.halo_l[i], proof.halo_r[i]]);
         let l_challenge = challenger.get_challenge();
-        ipa_challenges.push(C::try_convert_b2s(l_challenge).expect("Improbable"));
+        ipa_challenges.push(C::try_convert_b2s(l_challenge).map_err(|_| anyhow!(error_msg))?);
     }
 
+    // Compute challenge for Schnorr protocol.
+    challenger.observe_affine_point(proof.schnorr_proof.r);
     let schnorr_challenge_bf = challenger.get_challenge();
-    let schnorr_challenge = C::try_convert_b2s(schnorr_challenge_bf).expect("Improbable");
+    let schnorr_challenge = C::try_convert_b2s(schnorr_challenge_bf).map_err(|_| anyhow!(error_msg))?;
 
-    ProofChallenge {
+    Ok(ProofChallenge {
         beta,
         gamma,
         alpha,
@@ -366,5 +417,5 @@ fn get_challenges<C: Curve>(
         u,
         ipa_challenges,
         schnorr_challenge,
-    }
+    })
 }

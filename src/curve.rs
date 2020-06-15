@@ -3,13 +3,14 @@ use std::ops::Neg;
 use anyhow::Result;
 
 use crate::Field;
+use std::fmt::Debug;
 
 // To avoid implementation conflicts from associated types,
 // see https://github.com/rust-lang/rust/issues/20400
 pub struct CurveScalar<C: Curve>(pub <C as Curve>::ScalarField);
 
 /// A short Weierstrass curve.
-pub trait Curve: 'static + Sized + Copy {
+pub trait Curve: 'static + Sized + Copy + Debug {
     type BaseField: Field;
     type ScalarField: Field;
 

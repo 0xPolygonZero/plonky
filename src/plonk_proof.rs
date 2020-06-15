@@ -2,6 +2,13 @@ use anyhow::Result;
 
 use crate::{AffinePoint, AffinePointTarget, Curve, Field, PartialWitness, Target};
 
+#[derive(Debug, Clone, Copy)]
+pub struct SchnorrProof<C: Curve> {
+    pub r: AffinePoint<C>,
+    pub z1: C::ScalarField,
+    pub z2: C::ScalarField,
+}
+
 pub struct Proof<C: Curve> {
     /// A commitment to each wire polynomial.
     pub c_wires: Vec<AffinePoint<C>>,
@@ -26,7 +33,7 @@ pub struct Proof<C: Curve> {
     /// The purported value of G, i.e. <s, G>, in the context of Halo.
     pub halo_g: AffinePoint<C>,
     /// The two scalar used in the final Schnorr protocol of the Halo opening proof.
-    pub schnorr_proof: (C::ScalarField, C::ScalarField),
+    pub schnorr_proof: SchnorrProof<C>,
 }
 
 impl<C: Curve> Proof<C> {
