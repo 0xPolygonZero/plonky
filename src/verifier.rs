@@ -1,17 +1,13 @@
-use std::alloc::handle_alloc_error;
-
 use anyhow::{Result, bail};
 
 use crate::{
-    AffinePoint, Circuit, Curve, Field, HaloCurve, msm_execute, msm_execute_parallel,
+    AffinePoint, Circuit, Curve, Field, HaloCurve,  msm_execute_parallel,
     msm_precompute, NUM_ROUTED_WIRES, NUM_WIRES, ProjectivePoint, Proof,
 };
-use crate::fft::{fft_precompute, ifft_with_precomputation_power_of_2};
 use crate::partition::get_subgroup_shift;
 use crate::plonk_challenger::Challenger;
 use crate::plonk_gates::evaluate_all_constraints;
-use crate::plonk_proof::OpeningSet;
-use crate::plonk_util::{eval_poly, halo_g, halo_n, pedersen_hash, powers, reduce_with_powers};
+use crate::plonk_util::{halo_g, halo_n, powers, reduce_with_powers};
 
 const SECURITY_BITS: usize = 128;
 
@@ -27,19 +23,6 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarF
     proof: &Proof<C>,
     circuit: &Circuit<C>,
 ) -> Result<()> {
-    let Proof {
-        c_wires,
-        c_plonk_z,
-        c_plonk_t,
-        o_public_inputs,
-        o_local,
-        o_right,
-        o_below,
-        halo_l,
-        halo_r,
-        halo_g,
-        schnorr_proof,
-    } = proof;
     // Verify that the proof parameters are valid.
     check_proof_parameters(proof);
 
@@ -82,9 +65,9 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarF
         let k_i = get_subgroup_shift::<C::ScalarField>(i);
         let s_id = k_i * challs.zeta;
         let beta_s_id = challs.beta * s_id;
-        let beta_s_sigma = challs.beta * o_local.o_plonk_sigmas[i];
-        let f_prime_part = o_local.o_wires[i] + beta_s_id + challs.gamma;
-        let g_prime_part = o_local.o_wires[i] + beta_s_sigma + challs.gamma;
+        let beta_s_sigma = challs.beta * proof.o_local.o_plonk_sigmas[i];
+        let f_prime_part = proof.o_local.o_wires[i] + beta_s_id + challs.gamma;
+        let g_prime_part = proof.o_local.o_wires[i] + beta_s_sigma + challs.gamma;
         f_prime = f_prime * f_prime_part;
         g_prime = g_prime * g_prime_part;
     }
@@ -201,13 +184,6 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarF
 //     todo!()
 // }
 
-// fn public_input_polynomial<F: Field>(public_input: &[F], degree: usize) -> Vec<F> {
-//     let mut values = vec![F::ZERO; degree];
-//     (0..public_input.len()).for_each(|i| values[i] = public_input[i]);
-//     let fft_precomputation = fft_precompute(degree);
-//     ifft_with_precomputation_power_of_2(&values, &fft_precomputation)
-// }
-
 /// Verify all IPAs in the given proof using a reduction to a single polynomial.
 fn verify_all_ipas<C: HaloCurve>(
     circuit: &Circuit<C>,
@@ -307,14 +283,11 @@ fn check_proof_parameters<C: Curve>(proof: &Proof<C>) {
         c_wires,
         c_plonk_z,
         c_plonk_t,
-        o_public_inputs,
-        o_local,
-        o_right,
-        o_below,
         halo_l,
         halo_r,
         halo_g,
-        schnorr_proof
+        schnorr_proof,
+        ..
     } = proof;
     // Verify that the curve points are valid.
     assert!(c_wires.iter().all(|p| p.is_valid()));
