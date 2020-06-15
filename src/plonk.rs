@@ -151,8 +151,8 @@ impl<C: HaloCurve> Circuit<C> {
         }
 
         // Pad the coeffiecients to length a multiple of the degree.
-        if plonk_t_coeffs.len() % self.degree() != 0 {
-            plonk_t_coeffs.extend((0..self.degree()-plonk_t_coeffs.len()%self.degree()).map(|_| C::ScalarField::ZERO));
+        if plonk_t_coeffs.len() != QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER * self.degree() {
+            plonk_t_coeffs.extend((plonk_t_coeffs.len()..QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER *self.degree()).map(|_| C::ScalarField::ZERO));
         }
         // Split t into degree-n chunks.
         let plonk_t_coeff_chunks: Vec<Vec<C::ScalarField>> = plonk_t_coeffs
@@ -230,7 +230,6 @@ impl<C: HaloCurve> Circuit<C> {
         let (v_bf, u_bf) = challenger.get_2_challenges();
         let v_sf = v_bf.try_convert::<C::ScalarField>()?;
         let u_sf = u_bf.try_convert::<C::ScalarField>()?;
-        let u_curve = challenger.get_affine_point::<C>();
 
         // Make a list of all polynomials' commitments and coefficients, to be reduced later.
         // This must match the order of OpeningSet::to_vec.
@@ -360,7 +359,7 @@ impl<C: HaloCurve> Circuit<C> {
 
         debug_assert_eq!(halo_a.len(), 1);
         debug_assert_eq!(halo_b.len(), 1);
-        let schnorr_proof = self.schnorr_protocol(halo_a[0], halo_b[0], halo_g, randomness, u_curve, &mut challenger);
+        let schnorr_proof = self.schnorr_protocol(halo_a[0], halo_b[0], halo_g, randomness, self.u, &mut challenger);
 
         Ok(Proof {
             c_wires,

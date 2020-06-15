@@ -1,3 +1,4 @@
+use rayon::prelude::*;
 use crate::partition::get_subgroup_shift;
 use crate::witness::Witness;
 use crate::{
@@ -239,7 +240,7 @@ pub fn sigma_polynomials<F: Field>(
         .chunks(degree)
         .map(|chunk| {
             chunk
-                .iter()
+                .par_iter()
                 .map(|&x| {
                     get_subgroup_shift::<F>(x / degree) * subgroup_generator.exp_usize(x % degree)
                 })

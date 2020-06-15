@@ -18,8 +18,8 @@ const SECURITY_BITS: usize = 128;
 pub struct VerificationKey<C: Curve> {
     selector_commitments: Vec<AffinePoint<C>>,
     sigma_commitments: Vec<AffinePoint<C>>,
+    degree: usize,
     degree_log: usize,
-    degree_pow: usize,
 }
 
 pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>(
@@ -62,14 +62,14 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarF
     );
 
     // Evaluate zeta^degree.
-    let mut zeta_power_d = challs.zeta.exp_usize(degree);
+    let zeta_power_d = challs.zeta.exp_usize(degree);
     // Evaluate Z_H(zeta).
     let one = <C::ScalarField as Field>::ONE;
-    let z_of_zeta = zeta_power_d - one;
+    let zero_of_zeta = zeta_power_d - one;
 
     // Evaluate L_1(zeta) = (zeta^degree - 1) / (degree * (zeta - 1)).
     let lagrange_1_eval =
-        z_of_zeta / (C::ScalarField::from_canonical_usize(degree) * (challs.zeta - one));
+        zero_of_zeta / (C::ScalarField::from_canonical_usize(degree) * (challs.zeta - one));
 
     // Get z(zeta), z(g.zeta) from the proof openings.
     let (z_x, z_gx) = (proof.o_local.o_plonk_z, proof.o_right.o_plonk_z);
@@ -99,7 +99,7 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarF
         .concat();
 
     // Compute t(zeta).
-    let computed_t_opening = reduce_with_powers(&vanishing_terms, challs.alpha) / z_of_zeta;
+    let computed_t_opening = reduce_with_powers(&vanishing_terms, challs.alpha) / zero_of_zeta;
 
     // Compute the purported opening of t(zeta).
     let purported_t_opening = reduce_with_powers(&proof.o_local.o_plonk_t, zeta_power_d);
@@ -116,7 +116,6 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarF
         &proof,
         challs.u,
         challs.v,
-        challs.u_curve,
         challs.zeta,
         challs.ipa_challenges,
         challs.schnorr_challenge,
@@ -218,7 +217,6 @@ fn verify_all_ipas<C: HaloCurve>(
     proof: &Proof<C>,
     u: C::ScalarField,
     v: C::ScalarField,
-    u_curve: AffinePoint<C>,
     point: C::ScalarField,
     ipa_challenges: Vec<C::ScalarField>,
     schnorr_challenge: C::ScalarField,
@@ -250,7 +248,7 @@ fn verify_all_ipas<C: HaloCurve>(
     // Then, we reduce the above opening set reductions to a single value.
     let reduced_opening = reduce_with_powers(&opening_set_reductions, v);
 
-    verify_ipa::<C>(proof, c_reduction, reduced_opening, point, ipa_challenges, u_curve, circuit.pedersen_h,proof.halo_g, schnorr_challenge, proof.schnorr_proof)
+    verify_ipa::<C>(proof, c_reduction, reduced_opening, point, ipa_challenges, circuit.u, circuit.pedersen_h,proof.halo_g, schnorr_challenge, proof.schnorr_proof)
 }
 
 /// Verify the final IPA.
@@ -350,7 +348,6 @@ struct ProofChallenge<C: Curve> {
     zeta: C::ScalarField,
     v: C::ScalarField,
     u: C::ScalarField,
-    u_curve: AffinePoint<C>,
     ipa_challenges: Vec<C::ScalarField>,
     schnorr_challenge: C::ScalarField,
 }
@@ -378,8 +375,6 @@ fn get_challenges<C: Curve>(
     let (v_bf, u_bf) = challenger.get_2_challenges();
     let v = C::try_convert_b2s(v_bf).expect("Improbable");
     let u = C::try_convert_b2s(u_bf).expect("Improbable");
-    // U is the curve point used in VerifyOpen in the Halo polynomial commitment.
-    let u_curve = challenger.get_affine_point();
 
     // Compute IPA challenges.
     let mut ipa_challenges = Vec::new();
@@ -399,7 +394,6 @@ fn get_challenges<C: Curve>(
         zeta,
         v,
         u,
-        u_curve,
         ipa_challenges,
         schnorr_challenge,
     }
