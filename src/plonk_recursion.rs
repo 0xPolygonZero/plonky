@@ -1,4 +1,4 @@
-use crate::{AffinePointTarget, Circuit, CircuitBuilder, CurveMulOp, Field, get_subgroup_shift, HaloCurve, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, OpeningSetTarget, ProofTarget, PublicInput, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, Target};
+use crate::{AffinePointTarget, Circuit, CircuitBuilder, CurveMulOp, Field, get_subgroup_shift, HaloCurve, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, OpeningSetTarget, ProofTarget, PublicInput, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, Target, hash_usize_to_curve};
 use crate::plonk_challenger::RecursiveChallenger;
 use crate::plonk_gates::evaluate_all_constraints_recursively;
 use crate::plonk_util::{powers_recursive, reduce_with_powers_recursive};
@@ -118,8 +118,7 @@ pub fn recursive_verification_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField=
         let l_challenge = challenger.get_challenge(&mut builder);
         ipa_challenges.push(l_challenge);
     }
-
-    let (u_l, u_r) = verify_all_ipas::<C, InnerC>(&mut builder, &proof, u, v, x, ipa_challenges);
+    let (u_l, u_r) = verify_all_ipas::<C, InnerC>(&mut builder, &proof, u, v, x, ipa_challenges, security_bits);
 
     // "Outputs" data relating to assumption which still need to be verified by the next proof.
     builder.copy(public_inputs.beta.routable_target(), beta);
@@ -157,6 +156,7 @@ fn verify_all_ipas<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>(
     v: Target,
     x: Target,
     ipa_challenges: Vec<Target>,
+    security_bits: usize
 ) -> (Vec<Target>, Vec<Target>) {
     // Reduce all polynomial commitments to a single one, i.e. a random combination of them.
     // TODO: Configure the actual constants and permutations of whatever circuit we wish to verify.
@@ -190,7 +190,7 @@ fn verify_all_ipas<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>(
     // Then, we reduce the above opening set reductions to a single value.
     let reduced_opening = reduce_with_powers_recursive(builder, &opening_set_reductions, v);
 
-    verify_ipa::<C, InnerC>(builder, proof, c_reduction, reduced_opening, x, ipa_challenges)
+    verify_ipa::<C, InnerC>(builder, proof, c_reduction, reduced_opening, x, ipa_challenges, security_bits)
 }
 
 /// Verify the final IPA. Return `(u_l, u_r)`, which roughly correspond to `u` and `u^{-1}` in the
@@ -202,11 +202,15 @@ fn verify_ipa<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>(
     c: Target,
     x: Target,
     ipa_challenges: Vec<Target>,
+    security_bits: usize
 ) -> (Vec<Target>, Vec<Target>) {
     // Now we begin IPA verification by computing P' and u' as in Protocol 1 of Bulletproofs.
     // In Protocol 1 we compute u' = [x] u, but we leverage to endomorphism, instead computing
     // u' = [n(x)] u.
-    let u = builder.constant_affine_point(InnerC::GENERATOR_AFFINE);
+    // u is set to H(degree + 1). 
+    let u = builder.constant_affine_point(
+        hash_usize_to_curve::<InnerC>((1 << ipa_challenges.len()) + 1 , security_bits)
+    );
     let u_prime = builder.curve_mul_endo::<InnerC>(CurveMulOp { scalar: x, point: u }).mul_result;
 
     // Compute [c] [n(x)] u = [c] u'.

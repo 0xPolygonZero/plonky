@@ -151,8 +151,8 @@ impl<C: HaloCurve> Circuit<C> {
         }
 
         // Pad the coeffiecients to length a multiple of the degree.
-        if plonk_t_coeffs.len() % self.degree() != 0 {
-            plonk_t_coeffs.extend((0..self.degree()-plonk_t_coeffs.len()%self.degree()).map(|_| C::ScalarField::ZERO));
+        if plonk_t_coeffs.len() != QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER * self.degree() {
+            plonk_t_coeffs.extend((plonk_t_coeffs.len()..QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER *self.degree()).map(|_| C::ScalarField::ZERO));
         }
         // Split t into degree-n chunks.
         let plonk_t_coeff_chunks: Vec<Vec<C::ScalarField>> = plonk_t_coeffs
@@ -230,7 +230,6 @@ impl<C: HaloCurve> Circuit<C> {
         let (v_bf, u_bf) = challenger.get_2_challenges();
         let v_sf = v_bf.try_convert::<C::ScalarField>()?;
         let u_sf = u_bf.try_convert::<C::ScalarField>()?;
-        let u_curve = challenger.get_affine_point::<C>();
 
         // Make a list of all polynomials' commitments and coefficients, to be reduced later.
         // This must match the order of OpeningSet::to_vec.
@@ -288,6 +287,10 @@ impl<C: HaloCurve> Circuit<C> {
         // Then, we reduce the above opening set reductions to a single value.
         let _reduced_opening = reduce_with_powers(&opening_set_reductions, v_sf);
 
+        let u_scaling_bf = challenger.get_challenge();
+        let u_scaling_sf = u_scaling_bf.try_convert::<C::ScalarField>()?;
+        let u_curve = C::convert(u_scaling_sf) * self.u.to_projective();
+
         // Final IPA proof.
         let mut halo_a = reduced_coeffs;
         let mut halo_b = powers(zeta_sf, self.degree());
@@ -319,12 +322,12 @@ impl<C: HaloCurve> Circuit<C> {
             // L_i = <a_lo, G_hi> + [l_j] H + [<a_lo, b_hi>] U.
             let halo_l_j = msm_parallel(a_lo, g_hi, window_size)
                 + C::convert(l_j_blinding_factor) * self.pedersen_h.to_projective()
-                + C::convert(C::ScalarField::inner_product(a_lo, b_hi)) * self.u.to_projective();
+                + C::convert(C::ScalarField::inner_product(a_lo, b_hi)) * u_curve;
             halo_l.push(halo_l_j);
             // R_i = <a_hi, G_lo> + [r_j] H + [<a_hi, b_lo>] U.
             let halo_r_j = msm_parallel(a_hi, g_lo, window_size)
                 + C::convert(r_j_blinding_factor) * self.pedersen_h.to_projective()
-                + C::convert(C::ScalarField::inner_product(a_hi, b_lo)) * self.u.to_projective();
+                + C::convert(C::ScalarField::inner_product(a_hi, b_lo)) * u_curve;
             halo_r.push(halo_r_j);
 
             challenger.observe_proj_points(&[halo_l_j, halo_r_j]);
@@ -596,12 +599,12 @@ impl<C: HaloCurve> Circuit<C> {
         halo_b: C::ScalarField,
         halo_g: AffinePoint<C>,
         randomness: C::ScalarField,
-        u_curve: AffinePoint<C>,
+        u_curve: ProjectivePoint<C>,
         challenger: &mut Challenger<C::BaseField>,
     ) -> (C::ScalarField, C::ScalarField) {
         let (d, s) = (C::ScalarField::rand(), C::ScalarField::rand());
         let r_curve = C::convert(d)
-            * (halo_g.to_projective() + C::convert(halo_b) * u_curve.to_projective())
+            * (halo_g.to_projective() + C::convert(halo_b) * u_curve)
             + C::convert(s) * self.pedersen_h.to_projective();
         challenger.observe_proj_point(r_curve);
         let chall_bf = challenger.get_challenge();

@@ -30,12 +30,9 @@ impl<F: Field> Challenger<F> {
     }
 
     pub(crate) fn observe_affine_point<C: Curve<BaseField=F>>(&mut self, point: AffinePoint<C>) {
-        if !point.zero {
-            self.observe_element(point.x);
-            self.observe_element(point.y);
-        } else {
-            self.observe_element(F::ZERO);
-        }
+        debug_assert!(!point.zero);
+        self.observe_element(point.x);
+        self.observe_element(point.y);
     }
 
     pub(crate) fn observe_affine_points<C: Curve<BaseField=F>>(
@@ -89,24 +86,6 @@ impl<F: Field> Challenger<F> {
         let challenges = rescue_sponge(self.transcript.clone(), n, self.security_bits);
         self.transcript = vec![challenges[0]];
         challenges
-    }
-
-    pub(crate) fn get_affine_point<C: Curve<BaseField=F>>(&mut self) -> AffinePoint<C> {
-        let mut transcript = self.transcript.clone();
-        transcript.push(F::ZERO);
-        let mut i = F::ZERO;
-        loop {
-            *transcript.last_mut().unwrap() = i;
-            let x = rescue_sponge(transcript.clone(), 2, self.security_bits);
-            let square_candidate = x[0].cube() + C::A * x[0] + C::B;
-            if let Some(mut y) = square_candidate.square_root() {
-                if x[1].to_canonical_bool_vec()[0] {
-                    y = -y;
-                }
-                return AffinePoint::nonzero(x[0], y);
-            }
-            i = i + F::ONE;
-        }
     }
 }
 
