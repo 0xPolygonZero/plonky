@@ -290,6 +290,10 @@ impl<C: HaloCurve> Circuit<C> {
         dbg!((_reduced_commit + C::convert(_reduced_opening)*self.u.to_projective()).to_affine());
         dbg!(_reduced_commit.to_affine());
         dbg!(coeffs_to_commitments(&[reduced_coeffs.clone()], &self.pedersen_g_msm_precomputation));
+        let u_scaling_bf = challenger.get_challenge();
+        let u_scaling_sf = u_scaling_bf.try_convert::<C::ScalarField>()?;
+        let u_curve = C::convert(u_scaling_sf) * self.u.to_projective();
+        dbg!(u_curve.to_affine());
 
         // Final IPA proof.
         let mut halo_a = reduced_coeffs;
@@ -322,12 +326,12 @@ impl<C: HaloCurve> Circuit<C> {
             // L_i = <a_lo, G_hi> + [l_j] H + [<a_lo, b_hi>] U.
             let halo_l_j = msm_parallel(a_lo, g_hi, window_size)
                 + C::convert(l_j_blinding_factor) * self.pedersen_h.to_projective()
-                + C::convert(C::ScalarField::inner_product(a_lo, b_hi)) * self.u.to_projective();
+                + C::convert(C::ScalarField::inner_product(a_lo, b_hi)) * u_curve;
             halo_l.push(halo_l_j);
             // R_i = <a_hi, G_lo> + [r_j] H + [<a_hi, b_lo>] U.
             let halo_r_j = msm_parallel(a_hi, g_lo, window_size)
                 + C::convert(r_j_blinding_factor) * self.pedersen_h.to_projective()
-                + C::convert(C::ScalarField::inner_product(a_hi, b_lo)) * self.u.to_projective();
+                + C::convert(C::ScalarField::inner_product(a_hi, b_lo)) * u_curve;
             halo_r.push(halo_r_j);
 
             challenger.observe_proj_points(&[halo_l_j, halo_r_j]);
@@ -363,7 +367,7 @@ impl<C: HaloCurve> Circuit<C> {
 
         debug_assert_eq!(halo_a.len(), 1);
         debug_assert_eq!(halo_b.len(), 1);
-        let schnorr_proof = self.schnorr_protocol(halo_a[0], halo_b[0], halo_g, randomness, &mut challenger);
+        let schnorr_proof = self.schnorr_protocol(halo_a[0], halo_b[0], halo_g, randomness, u_curve, &mut challenger);
 
         Ok(Proof {
             c_wires,
@@ -599,21 +603,21 @@ impl<C: HaloCurve> Circuit<C> {
         halo_b: C::ScalarField,
         halo_g: AffinePoint<C>,
         randomness: C::ScalarField,
+        u_curve: ProjectivePoint<C>,
         challenger: &mut Challenger<C::BaseField>,
     ) -> SchnorrProof<C> {
         dbg!((C::convert(halo_a)*(halo_g.to_projective() + C::convert(halo_b)*self.u.to_projective()) + C::convert(randomness)*self.pedersen_h.to_projective()).to_affine());
         let (d, s) = (C::ScalarField::rand(), C::ScalarField::rand());
-        let r = (C::convert(d)
-            * (halo_g.to_projective() + C::convert(halo_b) * self.u.to_projective())
-            + C::convert(s) * self.pedersen_h.to_projective()).to_affine();
-
-        challenger.observe_affine_point(r);
+        let r_curve = C::convert(d)
+            * (halo_g.to_projective() + C::convert(halo_b) * u_curve)
+            + C::convert(s) * self.pedersen_h.to_projective();
+        challenger.observe_proj_point(r_curve);
         let chall_bf = challenger.get_challenge();
         let chall = chall_bf.try_convert::<C::ScalarField>().expect("Improbable");
         dbg!(chall);
         let z1 = halo_a * chall + d;
         let z2 = randomness * chall + s;
-        SchnorrProof {r, z1, z2 }
+        SchnorrProof {r: r_curve.to_affine(), z1, z2 }
     }
 }
 
