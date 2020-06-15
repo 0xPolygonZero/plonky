@@ -1,6 +1,6 @@
 use std::alloc::handle_alloc_error;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 
 use crate::{
     AffinePoint, Circuit, Curve, Field, HaloCurve, msm_execute, msm_execute_parallel,
@@ -26,7 +26,7 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarF
     public_inputs: &[C::ScalarField],
     proof: &Proof<C>,
     circuit: &Circuit<C>,
-) -> Result<bool> {
+) -> Result<()> {
     let Proof {
         c_wires,
         c_plonk_z,
@@ -45,8 +45,7 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarF
 
     // Check public inputs.
     if !verify_public_inputs(public_inputs, proof) {
-        println!("Public inputs don't match.");
-        return Ok(false);
+        bail!("Public inputs don't match.");
     }
 
     // Observe the transcript and generate the associated challenge points using Fiat-Shamir.
@@ -106,8 +105,7 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarF
 
     // If the two values differ, the proof is invalid.
     if computed_t_opening != purported_t_opening {
-        println!("Incorrect opening");
-        return Ok(false);
+        bail!("Incorrect opening of the t polynomial.");
     }
 
     // Verify polynomial commitment openings.
@@ -120,8 +118,7 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarF
         challs.ipa_challenges,
         challs.schnorr_challenge,
     ) {
-        println!("Invalid IPA proof.");
-        return Ok(false);
+        bail!("Invalid IPA proof.");
     }
     todo!()
 }
