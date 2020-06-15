@@ -1,17 +1,20 @@
 //! For reference, here is our gate prefix tree:
 //!
 //! ```text
-//! 00000 PublicInputGate
-//! 00001 CurveAddGate
-//! 00010 CurveDblGate
-//! 00011 CurveEndoGate
-//! 00100 Base4SumGate
-//! 00101 BufferGate
-//! 0011* ConstantGate
-//! 01*** ArithmeticGate
-//! 10*** RescueStepAGate
-//! 11*** RescueStepBGate
+//! 101001 PublicInputGate
+//! 101000 CurveAddGate
+//! 10111* CurveDblGate
+//! 11**** CurveEndoGate
+//! 1000** Base4SumGate
+//! 101010 BufferGate
+//! 10110* ConstantGate
+//! 1001** ArithmeticGate
+//! 00**** RescueStepAGate
+//! 01**** RescueStepBGate
 //! ```
+//!
+//! The `*`s above represent constants which are not used in the gate prefix, and are thus available
+//! for gate configuration.
 
 use std::marker::PhantomData;
 
@@ -199,7 +202,7 @@ impl<C: HaloCurve> PublicInputGate<C> {
 impl<C: HaloCurve> Gate<C> for PublicInputGate<C> {
     const NAME: &'static str = "PublicInputGate";
 
-    const PREFIX: &'static [bool] = &[false, false, false, false, false];
+    const PREFIX: &'static [bool] = &[true, false, true, false, false, true];
 
     fn evaluate_unfiltered(
         _local_constant_values: &[C::ScalarField],
@@ -268,7 +271,7 @@ impl<C: HaloCurve> BufferGate<C> {
 impl<C: HaloCurve> Gate<C> for BufferGate<C> {
     const NAME: &'static str = "BufferGate";
 
-    const PREFIX: &'static [bool] = &[false, false, true, false, true];
+    const PREFIX: &'static [bool] = &[true, false, true, false, true, false];
 
     fn evaluate_unfiltered(
         _local_constant_values: &[C::ScalarField],
@@ -317,7 +320,7 @@ impl<C: HaloCurve> ConstantGate<C> {
 impl<C: HaloCurve> Gate<C> for ConstantGate<C> {
     const NAME: &'static str = "ConstantGate";
 
-    const PREFIX: &'static [bool] = &[false, false, true, true];
+    const PREFIX: &'static [bool] = &[true, false, true, true, false];
 
     fn evaluate_unfiltered(
         local_constant_values: &[C::ScalarField],
@@ -385,13 +388,14 @@ CurveAddGate<C, InnerC> {
     pub const WIRE_ADDEND_Y: usize = 5;
     pub const WIRE_SCALAR_BIT: usize = 6;
     pub const WIRE_INVERSE: usize = 7;
+    pub const WIRE_LAMBDA: usize = 8;
 }
 
 impl<C: HaloCurve, InnerC: Curve<BaseField=C::ScalarField>>
 Gate<C> for CurveAddGate<C, InnerC> {
     const NAME: &'static str = "CurveAddGate";
 
-    const PREFIX: &'static [bool] = &[false, false, false, false, true];
+    const PREFIX: &'static [bool] = &[true, false, true, false, false, false];
 
     fn evaluate_unfiltered(
         _local_constant_values: &[InnerC::BaseField],
@@ -410,12 +414,14 @@ Gate<C> for CurveAddGate<C, InnerC> {
         let y2 = local_wire_values[Self::WIRE_ADDEND_Y];
         let scalar_bit = local_wire_values[Self::WIRE_SCALAR_BIT];
         let inverse = local_wire_values[Self::WIRE_INVERSE];
+        let lambda = local_wire_values[Self::WIRE_LAMBDA];
 
-        let lambda = (y1 - y2) * inverse;
+        let computed_lambda = (y1 - y2) * inverse;
         let computed_x3 = lambda.square() - x1 - x2;
         let computed_y3 = lambda * (x1 - x3) - y1;
 
         vec![
+            computed_lambda - lambda,
             computed_x3 - x3,
             computed_y3 - y3,
             scalar_acc_new - scalar_acc_old.double() + scalar_bit,
@@ -442,13 +448,14 @@ Gate<C> for CurveAddGate<C, InnerC> {
         let y2 = local_wire_values[Self::WIRE_ADDEND_Y];
         let scalar_bit = local_wire_values[Self::WIRE_SCALAR_BIT];
         let inverse = local_wire_values[Self::WIRE_INVERSE];
+        let lambda = local_wire_values[Self::WIRE_LAMBDA];
 
         let x1_minus_x2 = builder.sub(x1, x2);
         let x1_plus_x2 = builder.add(x1, x2);
         let x1_minus_x3 = builder.sub(x1, x3);
         let y1_minus_y2 = builder.sub(y1, y2);
 
-        let lambda = builder.mul(y1_minus_y2, inverse);
+        let computed_lambda = builder.mul(y1_minus_y2, inverse);
         let computed_x3 = builder.mul_sub(lambda, lambda, x1_plus_x2);
         let computed_y3 = builder.mul_sub(lambda, x1_minus_x3, y1);
 
@@ -456,6 +463,7 @@ Gate<C> for CurveAddGate<C, InnerC> {
         let computed_scalar_acc_new = builder.add(double_scalar_acc_old, scalar_bit);
 
         vec![
+            builder.sub(computed_lambda, lambda),
             builder.sub(computed_x3, x3),
             builder.sub(computed_y3, y3),
             builder.sub(computed_scalar_acc_new, scalar_acc_new),
@@ -489,37 +497,42 @@ WitnessGenerator<C::ScalarField> for CurveAddGate<C, InnerC> {
         let addend_y_target = Wire { gate: self.index, input: Self::WIRE_ADDEND_Y };
         let scalar_bit_target = Wire { gate: self.index, input: Self::WIRE_SCALAR_BIT };
         let inverse_target = Wire { gate: self.index, input: Self::WIRE_INVERSE };
+        let lambda_target = Wire { gate: self.index, input: Self::WIRE_LAMBDA };
 
         let group_acc_old_x = witness.get_wire(group_acc_old_x_target);
         let group_acc_old_y = witness.get_wire(group_acc_old_y_target);
-        let group_acc_old = AffinePoint::<InnerC>::nonzero(group_acc_old_x, group_acc_old_y);
 
         let scalar_acc_old = witness.get_wire(scalar_acc_old_target);
 
         let addend_x = witness.get_wire(addend_x_target);
         let addend_y = witness.get_wire(addend_y_target);
-        let addend = AffinePoint::<InnerC>::nonzero(addend_x, addend_y);
 
         let scalar_bit = witness.get_wire(scalar_bit_target);
         debug_assert!(scalar_bit.is_zero() || scalar_bit.is_one());
-
-        let mut group_acc_new = group_acc_old;
-        if scalar_bit.is_one() {
-            group_acc_new = (group_acc_new + addend).to_affine();
-        }
 
         let scalar_acc_new = scalar_acc_old.double() + scalar_bit;
 
         // Here's where our abstraction leaks a bit. Although we already have the sum, we need to
         // redo part of the computation in order to populate the purported inverse wire.
         let dx = group_acc_old_x - addend_x;
+        let dy = group_acc_old_y - addend_y;
         let inverse = dx.multiplicative_inverse().expect("x_1 = x_2");
+        let lambda = dy * inverse;
+
+        let x_3 = lambda.square() - group_acc_old_x - addend_x;
+        let y_3 = lambda * (group_acc_old_x - x_3) - group_acc_old_y;
+        let (group_acc_new_x, group_acc_new_y) = if scalar_bit.is_one() {
+            (x_3, y_3)
+        } else {
+            (group_acc_old_x, group_acc_old_y)
+        };
 
         let mut result = PartialWitness::new();
-        result.set_wire(group_acc_new_x_target, group_acc_new.x);
-        result.set_wire(group_acc_new_y_target, group_acc_new.y);
+        result.set_wire(group_acc_new_x_target, group_acc_new_x);
+        result.set_wire(group_acc_new_y_target, group_acc_new_y);
         result.set_wire(scalar_acc_new_target, scalar_acc_new);
         result.set_wire(inverse_target, inverse);
+        result.set_wire(lambda_target, lambda);
         result
     }
 }
@@ -542,13 +555,14 @@ CurveDblGate<C, InnerC> {
     pub const WIRE_X_NEW: usize = 2;
     pub const WIRE_Y_NEW: usize = 3;
     pub const WIRE_INVERSE: usize = 4;
+    pub const WIRE_LAMBDA: usize = 5;
 }
 
 impl<C: HaloCurve, InnerC: Curve<BaseField=C::ScalarField>>
 Gate<C> for CurveDblGate<C, InnerC> {
     const NAME: &'static str = "CurveDblGate";
 
-    const PREFIX: &'static [bool] = &[false, false, false, true, false];
+    const PREFIX: &'static [bool] = &[true, false, true, true, true];
 
     fn evaluate_unfiltered(
         _local_constant_values: &[InnerC::BaseField],
@@ -561,13 +575,16 @@ Gate<C> for CurveDblGate<C, InnerC> {
         let x_new = local_wire_values[Self::WIRE_X_NEW];
         let y_new = local_wire_values[Self::WIRE_Y_NEW];
         let inverse = local_wire_values[Self::WIRE_INVERSE];
+        let lambda = local_wire_values[Self::WIRE_LAMBDA];
 
-        let lambda_numerator = x_old.square().triple() + InnerC::A;
-        let lambda = lambda_numerator * inverse;
+        let computed_lambda_numerator = x_old.square().triple() + InnerC::A;
+        let computed_lambda = computed_lambda_numerator * inverse;
         let computed_x_new = lambda.square() - x_old.double();
         let computed_y_new = lambda * (x_old - x_new) - y_old;
 
         vec![
+            // Verify that computed_lambda matches lambda.
+            computed_lambda - lambda,
             // Verify that computed_x_new matches x_new.
             computed_x_new - x_new,
             // Verify that computed_y_new matches y_new.
@@ -593,13 +610,14 @@ Gate<C> for CurveDblGate<C, InnerC> {
         let x_new = local_wire_values[Self::WIRE_X_NEW];
         let y_new = local_wire_values[Self::WIRE_Y_NEW];
         let inverse = local_wire_values[Self::WIRE_INVERSE];
+        let lambda = local_wire_values[Self::WIRE_LAMBDA];
 
         let two_x_old = builder.double(x_old);
         let two_y_old = builder.double(y_old);
         let x_old_squared = builder.square(x_old);
         let three_x_old_squared = builder.mul(three, x_old_squared);
-        let lambda_numerator = builder.add(three_x_old_squared, a);
-        let lambda = builder.mul(lambda_numerator, inverse);
+        let computed_lambda_numerator = builder.add(three_x_old_squared, a);
+        let computed_lambda = builder.mul(computed_lambda_numerator, inverse);
         let lambda_squared = builder.square(lambda);
         let computed_x_new = builder.sub(lambda_squared, two_x_old);
         let delta_x = builder.sub(x_old, x_new);
@@ -607,6 +625,8 @@ Gate<C> for CurveDblGate<C, InnerC> {
         let computed_y_new = builder.sub(lambda_times_delta_x, y_old);
 
         vec![
+            // Verify that computed_lambda matches lambda.
+            builder.sub(computed_lambda, lambda),
             // Verify that computed_x_new matches x_new.
             builder.sub(computed_x_new, x_new),
             // Verify that computed_y_new matches y_new.
@@ -632,20 +652,21 @@ WitnessGenerator<C::ScalarField> for CurveDblGate<C, InnerC> {
         let x_new_target = Wire { gate: self.index, input: Self::WIRE_X_NEW };
         let y_new_target = Wire { gate: self.index, input: Self::WIRE_Y_NEW };
         let inverse_target = Wire { gate: self.index, input: Self::WIRE_INVERSE };
+        let lambda_target = Wire { gate: self.index, input: Self::WIRE_LAMBDA };
 
         let x_old = witness.get_wire(x_old_target);
         let y_old = witness.get_wire(y_old_target);
-        let old = AffinePoint::<InnerC>::nonzero(x_old, y_old);
-        let new = old.double();
 
-        // Here's where our abstraction leaks a bit. Although we already have the result, we need to
-        // redo part of the computation in order to populate the purported inverse wire.
         let inverse = y_old.double().multiplicative_inverse().expect("y = 0");
+        let lambda = x_old.square().triple() * inverse;
+        let x_new = lambda.square() - x_old.double();
+        let y_new = lambda * (x_old - x_new) - y_old;
 
         let mut result = PartialWitness::new();
         result.set_wire(inverse_target, inverse);
-        result.set_wire(x_new_target, new.x);
-        result.set_wire(y_new_target, new.y);
+        result.set_wire(lambda_target, lambda);
+        result.set_wire(x_new_target, x_new);
+        result.set_wire(y_new_target, y_new);
         result
     }
 }
@@ -679,7 +700,7 @@ impl<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>
 Gate<C> for CurveEndoGate<C, InnerC> {
     const NAME: &'static str = "CurveEndoGate";
 
-    const PREFIX: &'static [bool] = &[false, false, false, true, true];
+    const PREFIX: &'static [bool] = &[true, true];
 
     fn evaluate_unfiltered(
         _local_constant_values: &[InnerC::BaseField],
@@ -906,7 +927,7 @@ impl<C: HaloCurve> RescueStepAGate<C> {
 impl<C: HaloCurve> Gate<C> for RescueStepAGate<C> {
     const NAME: &'static str = "RescueStepAGate";
 
-    const PREFIX: &'static [bool] = &[true, false];
+    const PREFIX: &'static [bool] = &[false, false];
 
     fn evaluate_unfiltered(
         local_constant_values: &[C::ScalarField],
@@ -1032,7 +1053,7 @@ impl<C: HaloCurve> RescueStepBGate<C> {
 impl<C: HaloCurve> Gate<C> for RescueStepBGate<C> {
     const NAME: &'static str = "RescueStepBGate";
 
-    const PREFIX: &'static [bool] = &[true, true];
+    const PREFIX: &'static [bool] = &[false, true];
 
     fn evaluate_unfiltered(
         local_constant_values: &[C::ScalarField],
@@ -1152,7 +1173,7 @@ impl<C: HaloCurve> Base4SumGate<C> {
 impl<C: HaloCurve> Gate<C> for Base4SumGate<C> {
     const NAME: &'static str = "Base4SumGate";
 
-    const PREFIX: &'static [bool] = &[false, false, true, false, false];
+    const PREFIX: &'static [bool] = &[true, false, false, false];
 
     fn evaluate_unfiltered(
         _local_constant_values: &[C::ScalarField],
@@ -1232,7 +1253,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for Base4SumGate<C> {
 /// A gate which can be configured to perform various arithmetic. In particular, it computes
 ///
 /// ```text
-/// output := const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend + const_2
+/// output := const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend
 /// ```
 pub struct ArithmeticGate<C: HaloCurve> {
     pub index: usize,
@@ -1253,7 +1274,7 @@ impl<C: HaloCurve> ArithmeticGate<C> {
 impl<C: HaloCurve> Gate<C> for ArithmeticGate<C> {
     const NAME: &'static str = "ArithmeticGate";
 
-    const PREFIX: &'static [bool] = &[false, true];
+    const PREFIX: &'static [bool] = &[true, false, false, true];
 
     fn evaluate_unfiltered(
         local_constant_values: &[C::ScalarField],
@@ -1263,12 +1284,11 @@ impl<C: HaloCurve> Gate<C> for ArithmeticGate<C> {
     ) -> Vec<C::ScalarField> {
         let const_0 = local_constant_values[Self::PREFIX.len()];
         let const_1 = local_constant_values[Self::PREFIX.len() + 1];
-        let const_2 = local_constant_values[Self::PREFIX.len() + 2];
         let multiplicand_0 = local_wire_values[Self::WIRE_MULTIPLICAND_0];
         let multiplicand_1 = local_wire_values[Self::WIRE_MULTIPLICAND_1];
         let addend = local_wire_values[Self::WIRE_ADDEND];
         let output = local_wire_values[Self::WIRE_OUTPUT];
-        let computed_output = const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend + const_2;
+        let computed_output = const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend;
         vec![computed_output - output]
     }
 
@@ -1281,7 +1301,6 @@ impl<C: HaloCurve> Gate<C> for ArithmeticGate<C> {
     ) -> Vec<Target> {
         let const_0 = local_constant_values[Self::PREFIX.len()];
         let const_1 = local_constant_values[Self::PREFIX.len() + 1];
-        let const_2 = local_constant_values[Self::PREFIX.len() + 2];
         let multiplicand_0 = local_wire_values[Self::WIRE_MULTIPLICAND_0];
         let multiplicand_1 = local_wire_values[Self::WIRE_MULTIPLICAND_1];
         let addend = local_wire_values[Self::WIRE_ADDEND];
@@ -1289,7 +1308,7 @@ impl<C: HaloCurve> Gate<C> for ArithmeticGate<C> {
 
         let product_term = builder.mul_many(&[const_0, multiplicand_0, multiplicand_1]);
         let addend_term = builder.mul(const_1, addend);
-        let computed_output = builder.add_many(&[product_term, addend_term, const_2]);
+        let computed_output = builder.add_many(&[product_term, addend_term]);
         vec![builder.sub(computed_output, output)]
     }
 }
@@ -1311,16 +1330,114 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for ArithmeticGate<C> {
 
         let const_0 = constants[self.index][Self::PREFIX.len()];
         let const_1 = constants[self.index][Self::PREFIX.len() + 1];
-        let const_2 = constants[self.index][Self::PREFIX.len() + 2];
 
         let multiplicand_0 = witness.get_wire(multiplicand_0_target);
         let multiplicand_1 = witness.get_wire(multiplicand_1_target);
         let addend = witness.get_wire(addend_target);
 
-        let output = const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend + const_2;
+        let output = const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend;
 
         let mut result = PartialWitness::new();
         result.set_wire(output_target, output);
         result
     }
+}
+
+/// Test that a gate's constraints are within degree 8n, including the gate prefix filter.
+#[macro_export]
+macro_rules! test_gate_low_degree {
+    ($method:ident, $curve:ty, $gate:ty) => {
+        #[test]
+        #[ignore] // Too slow to run regularly.
+        fn $method() {
+            type C = $curve;
+            type SF = <C as $crate::curve::Curve>::ScalarField;
+
+            let n = 256;
+            let fft_precomputation_n = $crate::fft::fft_precompute::<SF>(n);
+            let fft_precomputation_8n = $crate::fft::fft_precompute::<SF>(8 * n);
+            let fft_precomputation_16n = $crate::fft::fft_precompute::<SF>(16 * n);
+
+            // Generate random constant and wire polynomials.
+            let mut constant_values_n: Vec<Vec<SF>> = vec![Vec::new(); $crate::plonk::NUM_CONSTANTS];
+            let mut wire_values_n: Vec<Vec<SF>> = vec![Vec::new(); $crate::plonk::NUM_WIRES];
+            for i in 0..n {
+                for points in constant_values_n.iter_mut() {
+                    points.push(<SF as $crate::field::Field>::rand())
+                }
+                for points in wire_values_n.iter_mut() {
+                    points.push(<SF as $crate::field::Field>::rand())
+                }
+            }
+
+            // Low-degree extend them to 16n values.
+            let mut constant_coeffs_16n = $crate::plonk_util::values_to_coeffs(&constant_values_n, &fft_precomputation_n);
+            let mut wire_coeffs_16n = $crate::plonk_util::values_to_coeffs(&wire_values_n, &fft_precomputation_n);
+            for coeffs in constant_coeffs_16n.iter_mut().chain(wire_coeffs_16n.iter_mut()) {
+                while coeffs.len() < 16 * n {
+                    coeffs.push(<SF as $crate::field::Field>::ZERO);
+                }
+            }
+            let constant_values_16n: Vec<Vec<SF>> = constant_coeffs_16n.iter()
+                .map(|coeffs| $crate::fft::fft_with_precomputation_power_of_2(coeffs, &fft_precomputation_16n))
+                .collect();
+            let wire_values_16n: Vec<Vec<SF>> = wire_coeffs_16n.iter()
+                .map(|coeffs| $crate::fft::fft_with_precomputation_power_of_2(coeffs, &fft_precomputation_16n))
+                .collect();
+
+            // Make sure each extended polynomial is still degree n.
+            for values_16n in constant_values_16n.iter().chain(wire_values_16n.iter()) {
+                assert!($crate::plonk_util::polynomial_degree(values_16n, &fft_precomputation_16n) < n);
+            }
+
+            let constant_values_16n_t = $crate::util::transpose(&constant_values_16n);
+            let wire_values_16n_t = $crate::util::transpose(&wire_values_16n);
+
+            // Evaluate constraints at each of our 16n points.
+            let mut constraint_values_16n: Vec<Vec<SF>> = Vec::new();
+            for i in 0..16 * n {
+                let constraints: Vec<SF> = <$gate as $crate::plonk_gates::Gate<C>>::evaluate_filtered(
+                    &constant_values_16n_t[i],
+                    &wire_values_16n_t[i],
+                    &wire_values_16n_t[(i + 16) % (16 * n)],
+                    &wire_values_16n_t[(i + 16 * $crate::plonk::GRID_WIDTH) % (16 * n)]);
+                for (j, &c) in constraints.iter().enumerate() {
+                    if constraint_values_16n.len() <= j {
+                        constraint_values_16n.push(Vec::new());
+                    }
+                    constraint_values_16n[j].push(c);
+                }
+            }
+
+            // Check that the degree of each constraint is within the limit.
+            let constraint_degrees = constraint_values_16n.iter()
+                .map(|c| $crate::plonk_util::polynomial_degree(c, &fft_precomputation_16n))
+                .collect::<Vec<_>>();
+            let max_degree_excl = (crate::plonk::QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER + 1) * n;
+            for (i, &deg) in constraint_degrees.iter().enumerate() {
+                assert!(deg < max_degree_excl,
+                "Constraint at index {} has degree {}; should be less than {}n = {}",
+                i,
+                deg,
+                crate::plonk::QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER + 1,
+                max_degree_excl);
+            }
+        }
+    };
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{Tweedledum, Tweedledee, PublicInputGate, CurveAddGate, CurveDblGate, CurveEndoGate, Base4SumGate, BufferGate, ConstantGate, ArithmeticGate, RescueStepAGate, RescueStepBGate};
+
+    test_gate_low_degree!(low_degree_PublicInputGate, Tweedledum, PublicInputGate<Tweedledum>);
+    test_gate_low_degree!(low_degree_CurveAddGate, Tweedledum, CurveAddGate<Tweedledum, Tweedledee>);
+    test_gate_low_degree!(low_degree_CurveDblGate, Tweedledum, CurveDblGate<Tweedledum, Tweedledee>);
+    test_gate_low_degree!(low_degree_CurveEndoGate, Tweedledum, CurveEndoGate<Tweedledum, Tweedledee>);
+    test_gate_low_degree!(low_degree_Base4SumGate, Tweedledum, Base4SumGate<Tweedledum>);
+    test_gate_low_degree!(low_degree_BufferGate, Tweedledum, BufferGate<Tweedledum>);
+    test_gate_low_degree!(low_degree_ConstantGate, Tweedledum, ConstantGate<Tweedledum>);
+    test_gate_low_degree!(low_degree_ArithmeticGate, Tweedledum, ArithmeticGate<Tweedledum>);
+    test_gate_low_degree!(low_degree_RescueStepAGate, Tweedledum, RescueStepAGate<Tweedledum>);
+    test_gate_low_degree!(low_degree_RescueStepBGate, Tweedledum, RescueStepBGate<Tweedledum>);
 }

@@ -9,10 +9,10 @@ use crate::bigint_inverse::nonzero_multiplicative_inverse_4;
 use crate::{add_4_4_no_overflow, cmp_4_4, field_to_biguint, rand_range_4, rand_range_4_from_rng, sub_4_4, Field};
 use std::cmp::Ordering;
 use std::fmt;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display, Formatter, Debug};
 
 /// An element of the Tweedledum group's base field.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Default)]
 pub struct TweedledumBase {
     /// Montgomery representation, encoded with little-endian u64 limbs.
     pub limbs: [u64; 4],
@@ -294,9 +294,16 @@ impl PartialOrd for TweedledumBase {
     }
 }
 
+
 impl Display for TweedledumBase {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        field_to_biguint(*self).fmt(f)
+        write!(f, "{}", field_to_biguint(*self))
+    }
+}
+
+impl Debug for TweedledumBase {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "TweedledumBase({})", field_to_biguint(*self))
     }
 }
 

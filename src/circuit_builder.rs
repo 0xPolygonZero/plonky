@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::{AffinePoint, AffinePointTarget, blake_hash_usize_to_curve, Circuit, Curve, CurveMsmEndoResult, CurveMulEndoResult, CurveMulOp, fft_precompute, Field, generate_rescue_constants, HaloCurve, msm_precompute, NUM_CONSTANTS, NUM_WIRES, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, blake_hash_base_field_to_curve};
 use crate::plonk_gates::*;
-use crate::plonk_util::{coeffs_to_commitments, coeffs_to_values_padded, values_to_coeffs};
+use crate::plonk_util::{coeffs_to_commitments, coeffs_to_values_padded, values_to_coeffs, sigma_polynomials};
 use crate::util::{ceil_div_usize, log2_strict, transpose};
 
 pub struct CircuitBuilder<C: HaloCurve> {
@@ -157,7 +157,6 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             vec![
                 C::ScalarField::ONE,
                 C::ScalarField::ONE,
-                C::ScalarField::ZERO,
             ],
         );
         self.copy(
@@ -212,7 +211,6 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             vec![
                 C::ScalarField::ONE,
                 C::ScalarField::NEG_ONE,
-                C::ScalarField::ZERO,
             ],
         );
         self.copy(
@@ -257,7 +255,6 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             ArithmeticGate::new(index),
             vec![
                 C::ScalarField::ONE,
-                C::ScalarField::ZERO,
                 C::ScalarField::ZERO,
             ],
         );
@@ -474,7 +471,6 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             vec![
                 C::ScalarField::ONE,
                 C::ScalarField::ONE,
-                C::ScalarField::ZERO,
             ],
         );
         self.copy(
@@ -512,7 +508,6 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             vec![
                 C::ScalarField::ONE,
                 C::ScalarField::NEG_ONE,
-                C::ScalarField::ZERO,
             ],
         );
         self.copy(
@@ -1244,7 +1239,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         let subgroup_generator_8n = C::ScalarField::primitive_root_of_unity(degree_pow + 3);
         let subgroup_n = C::ScalarField::cyclic_subgroup_known_order(subgroup_generator_n, degree);
         let subgroup_8n =
-            C::ScalarField::cyclic_subgroup_known_order(subgroup_generator_n, 8 * degree);
+            C::ScalarField::cyclic_subgroup_known_order(subgroup_generator_8n, 8 * degree);
 
         // TODO: Shouldn't this be random?
         let pedersen_g: Vec<_> = (0..degree)
@@ -1266,13 +1261,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         let c_constants = coeffs_to_commitments(&constants_coeffs, &pedersen_g_msm_precomputation);
 
         // Convert sigma's values to scalar field elements and split it into degree-n chunks.
-        let sigma_chunks: Vec<Vec<C::ScalarField>> = sigma
-            .into_iter()
-            .map(|x| C::ScalarField::from_canonical_usize(x))
-            .collect::<Vec<_>>()
-            .chunks(degree)
-            .map(|chunk| chunk.to_vec())
-            .collect();
+        let sigma_chunks = sigma_polynomials(sigma, degree, subgroup_generator_n);
 
         // Compute S_sigma, then a commitment to it.
         let s_sigma_coeffs = values_to_coeffs(&sigma_chunks, &fft_precomputation_n);

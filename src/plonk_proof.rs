@@ -25,6 +25,22 @@ pub struct Proof<C: Curve> {
     pub halo_r: Vec<AffinePoint<C>>,
     /// The purported value of G, i.e. <s, G>, in the context of Halo.
     pub halo_g: AffinePoint<C>,
+    /// The two scalar used in the final Schnorr protocol of the Halo opening proof.
+    pub schnorr_proof: (C::ScalarField, C::ScalarField),
+}
+
+impl<C: Curve> Proof<C> {
+    pub fn all_opening_sets(&self) -> Vec<OpeningSet<C::ScalarField>> {
+        [
+            self.o_public_inputs.as_slice(),
+            &[
+                self.o_local.clone(),
+                self.o_right.clone(),
+                self.o_below.clone(),
+            ],
+        ]
+        .concat()
+    }
 }
 
 pub struct ProofTarget {
@@ -61,12 +77,19 @@ impl ProofTarget {
     pub fn all_opening_sets(&self) -> Vec<OpeningSetTarget> {
         [
             self.o_public_inputs.as_slice(),
-            &[self.o_local.clone(), self.o_right.clone(), self.o_below.clone()],
-        ].concat()
+            &[
+                self.o_local.clone(),
+                self.o_right.clone(),
+                self.o_below.clone(),
+            ],
+        ]
+        .concat()
     }
 
     pub fn all_opening_targets(&self) -> Vec<Target> {
-        let targets_2d: Vec<Vec<Target>> = self.all_opening_sets().into_iter()
+        let targets_2d: Vec<Vec<Target>> = self
+            .all_opening_sets()
+            .into_iter()
             .map(|set| set.to_vec())
             .collect();
         targets_2d.concat()
@@ -99,7 +122,7 @@ impl ProofTarget {
 }
 
 /// The opening of each Plonk polynomial at a particular point.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct OpeningSet<F: Field> {
     /// The purported opening of each constant polynomial.
     pub o_constants: Vec<F>,
@@ -121,7 +144,8 @@ impl<F: Field> OpeningSet<F> {
             self.o_wires.as_slice(),
             &[self.o_plonk_z],
             self.o_plonk_t.as_slice(),
-        ].concat()
+        ]
+        .concat()
     }
 }
 
@@ -148,7 +172,8 @@ impl OpeningSetTarget {
             self.o_wires.as_slice(),
             &[self.o_plonk_z],
             self.o_plonk_t.as_slice(),
-        ].concat()
+        ]
+        .concat()
     }
 
     pub fn populate_witness<InnerBF: Field, InnerSF: Field>(
@@ -157,16 +182,23 @@ impl OpeningSetTarget {
         values: OpeningSet<InnerSF>,
     ) -> Result<()> {
         // TODO: We temporarily assume that each opened value fits in both fields.
-        witness.set_targets(&self.o_constants,
-                            &InnerSF::try_convert_all::<InnerBF>(&values.o_constants)?);
-        witness.set_targets(&self.o_plonk_sigmas,
-                            &InnerSF::try_convert_all::<InnerBF>(&values.o_plonk_sigmas)?);
-        witness.set_targets(&self.o_wires,
-                            &InnerSF::try_convert_all::<InnerBF>(&values.o_wires)?);
-        witness.set_target(self.o_plonk_z,
-                           values.o_plonk_z.try_convert::<InnerBF>()?);
-        witness.set_targets(&self.o_plonk_t,
-                            &InnerSF::try_convert_all::<InnerBF>(&values.o_plonk_t)?);
+        witness.set_targets(
+            &self.o_constants,
+            &InnerSF::try_convert_all::<InnerBF>(&values.o_constants)?,
+        );
+        witness.set_targets(
+            &self.o_plonk_sigmas,
+            &InnerSF::try_convert_all::<InnerBF>(&values.o_plonk_sigmas)?,
+        );
+        witness.set_targets(
+            &self.o_wires,
+            &InnerSF::try_convert_all::<InnerBF>(&values.o_wires)?,
+        );
+        witness.set_target(self.o_plonk_z, values.o_plonk_z.try_convert::<InnerBF>()?);
+        witness.set_targets(
+            &self.o_plonk_t,
+            &InnerSF::try_convert_all::<InnerBF>(&values.o_plonk_t)?,
+        );
         Ok(())
     }
 }

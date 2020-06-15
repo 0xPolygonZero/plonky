@@ -1,5 +1,9 @@
-use crate::{Field, rescue_sponge, Curve, Target, CircuitBuilder, AffinePoint, AffinePointTarget, ProjectivePoint, HaloCurve};
 use std::marker::PhantomData;
+
+use crate::{
+    AffinePoint, AffinePointTarget, CircuitBuilder, Curve, Field, HaloCurve, ProjectivePoint,
+    rescue_sponge, Target,
+};
 
 /// Observes prover messages, and generates challenges by hashing the transcript.
 pub(crate) struct Challenger<F: Field> {
@@ -9,7 +13,10 @@ pub(crate) struct Challenger<F: Field> {
 
 impl<F: Field> Challenger<F> {
     pub(crate) fn new(security_bits: usize) -> Challenger<F> {
-        Challenger { transcript: Vec::new(), security_bits }
+        Challenger {
+            transcript: Vec::new(),
+            security_bits,
+        }
     }
 
     pub(crate) fn observe_element(&mut self, element: F) {
@@ -22,27 +29,42 @@ impl<F: Field> Challenger<F> {
         }
     }
 
-    pub(crate) fn observe_affine_point<C: Curve<BaseField = F>>(&mut self, point: AffinePoint<C>) {
-        debug_assert!(!point.zero);
-        self.observe_element(point.x);
-        self.observe_element(point.y);
+    pub(crate) fn observe_affine_point<C: Curve<BaseField=F>>(&mut self, point: AffinePoint<C>) {
+        if !point.zero {
+            self.observe_element(point.x);
+            self.observe_element(point.y);
+        } else {
+            self.observe_element(F::ZERO);
+        }
     }
 
-    pub(crate) fn observe_affine_points<C: Curve<BaseField = F>>(&mut self, points: &[AffinePoint<C>]) {
+    pub(crate) fn observe_affine_points<C: Curve<BaseField=F>>(
+        &mut self,
+        points: &[AffinePoint<C>],
+    ) {
         for &point in points {
             self.observe_affine_point(point);
         }
     }
 
-    pub(crate) fn observe_proj_point<C: Curve<BaseField = F>>(&mut self, point: ProjectivePoint<C>) {
+    pub(crate) fn observe_proj_point<C: Curve<BaseField=F>>(
+        &mut self,
+        point: ProjectivePoint<C>,
+    ) {
         self.observe_affine_point(point.to_affine());
     }
 
-    pub(crate) fn observe_proj_points<C: Curve<BaseField = F>>(&mut self, points: &[ProjectivePoint<C>]) {
+    pub(crate) fn observe_proj_points<C: Curve<BaseField=F>>(
+        &mut self,
+        points: &[ProjectivePoint<C>],
+    ) {
         self.observe_affine_points(&ProjectivePoint::batch_to_affine(points));
     }
 
-    pub(crate) fn observe_proj_point_other_curve<C: Curve<ScalarField = F>>(&mut self, point: ProjectivePoint<C>) {
+    pub(crate) fn observe_proj_point_other_curve<C: Curve<ScalarField=F>>(
+        &mut self,
+        point: ProjectivePoint<C>,
+    ) {
         let p = point.to_affine();
         let x = p.x.try_convert::<F>().expect("Element is too large");
         let y = p.x.try_convert::<F>().expect("Element is too large");
@@ -68,6 +90,24 @@ impl<F: Field> Challenger<F> {
         self.transcript = vec![challenges[0]];
         challenges
     }
+
+    pub(crate) fn get_affine_point<C: Curve<BaseField=F>>(&mut self) -> AffinePoint<C> {
+        let mut transcript = self.transcript.clone();
+        transcript.push(F::ZERO);
+        let mut i = F::ZERO;
+        loop {
+            *transcript.last_mut().unwrap() = i;
+            let x = rescue_sponge(transcript.clone(), 2, self.security_bits);
+            let square_candidate = x[0].cube() + C::A * x[0] + C::B;
+            if let Some(mut y) = square_candidate.square_root() {
+                if x[1].to_canonical_bool_vec()[0] {
+                    y = -y;
+                }
+                return AffinePoint::nonzero(x[0], y);
+            }
+            i = i + F::ONE;
+        }
+    }
 }
 
 /// Observes prover messages, and generates challenges by hashing the transcript.
@@ -78,7 +118,10 @@ pub(crate) struct RecursiveChallenger<C: HaloCurve> {
 
 impl<C: HaloCurve> RecursiveChallenger<C> {
     pub(crate) fn new() -> RecursiveChallenger<C> {
-        RecursiveChallenger { transcript: Vec::new(), _phantom: PhantomData }
+        RecursiveChallenger {
+            transcript: Vec::new(),
+            _phantom: PhantomData,
+        }
     }
 
     pub(crate) fn observe_element(&mut self, target: Target) {
@@ -111,14 +154,23 @@ impl<C: HaloCurve> RecursiveChallenger<C> {
         (challenges[0], challenges[1])
     }
 
-    pub(crate) fn get_3_challenges(&mut self, builder: &mut CircuitBuilder<C>) -> (Target, Target, Target) {
+    pub(crate) fn get_3_challenges(
+        &mut self,
+        builder: &mut CircuitBuilder<C>,
+    ) -> (Target, Target, Target) {
         let challenges = self.get_n_challenges(builder, 3);
         (challenges[0], challenges[1], challenges[2])
     }
 
-    pub(crate) fn get_n_challenges(&mut self, builder: &mut CircuitBuilder<C>, n: usize) -> Vec<Target> {
+    pub(crate) fn get_n_challenges(
+        &mut self,
+        builder: &mut CircuitBuilder<C>,
+        n: usize,
+    ) -> Vec<Target> {
         let challenges = builder.rescue_sponge(&self.transcript, n);
         self.transcript = vec![challenges[0]];
         challenges
     }
+
+    // TODO: Implement recursive `get_affine_point`.
 }

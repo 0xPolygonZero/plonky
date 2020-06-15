@@ -12,10 +12,10 @@ use crate::{
 };
 use std::cmp::Ordering;
 use std::fmt;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display, Formatter, Debug};
 
 /// An element of the Tweedledee group's base field.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Default)]
 pub struct TweedledeeBase {
     /// Montgomery representation, encoded with little-endian u64 limbs.
     pub limbs: [u64; 4],
@@ -298,7 +298,13 @@ impl PartialOrd for TweedledeeBase {
 
 impl Display for TweedledeeBase {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        field_to_biguint(*self).fmt(f)
+        write!(f, "{}", field_to_biguint(*self))
+    }
+}
+
+impl Debug for TweedledeeBase {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "TweedledeeBase {}", field_to_biguint(*self))
     }
 }
 

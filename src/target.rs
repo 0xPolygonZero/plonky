@@ -37,7 +37,7 @@ pub struct PublicInput {
 
 /// See `PublicInputGate` for an explanation of how we make public inputs routable.
 impl PublicInput {
-    fn original_wire(&self) -> Wire {
+    pub fn original_wire(&self) -> Wire {
         let gate = self.index / NUM_WIRES * 2;
         let input = self.index % NUM_WIRES;
         Wire { gate, input }
