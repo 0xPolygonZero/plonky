@@ -9,7 +9,7 @@ use crate::Field;
 pub struct CurveScalar<C: Curve>(pub <C as Curve>::ScalarField);
 
 /// A short Weierstrass curve.
-pub trait Curve: 'static + Sized + Copy {
+pub trait Curve: 'static + Sync + Sized + Copy {
     type BaseField: Field;
     type ScalarField: Field;
 
