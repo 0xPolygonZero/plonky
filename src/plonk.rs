@@ -150,7 +150,7 @@ impl<C: HaloCurve> Circuit<C> {
             );
         }
 
-        // Pad the coeffiecients to length a multiple of the degree.
+        // Pad the coefficients to 7n.
         if plonk_t_coeffs.len() != QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER * self.degree() {
             plonk_t_coeffs.extend((plonk_t_coeffs.len()..QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER *self.degree()).map(|_| C::ScalarField::ZERO));
         }
@@ -399,8 +399,7 @@ impl<C: HaloCurve> Circuit<C> {
         );
 
         // We will evaluate the vanishing polynomial at 8n points, then interpolate.
-        let mut vanishing_points: Vec<C::ScalarField> = Vec::new();
-        for (i, &x) in self.subgroup_8n.iter().enumerate() {
+        let mut vanishing_points = self.subgroup_8n.par_iter().enumerate().map(|(i, &x)| {
             // Load the constant polynomials' values at x.
             let mut local_constant_values = Vec::new();
             for j in 0..NUM_CONSTANTS {
@@ -453,8 +452,8 @@ impl<C: HaloCurve> Circuit<C> {
             ]
             .concat();
 
-            vanishing_points.push(reduce_with_powers(&vanishing_terms, alpha_sf));
-        }
+            reduce_with_powers(&vanishing_terms, alpha_sf)
+        }).collect::<Vec<_>>();
 
         ifft_with_precomputation_power_of_2(&vanishing_points, &self.fft_precomputation_8n)
     }

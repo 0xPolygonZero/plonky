@@ -135,7 +135,7 @@ impl<F: Field> Witness<F> {
     }
 }
 
-pub trait WitnessGenerator<F: Field>: 'static {
+pub trait WitnessGenerator<F: Field>: 'static + Sync {
     fn dependencies(&self) -> Vec<Target>;
 
     /// Given a partial witness, return any newly generated values. The caller will merge them in.
