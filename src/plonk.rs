@@ -661,6 +661,7 @@ impl<C: HaloCurve> Circuit<C> {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Instant;
     use crate::{
         verify_proof_circuit, CircuitBuilder, Curve, Field, PartialWitness, Tweedledee, Tweedledum,
         NUM_WIRES,
@@ -693,6 +694,32 @@ mod tests {
         let witness = circuit.generate_witness(partial_witness);
         let proof = circuit.generate_proof::<Tweedledum>(witness).unwrap();
         assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &circuit,).is_ok());
+    }
+
+    #[test]
+    fn test_generate_proof_sum_big() {
+        let now = Instant::now();
+        let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+        let ts = (0..100_000)
+            .map(|i| {
+                builder.constant_wire(<Tweedledee as Curve>::ScalarField::from_canonical_usize(i))
+            })
+            .collect::<Vec<_>>();
+        let s = builder.add_many(&ts);
+        let x = builder.add_virtual_target();
+        let z = builder.sub(s, x);
+        builder.assert_zero(z);
+        let mut partial_witness = PartialWitness::new();
+        partial_witness.set_target(x, <Tweedledee as Curve>::ScalarField::from_canonical_usize((100_000*99_999)/2));
+        dbg!(now.elapsed());
+        let circuit = builder.build();
+        dbg!(now.elapsed());
+        let witness = circuit.generate_witness(partial_witness);
+        dbg!(now.elapsed());
+        let proof = circuit.generate_proof::<Tweedledum>(witness).unwrap();
+        dbg!(now.elapsed());
+        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &circuit,).is_ok());
+        dbg!(now.elapsed());
     }
 
     #[test]
