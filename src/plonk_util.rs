@@ -167,17 +167,6 @@ pub(crate) fn coeffs_to_values_padded<F: Field>(
         .collect()
 }
 
-pub(crate) fn coeffs_to_commitments<C: Curve>(
-    coefficients_vec: &[Vec<C::ScalarField>],
-    msm_precomputation: &MsmPrecomputation<C>,
-) -> Vec<AffinePoint<C>> {
-    let projs: Vec<_> = coefficients_vec
-        .iter()
-        .map(|coeffs| pedersen_hash(coeffs, msm_precomputation))
-        .collect();
-    ProjectivePoint::batch_to_affine(&projs)
-}
-
 /// Like `pedersen_commit`, but with no blinding factor.
 pub fn pedersen_hash<C: Curve>(
     xs: &[C::ScalarField],

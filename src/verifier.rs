@@ -197,8 +197,8 @@ fn verify_all_ipas<C: HaloCurve>(
 ) -> bool {
     // Reduce all polynomial commitments to a single one, i.e. a random combination of them.
     let c_all: Vec<AffinePoint<C>> = [
-        circuit.c_constants.clone(),
-        circuit.c_s_sigmas.clone(),
+        circuit.c_constants.iter().map(|c| c.to_affine()).collect(),
+        circuit.c_s_sigmas.iter().map(|c| c.to_affine()).collect(),
         proof.c_wires.clone(),
         vec![proof.c_plonk_z],
         proof.c_plonk_t.clone(),
@@ -225,20 +225,22 @@ fn verify_all_ipas<C: HaloCurve>(
     let u_curve = C::convert(u_scaling) * circuit.u.to_projective();
 
     let num_public_input_gates = ceil_div_usize(circuit.num_public_inputs, NUM_WIRES);
-    let points = 
-        [
-            (0..2 * num_public_input_gates)
-                .step_by(2)
-                .map(|i| circuit.subgroup_generator_n.exp_usize(i))
-                .collect::<Vec<_>>(),
-            vec![
-                zeta,
-                zeta * circuit.subgroup_generator_n,
-                zeta * circuit.subgroup_generator_n.exp_usize(GRID_WIDTH),
-            ],
-        ]
-        .concat();
-    let halo_bs = points.iter().map(|&p| halo_g(p, &ipa_challenges)).collect::<Vec<_>>();
+    let points = [
+        (0..2 * num_public_input_gates)
+            .step_by(2)
+            .map(|i| circuit.subgroup_generator_n.exp_usize(i))
+            .collect::<Vec<_>>(),
+        vec![
+            zeta,
+            zeta * circuit.subgroup_generator_n,
+            zeta * circuit.subgroup_generator_n.exp_usize(GRID_WIDTH),
+        ],
+    ]
+    .concat();
+    let halo_bs = points
+        .iter()
+        .map(|&p| halo_g(p, &ipa_challenges))
+        .collect::<Vec<_>>();
     let halo_b = reduce_with_powers(&halo_bs, v);
     verify_ipa::<C>(
         proof,
@@ -292,7 +294,8 @@ fn verify_ipa<C: HaloCurve>(
 
     // Performing ZK opening protocol.
     C::convert(schnorr_challenge) * q + schnorr_proof.r
-        == C::convert(schnorr_proof.z1) * (halo_g_curve.to_projective() + C::convert(halo_b) * u_curve)
+        == C::convert(schnorr_proof.z1)
+            * (halo_g_curve.to_projective() + C::convert(halo_b) * u_curve)
             + C::convert(schnorr_proof.z2) * pedersen_h.to_projective()
 }
 
