@@ -151,7 +151,7 @@ impl<C: HaloCurve> Circuit<C> {
             );
         }
 
-        // Pad the coeffiecients to length a multiple of the degree.
+        // Pad the coefficients to 7n.
         if plonk_t_coeffs.len() != QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER * self.degree() {
             plonk_t_coeffs.extend(
                 (plonk_t_coeffs.len()..QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER * self.degree())
@@ -423,8 +423,7 @@ impl<C: HaloCurve> Circuit<C> {
         );
 
         // We will evaluate the vanishing polynomial at 8n points, then interpolate.
-        let mut vanishing_points: Vec<C::ScalarField> = Vec::new();
-        for (i, &x) in self.subgroup_8n.iter().enumerate() {
+        let mut vanishing_points = self.subgroup_8n.par_iter().enumerate().map(|(i, &x)| {
             // Load the constant polynomials' values at x.
             let mut local_constant_values = Vec::new();
             for j in 0..NUM_CONSTANTS {
@@ -477,8 +476,8 @@ impl<C: HaloCurve> Circuit<C> {
             ]
             .concat();
 
-            vanishing_points.push(reduce_with_powers(&vanishing_terms, alpha_sf));
-        }
+            reduce_with_powers(&vanishing_terms, alpha_sf)
+        }).collect::<Vec<_>>();
 
         ifft_with_precomputation_power_of_2(&vanishing_points, &self.fft_precomputation_8n)
     }
@@ -700,7 +699,7 @@ mod tests {
     fn test_generate_proof_sum_big() {
         let now = Instant::now();
         let mut builder = CircuitBuilder::<Tweedledee>::new(128);
-        let ts = (0..100_000)
+        let ts = (0..10_000)
             .map(|i| {
                 builder.constant_wire(<Tweedledee as Curve>::ScalarField::from_canonical_usize(i))
             })
@@ -710,7 +709,7 @@ mod tests {
         let z = builder.sub(s, x);
         builder.assert_zero(z);
         let mut partial_witness = PartialWitness::new();
-        partial_witness.set_target(x, <Tweedledee as Curve>::ScalarField::from_canonical_usize((100_000*99_999)/2));
+        partial_witness.set_target(x, <Tweedledee as Curve>::ScalarField::from_canonical_usize((10_000*9_999)/2));
         dbg!(now.elapsed());
         let circuit = builder.build();
         dbg!(now.elapsed());

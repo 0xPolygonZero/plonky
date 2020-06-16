@@ -10,7 +10,7 @@ use std::fmt::Debug;
 pub struct CurveScalar<C: Curve>(pub <C as Curve>::ScalarField);
 
 /// A short Weierstrass curve.
-pub trait Curve: 'static + Sized + Copy + Debug {
+pub trait Curve: 'static + Sync + Sized + Copy + Debug {
     type BaseField: Field;
     type ScalarField: Field;
 

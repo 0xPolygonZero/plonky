@@ -1349,6 +1349,7 @@ macro_rules! test_gate_low_degree {
     ($method:ident, $curve:ty, $gate:ty) => {
         #[test]
         #[ignore] // Too slow to run regularly.
+        #[allow(non_snake_case)]
         fn $method() {
             type C = $curve;
             type SF = <C as $crate::curve::Curve>::ScalarField;
