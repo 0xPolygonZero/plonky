@@ -225,8 +225,8 @@ fn verify_all_ipas<C: HaloCurve>(
     let u_curve = C::convert(u_scaling) * circuit.u.to_projective();
 
     let num_public_input_gates = ceil_div_usize(circuit.num_public_inputs, NUM_WIRES);
-    let b = circuit.build_halo_b(
-        &[
+    let points = 
+        [
             (0..2 * num_public_input_gates)
                 .step_by(2)
                 .map(|i| circuit.subgroup_generator_n.exp_usize(i))
@@ -237,14 +237,14 @@ fn verify_all_ipas<C: HaloCurve>(
                 zeta * circuit.subgroup_generator_n.exp_usize(GRID_WIDTH),
             ],
         ]
-        .concat(),
-        v,
-    );
+        .concat();
+    let halo_bs = points.iter().map(|&p| halo_g(p, &ipa_challenges)).collect::<Vec<_>>();
+    let halo_b = reduce_with_powers(&halo_bs, v);
     verify_ipa::<C>(
         proof,
         c_reduction,
         reduced_opening,
-        b,
+        halo_b,
         ipa_challenges,
         u_curve,
         circuit.pedersen_h,
@@ -259,7 +259,7 @@ fn verify_ipa<C: HaloCurve>(
     proof: &Proof<C>,
     commitment: ProjectivePoint<C>,
     value: C::ScalarField,
-    b: Vec<C::ScalarField>,
+    halo_b: C::ScalarField,
     ipa_challenges: Vec<C::ScalarField>,
     u_curve: ProjectivePoint<C>,
     pedersen_h: AffinePoint<C>,
@@ -289,21 +289,10 @@ fn verify_ipa<C: HaloCurve>(
     );
     let precomputation = msm_precompute(&AffinePoint::batch_to_projective(&points), 8);
     let q = msm_execute_parallel(&precomputation, &scalars) + p_prime;
-    dbg!(q.to_affine());
 
     // Performing ZK opening protocol.
-    // let b = halo_g(point, &ipa_challenges);
-    dbg!(build_s(&ipa_challenges));
-    let b = C::ScalarField::inner_product(&build_s(&ipa_challenges), &b);
-    dbg!(b);
-    dbg!(
-        (C::convert(schnorr_challenge) * q + schnorr_proof.r).to_affine(),
-        (C::convert(schnorr_proof.z1) * (halo_g_curve.to_projective() + C::convert(b) * u_curve)
-            + C::convert(schnorr_proof.z2) * pedersen_h.to_projective())
-        .to_affine()
-    );
     C::convert(schnorr_challenge) * q + schnorr_proof.r
-        == C::convert(schnorr_proof.z1) * (halo_g_curve.to_projective() + C::convert(b) * u_curve)
+        == C::convert(schnorr_proof.z1) * (halo_g_curve.to_projective() + C::convert(halo_b) * u_curve)
             + C::convert(schnorr_proof.z2) * pedersen_h.to_projective()
 }
 
