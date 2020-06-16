@@ -1,12 +1,13 @@
-use anyhow::{bail, ensure, Result, anyhow};
+use anyhow::{anyhow, bail, ensure, Result};
 
 use crate::partition::get_subgroup_shift;
 use crate::plonk_challenger::Challenger;
 use crate::plonk_gates::evaluate_all_constraints;
-use crate::plonk_util::{halo_g, halo_n, powers, reduce_with_powers};
+use crate::plonk_util::{build_s, halo_g, halo_n, powers, reduce_with_powers};
+use crate::util::ceil_div_usize;
 use crate::{
     msm_execute_parallel, msm_precompute, AffinePoint, Circuit, Curve, Field, HaloCurve,
-    ProjectivePoint, Proof, NUM_ROUTED_WIRES, NUM_WIRES, SchnorrProof
+    ProjectivePoint, Proof, SchnorrProof, GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES,
 };
 
 const SECURITY_BITS: usize = 128;
@@ -102,7 +103,6 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::Scala
     ) {
         bail!("Invalid IPA proof.");
     }
-    
     Ok(())
 }
 
@@ -191,7 +191,7 @@ fn verify_all_ipas<C: HaloCurve>(
     u: C::ScalarField,
     v: C::ScalarField,
     u_scaling: C::ScalarField,
-    point: C::ScalarField,
+    zeta: C::ScalarField,
     ipa_challenges: Vec<C::ScalarField>,
     schnorr_challenge: C::ScalarField,
 ) -> bool {
@@ -221,12 +221,37 @@ fn verify_all_ipas<C: HaloCurve>(
 
     // Then, we reduce the above opening set reductions to a single value.
     let reduced_opening = reduce_with_powers(&opening_set_reductions, v);
-    // TODO: Take care of this.
-    let reduced_opening = opening_set_reductions[circuit.num_public_inputs];
 
     let u_curve = C::convert(u_scaling) * circuit.u.to_projective();
 
-    verify_ipa::<C>(proof, c_reduction, reduced_opening, point, ipa_challenges, u_curve, circuit.pedersen_h,proof.halo_g, schnorr_challenge, proof.schnorr_proof)
+    let num_public_input_gates = ceil_div_usize(circuit.num_public_inputs, NUM_WIRES);
+    let b = circuit.build_halo_b(
+        &[
+            (0..2 * num_public_input_gates)
+                .step_by(2)
+                .map(|i| circuit.subgroup_generator_n.exp_usize(i))
+                .collect::<Vec<_>>(),
+            vec![
+                zeta,
+                zeta * circuit.subgroup_generator_n,
+                zeta * circuit.subgroup_generator_n.exp_usize(GRID_WIDTH),
+            ],
+        ]
+        .concat(),
+        v,
+    );
+    verify_ipa::<C>(
+        proof,
+        c_reduction,
+        reduced_opening,
+        b,
+        ipa_challenges,
+        u_curve,
+        circuit.pedersen_h,
+        proof.halo_g,
+        schnorr_challenge,
+        proof.schnorr_proof,
+    )
 }
 
 /// Verify the final IPA.
@@ -234,7 +259,7 @@ fn verify_ipa<C: HaloCurve>(
     proof: &Proof<C>,
     commitment: ProjectivePoint<C>,
     value: C::ScalarField,
-    point: C::ScalarField,
+    b: Vec<C::ScalarField>,
     ipa_challenges: Vec<C::ScalarField>,
     u_curve: ProjectivePoint<C>,
     pedersen_h: AffinePoint<C>,
@@ -253,18 +278,32 @@ fn verify_ipa<C: HaloCurve>(
     // Compute Q as defined in the Halo paper.
     let mut points = proof.halo_l.clone();
     points.extend(proof.halo_r.iter());
-    let mut scalars = ipa_challenges.iter().map(|u| u.square()).collect::<Vec<_>>();
-    scalars.extend(ipa_challenges.iter().map(|chal| {
-            chal.multiplicative_inverse_assuming_nonzero().square()
-    }));
+    let mut scalars = ipa_challenges
+        .iter()
+        .map(|u| u.square())
+        .collect::<Vec<_>>();
+    scalars.extend(
+        ipa_challenges
+            .iter()
+            .map(|chal| chal.multiplicative_inverse_assuming_nonzero().square()),
+    );
     let precomputation = msm_precompute(&AffinePoint::batch_to_projective(&points), 8);
     let q = msm_execute_parallel(&precomputation, &scalars) + p_prime;
+    dbg!(q.to_affine());
 
     // Performing ZK opening protocol.
-    let b = halo_g(point, &ipa_challenges);
+    // let b = halo_g(point, &ipa_challenges);
+    dbg!(build_s(&ipa_challenges));
+    let b = C::ScalarField::inner_product(&build_s(&ipa_challenges), &b);
+    dbg!(b);
+    dbg!(
+        (C::convert(schnorr_challenge) * q + schnorr_proof.r).to_affine(),
+        (C::convert(schnorr_proof.z1) * (halo_g_curve.to_projective() + C::convert(b) * u_curve)
+            + C::convert(schnorr_proof.z2) * pedersen_h.to_projective())
+        .to_affine()
+    );
     C::convert(schnorr_challenge) * q + schnorr_proof.r
-        == C::convert(schnorr_proof.z1)
-            * (halo_g_curve.to_projective() + C::convert(b) * u_curve)
+        == C::convert(schnorr_proof.z1) * (halo_g_curve.to_projective() + C::convert(b) * u_curve)
             + C::convert(schnorr_proof.z2) * pedersen_h.to_projective()
 }
 
@@ -403,7 +442,8 @@ fn get_challenges<C: Curve>(
     // Compute challenge for Schnorr protocol.
     challenger.observe_affine_point(proof.schnorr_proof.r);
     let schnorr_challenge_bf = challenger.get_challenge();
-    let schnorr_challenge = C::try_convert_b2s(schnorr_challenge_bf).map_err(|_| anyhow!(error_msg))?;
+    let schnorr_challenge =
+        C::try_convert_b2s(schnorr_challenge_bf).map_err(|_| anyhow!(error_msg))?;
 
     Ok(ProofChallenge {
         beta,

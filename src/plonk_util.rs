@@ -257,6 +257,36 @@ pub(crate) fn polynomial_degree<F: Field>(
     coeffs.iter().rev().skip_while(|c| c.is_zero()).count() - 1
 }
 
+pub fn build_s<F: Field>(us: &[F]) -> Vec<F> {
+    let n = 1 << us.len();
+    let mut res = vec![F::ONE; n];
+    let us_inv = F::batch_multiplicative_inverse(us);
+
+    for (j, (&u, &u_inv)) in us.iter().rev().zip(us_inv.iter().rev()).enumerate() {
+        for (i, x) in res.iter_mut().enumerate() {
+            if i & (1 << j) == 0 {
+                *x = *x * u_inv;
+            } else {
+                *x = *x * u;
+            }
+        }
+    }
+    res
+}
+
+/// Evaluate `g(X, {u_i})` as defined in the Halo paper.
+pub fn halo_g<F: Field>(x: F, us: &[F]) -> F {
+    let mut product = F::ONE;
+    let mut x_power = x;
+    for &u_i in us.iter().rev() {
+        let u_i_inv = u_i.multiplicative_inverse_assuming_nonzero();
+        let term = u_i * x_power + u_i_inv;
+        product = product * term;
+        x_power = x_power.square();
+    }
+    product
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -314,17 +344,15 @@ mod test {
             );
         }
     }
-}
 
-/// Evaluate `g(X, {u_i})` as defined in the Halo paper.
-pub fn halo_g<F: Field>(x: F, us: &[F]) -> F {
-    let mut product = F::ONE;
-    let mut x_power = x;
-    for &u_i in us.iter().rev() {
-        let u_i_inv = u_i.multiplicative_inverse_assuming_nonzero();
-        let term = u_i * x_power + u_i_inv;
-        product = product * term;
-        x_power = x_power.square();
+    #[test]
+    fn test_s_vector_g_function() {
+        type F = <Tweedledee as Curve>::ScalarField;
+        let us = (0..10).map(|_| F::rand()).collect::<Vec<_>>();
+        let x = F::rand();
+        assert_eq!(
+            F::inner_product(&build_s(&us), &powers(x, 1 << 10)),
+            halo_g(x, &us)
+        );
     }
-    product
 }

@@ -5,11 +5,6 @@ use std::time::Instant;
 use anyhow::Result;
 use rayon::prelude::*;
 
-use crate::{
-    AffinePoint, divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2,
-    FftPrecomputation, Field, HaloCurve, ifft_with_precomputation_power_of_2, msm_parallel,
-    MsmPrecomputation, OpeningSet, ProjectivePoint, Proof, SchnorrProof
-};
 use crate::partition::{get_subgroup_shift, TargetPartitions};
 use crate::plonk_challenger::Challenger;
 use crate::plonk_util::{
@@ -20,6 +15,11 @@ use crate::plonk_util::{
 use crate::target::Target;
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::witness::{PartialWitness, Witness, WitnessGenerator};
+use crate::{
+    divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2,
+    ifft_with_precomputation_power_of_2, msm_parallel, AffinePoint, FftPrecomputation, Field,
+    HaloCurve, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof, SchnorrProof,
+};
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
@@ -139,7 +139,8 @@ impl<C: HaloCurve> Circuit<C> {
         }
 
         // Compute the quotient polynomial, t(x) = vanishing(x) / Z_H(x).
-        let mut plonk_t_coeffs: Vec<C::ScalarField> = divide_by_z_h(&vanishing_coeffs, self.degree());
+        let mut plonk_t_coeffs: Vec<C::ScalarField> =
+            divide_by_z_h(&vanishing_coeffs, self.degree());
 
         if cfg!(debug_assertions) {
             // Check that division was performed correctly by evaluating at a random point.
@@ -152,8 +153,12 @@ impl<C: HaloCurve> Circuit<C> {
 
         // Pad the coeffiecients to length a multiple of the degree.
         if plonk_t_coeffs.len() != QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER * self.degree() {
-            plonk_t_coeffs.extend((plonk_t_coeffs.len()..QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER *self.degree()).map(|_| C::ScalarField::ZERO));
+            plonk_t_coeffs.extend(
+                (plonk_t_coeffs.len()..QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER * self.degree())
+                    .map(|_| C::ScalarField::ZERO),
+            );
         }
+
         // Split t into degree-n chunks.
         let plonk_t_coeff_chunks: Vec<Vec<C::ScalarField>> = plonk_t_coeffs
             .chunks(self.degree())
@@ -292,7 +297,22 @@ impl<C: HaloCurve> Circuit<C> {
         let u_curve = C::convert(u_scaling_sf) * self.u.to_projective();
         // Final IPA proof.
         let mut halo_a = reduced_coeffs;
-        let mut halo_b = powers(zeta_sf, self.degree());
+        // The Halo b vector is a random combination of the powers of all opening points.
+        let mut halo_b = self.build_halo_b(
+            &[
+                (0..2 * num_public_input_gates)
+                    .step_by(2)
+                    .map(|i| self.subgroup_generator_n.exp_usize(i))
+                    .collect::<Vec<_>>(),
+                vec![
+                    zeta_sf,
+                    zeta_sf * self.subgroup_generator_n,
+                    zeta_sf * self.subgroup_generator_n.exp_usize(GRID_WIDTH),
+                ],
+            ]
+            .concat(),
+            v_sf,
+        );
         let mut halo_g = AffinePoint::batch_to_projective(&self.pedersen_g);
         let mut halo_l = Vec::new();
         let mut halo_r = Vec::new();
@@ -346,11 +366,12 @@ impl<C: HaloCurve> Circuit<C> {
                 &l_challenge_sf.scale_slice(b_hi),
                 &r_challenge_sf.scale_slice(b_lo),
             );
-            halo_g = g_lo.into_par_iter().zip(g_hi)
-                .map(|(&g_lo_i, &g_hi_i)| msm_parallel(
-                    &[l_challenge_sf, r_challenge_sf],
-                    &[g_hi_i, g_lo_i],
-                    4))
+            halo_g = g_lo
+                .into_par_iter()
+                .zip(g_hi)
+                .map(|(&g_lo_i, &g_hi_i)| {
+                    msm_parallel(&[l_challenge_sf, r_challenge_sf], &[g_hi_i, g_lo_i], 4)
+                })
                 .collect();
         }
 
@@ -359,7 +380,14 @@ impl<C: HaloCurve> Circuit<C> {
 
         debug_assert_eq!(halo_a.len(), 1);
         debug_assert_eq!(halo_b.len(), 1);
-        let schnorr_proof = self.schnorr_protocol(halo_a[0], halo_b[0], halo_g, randomness, u_curve, &mut challenger);
+        let schnorr_proof = self.schnorr_protocol(
+            halo_a[0],
+            halo_b[0],
+            halo_g,
+            randomness,
+            u_curve,
+            &mut challenger,
+        );
 
         Ok(Proof {
             c_wires,
@@ -372,7 +400,7 @@ impl<C: HaloCurve> Circuit<C> {
             halo_l: ProjectivePoint::batch_to_affine(&halo_l),
             halo_r: ProjectivePoint::batch_to_affine(&halo_r),
             halo_g,
-            schnorr_proof
+            schnorr_proof,
         })
     }
 
@@ -589,6 +617,20 @@ impl<C: HaloCurve> Circuit<C> {
         result
     }
 
+    pub fn build_halo_b(
+        &self,
+        points: &[C::ScalarField],
+        v: C::ScalarField,
+    ) -> Vec<C::ScalarField> {
+        let power_points = points
+            .iter()
+            .map(|&p| powers(p, self.degree()))
+            .collect::<Vec<_>>();
+        (0..self.degree())
+            .map(|i| reduce_with_powers(&power_points.iter().map(|v| v[i]).collect::<Vec<_>>(), v))
+            .collect()
+    }
+
     fn schnorr_protocol(
         &self,
         halo_a: C::ScalarField,
@@ -599,15 +641,21 @@ impl<C: HaloCurve> Circuit<C> {
         challenger: &mut Challenger<C::BaseField>,
     ) -> SchnorrProof<C> {
         let (d, s) = (C::ScalarField::rand(), C::ScalarField::rand());
-        let r_curve = C::convert(d)
-            * (halo_g.to_projective() + C::convert(halo_b) * u_curve)
+        let r_curve = C::convert(d) * (halo_g.to_projective() + C::convert(halo_b) * u_curve)
             + C::convert(s) * self.pedersen_h.to_projective();
+
         challenger.observe_proj_point(r_curve);
         let chall_bf = challenger.get_challenge();
-        let chall = chall_bf.try_convert::<C::ScalarField>().expect("Improbable");
+        let chall = chall_bf
+            .try_convert::<C::ScalarField>()
+            .expect("Improbable");
         let z1 = halo_a * chall + d;
         let z2 = randomness * chall + s;
-        SchnorrProof {r: r_curve.to_affine(), z1, z2 }
+        SchnorrProof {
+            r: r_curve.to_affine(),
+            z1,
+            z2,
+        }
     }
 }
 
@@ -628,11 +676,7 @@ mod tests {
         let circuit = builder.build();
         let witness = circuit.generate_witness(partial_witness);
         let proof = circuit.generate_proof::<Tweedledum>(witness).unwrap();
-        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(
-            &[],
-            &proof,
-            &circuit,
-        ).is_ok());
+        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &circuit,).is_ok());
     }
 
     #[test]
@@ -648,11 +692,7 @@ mod tests {
         let circuit = builder.build();
         let witness = circuit.generate_witness(partial_witness);
         let proof = circuit.generate_proof::<Tweedledum>(witness).unwrap();
-        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(
-            &[],
-            &proof,
-            &circuit,
-        ).is_ok());
+        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &circuit,).is_ok());
     }
 
     #[test]
@@ -671,11 +711,7 @@ mod tests {
         let circuit = builder.build();
         let witness = circuit.generate_witness(partial_witness);
         let proof = circuit.generate_proof::<Tweedledum>(witness).unwrap();
-        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(
-            &[],
-            &proof,
-            &circuit,
-        ).is_ok());
+        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &circuit,).is_ok());
     }
 
     #[test]
@@ -702,7 +738,8 @@ mod tests {
             &[<Tweedledee as Curve>::ScalarField::TWO],
             &proof,
             &circuit,
-        ).is_ok());
+        )
+        .is_ok());
     }
 
     #[test]
@@ -733,8 +770,6 @@ mod tests {
                 proof.o_public_inputs[i / NUM_WIRES].o_wires[i % NUM_WIRES],
             )
         });
-        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(
-            &values, &proof, &circuit,
-        ).is_ok());
+        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&values, &proof, &circuit,).is_ok());
     }
 }
