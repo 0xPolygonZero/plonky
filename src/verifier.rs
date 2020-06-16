@@ -102,7 +102,8 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::Scala
     ) {
         bail!("Invalid IPA proof.");
     }
-    todo!()
+    
+    Ok(())
 }
 
 // pub fn verify_proof_vk<C: Curve>(
@@ -220,6 +221,8 @@ fn verify_all_ipas<C: HaloCurve>(
 
     // Then, we reduce the above opening set reductions to a single value.
     let reduced_opening = reduce_with_powers(&opening_set_reductions, v);
+    // TODO: Take care of this.
+    let reduced_opening = opening_set_reductions[circuit.num_public_inputs];
 
     let u_curve = C::convert(u_scaling) * circuit.u.to_projective();
 
@@ -246,8 +249,6 @@ fn verify_ipa<C: HaloCurve>(
     // Compute [c] [n(x)] u = [c] u'.
     let u_n_x_c = C::convert(value) * u_curve;
     let p_prime = commitment + u_n_x_c;
-    dbg!(u_curve.to_affine());
-    dbg!(p_prime.to_affine());
 
     // Compute Q as defined in the Halo paper.
     let mut points = proof.halo_l.clone();
@@ -260,8 +261,6 @@ fn verify_ipa<C: HaloCurve>(
     let q = msm_execute_parallel(&precomputation, &scalars) + p_prime;
 
     // Performing ZK opening protocol.
-    dbg!(schnorr_challenge);
-    dbg!(q.to_affine());
     let b = halo_g(point, &ipa_challenges);
     C::convert(schnorr_challenge) * q + schnorr_proof.r
         == C::convert(schnorr_proof.z1)

@@ -287,14 +287,9 @@ impl<C: HaloCurve> Circuit<C> {
         // Then, we reduce the above opening set reductions to a single value.
         let _reduced_opening = reduce_with_powers(&opening_set_reductions, v_sf);
 
-        dbg!((_reduced_commit + C::convert(_reduced_opening)*self.u.to_projective()).to_affine());
-        dbg!(_reduced_commit.to_affine());
-        dbg!(coeffs_to_commitments(&[reduced_coeffs.clone()], &self.pedersen_g_msm_precomputation));
         let u_scaling_bf = challenger.get_challenge();
         let u_scaling_sf = u_scaling_bf.try_convert::<C::ScalarField>()?;
         let u_curve = C::convert(u_scaling_sf) * self.u.to_projective();
-        dbg!(u_curve.to_affine());
-
         // Final IPA proof.
         let mut halo_a = reduced_coeffs;
         let mut halo_b = powers(zeta_sf, self.degree());
@@ -336,11 +331,8 @@ impl<C: HaloCurve> Circuit<C> {
 
             challenger.observe_proj_points(&[halo_l_j, halo_r_j]);
             let l_challenge_bf = challenger.get_challenge();
-            let r_challenge_bf = l_challenge_bf
-                .multiplicative_inverse()
-                .expect("This is improbable!");
             let l_challenge_sf = l_challenge_bf.try_convert::<C::ScalarField>()?;
-            let r_challenge_sf = r_challenge_bf.try_convert::<C::ScalarField>()?;
+            let r_challenge_sf = l_challenge_sf.multiplicative_inverse().expect("Improbable");
 
             randomness = randomness
                 + l_challenge_sf.square() * l_j_blinding_factor
@@ -351,13 +343,13 @@ impl<C: HaloCurve> Circuit<C> {
                 &r_challenge_sf.scale_slice(a_hi),
             );
             halo_b = C::ScalarField::add_slices(
-                &l_challenge_sf.scale_slice(b_lo),
-                &r_challenge_sf.scale_slice(b_hi),
+                &l_challenge_sf.scale_slice(b_hi),
+                &r_challenge_sf.scale_slice(b_lo),
             );
             halo_g = g_lo.into_par_iter().zip(g_hi)
                 .map(|(&g_lo_i, &g_hi_i)| msm_parallel(
                     &[l_challenge_sf, r_challenge_sf],
-                    &[g_lo_i, g_hi_i],
+                    &[g_hi_i, g_lo_i],
                     4))
                 .collect();
         }
@@ -394,7 +386,7 @@ impl<C: HaloCurve> Circuit<C> {
     ) -> Vec<C::ScalarField> {
         let degree = self.degree();
         let k_is = (0..NUM_ROUTED_WIRES)
-            .map(|j| get_subgroup_shift::<C::ScalarField>(j))
+            .map(get_subgroup_shift::<C::ScalarField>)
             .collect::<Vec<_>>();
         // Low degree extend Z.
         let plonk_z_points_8n = fft_with_precomputation_power_of_2(
@@ -606,7 +598,6 @@ impl<C: HaloCurve> Circuit<C> {
         u_curve: ProjectivePoint<C>,
         challenger: &mut Challenger<C::BaseField>,
     ) -> SchnorrProof<C> {
-        dbg!((C::convert(halo_a)*(halo_g.to_projective() + C::convert(halo_b)*self.u.to_projective()) + C::convert(randomness)*self.pedersen_h.to_projective()).to_affine());
         let (d, s) = (C::ScalarField::rand(), C::ScalarField::rand());
         let r_curve = C::convert(d)
             * (halo_g.to_projective() + C::convert(halo_b) * u_curve)
@@ -614,7 +605,6 @@ impl<C: HaloCurve> Circuit<C> {
         challenger.observe_proj_point(r_curve);
         let chall_bf = challenger.get_challenge();
         let chall = chall_bf.try_convert::<C::ScalarField>().expect("Improbable");
-        dbg!(chall);
         let z1 = halo_a * chall + d;
         let z2 = randomness * chall + s;
         SchnorrProof {r: r_curve.to_affine(), z1, z2 }
@@ -638,11 +628,11 @@ mod tests {
         let circuit = builder.build();
         let witness = circuit.generate_witness(partial_witness);
         let proof = circuit.generate_proof::<Tweedledum>(witness).unwrap();
-        dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
+        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(
             &[],
             &proof,
             &circuit,
-        ));
+        ).is_ok());
     }
 
     #[test]
@@ -658,11 +648,11 @@ mod tests {
         let circuit = builder.build();
         let witness = circuit.generate_witness(partial_witness);
         let proof = circuit.generate_proof::<Tweedledum>(witness).unwrap();
-        dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
+        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(
             &[],
             &proof,
             &circuit,
-        ));
+        ).is_ok());
     }
 
     #[test]
@@ -681,11 +671,11 @@ mod tests {
         let circuit = builder.build();
         let witness = circuit.generate_witness(partial_witness);
         let proof = circuit.generate_proof::<Tweedledum>(witness).unwrap();
-        dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
+        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(
             &[],
             &proof,
             &circuit,
-        ));
+        ).is_ok());
     }
 
     #[test]
@@ -708,11 +698,11 @@ mod tests {
             proof.o_public_inputs[0].o_wires[0],
             <Tweedledee as Curve>::ScalarField::TWO
         );
-        dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
+        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(
             &[<Tweedledee as Curve>::ScalarField::TWO],
             &proof,
             &circuit,
-        ));
+        ).is_ok());
     }
 
     #[test]
@@ -743,8 +733,8 @@ mod tests {
                 proof.o_public_inputs[i / NUM_WIRES].o_wires[i % NUM_WIRES],
             )
         });
-        dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
+        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(
             &values, &proof, &circuit,
-        ));
+        ).is_ok());
     }
 }

@@ -320,9 +320,9 @@ mod test {
 pub fn halo_g<F: Field>(x: F, us: &[F]) -> F {
     let mut product = F::ONE;
     let mut x_power = x;
-    for &u_i in us {
+    for &u_i in us.iter().rev() {
         let u_i_inv = u_i.multiplicative_inverse_assuming_nonzero();
-        let term = u_i_inv * x_power + u_i;
+        let term = u_i * x_power + u_i_inv;
         product = product * term;
         x_power = x_power.square();
     }
