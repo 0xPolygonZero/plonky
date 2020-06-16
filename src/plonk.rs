@@ -85,17 +85,21 @@ impl<C: HaloCurve> Circuit<C> {
         let mut challenger = Challenger::new(self.security_bits);
 
         // Convert the witness both to coefficient form and a degree-8n LDE.
+        let start = Instant::now();
         let wire_values_by_wire_index = &witness.transpose();
         let wires_coeffs = values_to_coeffs(&wire_values_by_wire_index, &self.fft_precomputation_n);
         let wire_values_8n = coeffs_to_values_padded(&wires_coeffs, &self.fft_precomputation_8n);
+        println!("Low degree extending wire polynomials took {}s", start.elapsed().as_secs_f64());
 
         // Commit to the wire polynomials.
+        let start = Instant::now();
         let c_wires = PolynomialCommitment::coeffs_vec_to_commitments(
             &wires_coeffs,
             &self.pedersen_g_msm_precomputation,
             self.pedersen_h,
             blinding_commitments,
         );
+        println!("Committing to wire polynomials took {}s", start.elapsed().as_secs_f64());
 
         // Generate a random beta and gamma from the transcript.
         challenger
@@ -104,6 +108,7 @@ impl<C: HaloCurve> Circuit<C> {
         let beta_sf = beta_bf.try_convert::<C::ScalarField>()?;
         let gamma_sf = gamma_bf.try_convert::<C::ScalarField>()?;
 
+        let start = Instant::now();
         let plonk_z_points_n = permutation_polynomial(
             self.degree(),
             &self.subgroup_n,
@@ -112,7 +117,10 @@ impl<C: HaloCurve> Circuit<C> {
             beta_sf,
             gamma_sf,
         );
+        println!("Evaluating Z at n points took {}s", start.elapsed().as_secs_f64());
+
         // Commit to Z.
+        let start = Instant::now();
         let plonk_z_coeffs =
             ifft_with_precomputation_power_of_2(&plonk_z_points_n, &self.fft_precomputation_n);
         let c_plonk_z = PolynomialCommitment::coeffs_to_commitment(
@@ -121,6 +129,7 @@ impl<C: HaloCurve> Circuit<C> {
             self.pedersen_h,
             blinding_commitments,
         );
+        println!("Committing to Z took {}s", start.elapsed().as_secs_f64());
 
         // Generate a random alpha from the transcript.
         challenger.observe_affine_point(c_plonk_z.to_affine());
@@ -144,8 +153,10 @@ impl<C: HaloCurve> Circuit<C> {
         }
 
         // Compute the quotient polynomial, t(x) = vanishing(x) / Z_H(x).
+        let start = Instant::now();
         let mut plonk_t_coeffs: Vec<C::ScalarField> =
             divide_by_z_h(&vanishing_coeffs, self.degree());
+        println!("Division by Z_H took {}s", start.elapsed().as_secs_f64());
 
         if cfg!(debug_assertions) {
             // Check that division was performed correctly by evaluating at a random point.
@@ -171,12 +182,14 @@ impl<C: HaloCurve> Circuit<C> {
             .collect();
 
         // Commit to the quotient polynomial.
+        let start = Instant::now();
         let c_plonk_t = PolynomialCommitment::coeffs_vec_to_commitments(
             &plonk_t_coeff_chunks,
             &self.pedersen_g_msm_precomputation,
             self.pedersen_h,
             blinding_commitments,
         );
+        println!("Committing to quotient polynomial took {}s", start.elapsed().as_secs_f64());
 
         // Generate a random zeta from the transcript.
         challenger
@@ -186,6 +199,7 @@ impl<C: HaloCurve> Circuit<C> {
             C::try_convert_b2s(zeta_bf).expect("should fit in both fields with high probability");
 
         // Open all polynomials at each PublicInputGate index.
+        let start = Instant::now();
         let num_public_input_gates = ceil_div_usize(self.num_public_inputs, NUM_WIRES);
         let o_public_inputs: Vec<OpeningSet<C::ScalarField>> = (0..num_public_input_gates)
             // We place PublicInputGates at indices 0, 2, 4, ...
@@ -199,8 +213,10 @@ impl<C: HaloCurve> Circuit<C> {
                 )
             })
             .collect();
+        println!("Evaluating polynomials at public input gate indices took {}s", start.elapsed().as_secs_f64());
 
         // Open all polynomials at zeta, zeta * g, and zeta * g^65.
+        let start = Instant::now();
         let o_local = self.open_all_polynomials(
             &wires_coeffs,
             &plonk_z_coeffs,
@@ -219,8 +235,10 @@ impl<C: HaloCurve> Circuit<C> {
             &plonk_t_coeff_chunks,
             zeta_sf * self.subgroup_generator_n.exp_usize(GRID_WIDTH),
         );
+        println!("Evaluating polynomials at challenge points took {}s", start.elapsed().as_secs_f64());
 
         // Get a list of all opened values, to append to the transcript.
+        let start = Instant::now();
         let all_opening_sets: Vec<OpeningSet<C::ScalarField>> = [
             o_public_inputs.clone(),
             vec![o_local.clone(), o_right.clone(), o_below.clone()],
@@ -289,7 +307,9 @@ impl<C: HaloCurve> Circuit<C> {
         }
 
         let u_prime = halo_n_mul(&u_scaling_sf.to_canonical_bool_vec()[..self.security_bits], self.u).to_projective();
+
         // Final IPA proof.
+        let start = Instant::now();
         let mut halo_a = reduced_coeffs;
         // The Halo b vector is a random combination of the powers of all opening points.
         let mut halo_b = self.build_halo_b(
@@ -348,6 +368,7 @@ impl<C: HaloCurve> Circuit<C> {
 
             let window_size = 8;
 
+            let start = Instant::now();
             // L_i = <a_lo, G_hi> + [l_j] H + [<a_lo, b_hi>] U.
             let halo_l_j = msm_parallel(a_lo, g_hi, window_size)
                 + C::convert(l_j_blinding_factor) * self.pedersen_h.to_projective()
@@ -358,6 +379,7 @@ impl<C: HaloCurve> Circuit<C> {
                 + C::convert(r_j_blinding_factor) * self.pedersen_h.to_projective()
                 + C::convert(C::ScalarField::inner_product(a_hi, b_lo)) * u_prime;
             halo_r.push(halo_r_j);
+            println!("L_j, R_j (j={}) took {}s", j, start.elapsed().as_secs_f64());
 
             challenger.observe_proj_points(&[halo_l_j, halo_r_j]);
             let l_challenge_bf = challenger.get_challenge();
@@ -368,6 +390,7 @@ impl<C: HaloCurve> Circuit<C> {
                 + l_challenge_sf.square() * l_j_blinding_factor
                 + r_challenge_sf.square() * r_j_blinding_factor;
 
+            let start = Instant::now();
             halo_a = C::ScalarField::add_slices(
                 &l_challenge_sf.scale_slice(a_lo),
                 &r_challenge_sf.scale_slice(a_hi),
@@ -376,6 +399,8 @@ impl<C: HaloCurve> Circuit<C> {
                 &l_challenge_sf.scale_slice(b_hi),
                 &r_challenge_sf.scale_slice(b_lo),
             );
+            println!("Reducing a, b (j={}) took {}s", j, start.elapsed().as_secs_f64());
+            let start = Instant::now();
             halo_g = g_lo
                 .into_par_iter()
                 .zip(g_hi)
@@ -383,7 +408,9 @@ impl<C: HaloCurve> Circuit<C> {
                     msm_parallel(&[l_challenge_sf, r_challenge_sf], &[g_hi_i, g_lo_i], 4)
                 })
                 .collect();
+            println!("Reducing G (j={}) took {}s", j, start.elapsed().as_secs_f64());
         }
+        println!("Final IPA reduction (total) took {}s", start.elapsed().as_secs_f64());
 
         debug_assert_eq!(halo_g.len(), 1);
         let halo_g = halo_g[0].to_affine();
@@ -427,12 +454,15 @@ impl<C: HaloCurve> Circuit<C> {
             .map(get_subgroup_shift::<C::ScalarField>)
             .collect::<Vec<_>>();
         // Low degree extend Z.
+        let start = Instant::now();
         let plonk_z_points_8n = fft_with_precomputation_power_of_2(
             &pad_to_8n(&plonk_z_coeffs),
             &self.fft_precomputation_8n,
         );
+        println!("Low degree extending Z took {}s", start.elapsed().as_secs_f64());
 
         // We will evaluate the vanishing polynomial at 8n points, then interpolate.
+        let start = Instant::now();
         let vanishing_points = self
             .subgroup_8n
             .par_iter()
@@ -492,8 +522,12 @@ impl<C: HaloCurve> Circuit<C> {
 
             reduce_with_powers(&vanishing_terms, alpha_sf)
         }).collect::<Vec<_>>();
+        println!("Evaluating vanishing polynomial at 8n points took {}s", start.elapsed().as_secs_f64());
 
-        ifft_with_precomputation_power_of_2(&vanishing_points, &self.fft_precomputation_8n)
+        let start = Instant::now();
+        let coeffs = ifft_with_precomputation_power_of_2(&vanishing_points, &self.fft_precomputation_8n);
+        println!("IFFT on vanishing polynomial took {}s", start.elapsed().as_secs_f64());
+        coeffs
     }
 
     /// Open each polynomial at the given point, `zeta`.
