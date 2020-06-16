@@ -692,16 +692,38 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
     pub fn curve_add<InnerC: Curve<BaseField = C::ScalarField>>(
         &mut self,
-        _p_1: AffinePointTarget,
-        _p_2: AffinePointTarget,
+        p_1: AffinePointTarget,
+        p_2: AffinePointTarget,
     ) -> AffinePointTarget {
         let add_index = self.num_gates();
         self.add_gate_no_constants(CurveAddGate::<C, InnerC>::new(add_index));
         let buffer_index = self.num_gates();
         self.add_gate_no_constants(BufferGate::new(buffer_index));
 
-        // TODO: Wiring.
-
+        let group_acc_x = Target::Wire(Wire {
+            gate: add_index,
+            input: CurveAddGate::<C, InnerC>::WIRE_GROUP_ACC_X,
+        });
+        let group_acc_y = Target::Wire(Wire {
+            gate: add_index,
+            input: CurveAddGate::<C, InnerC>::WIRE_GROUP_ACC_Y,
+        });
+        let scalar_acc_old = Target::Wire(Wire {
+            gate: add_index,
+            input: CurveAddGate::<C, InnerC>::WIRE_SCALAR_ACC_OLD,
+        });
+        let addend_x = Target::Wire(Wire {
+            gate: add_index,
+            input: CurveAddGate::<C, InnerC>::WIRE_ADDEND_X,
+        });
+        let addend_y = Target::Wire(Wire {
+            gate: add_index,
+            input: CurveAddGate::<C, InnerC>::WIRE_ADDEND_Y,
+        });
+        let scalar_bit = Target::Wire(Wire {
+            gate: add_index,
+            input: CurveAddGate::<C, InnerC>::WIRE_SCALAR_BIT,
+        });
         let result_x = Target::Wire(Wire {
             gate: buffer_index,
             input: CurveAddGate::<C, InnerC>::WIRE_GROUP_ACC_X,
@@ -710,6 +732,21 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             gate: buffer_index,
             input: CurveAddGate::<C, InnerC>::WIRE_GROUP_ACC_Y,
         });
+
+        // Wire inputs
+        self.copy(group_acc_x, p_1.x);
+        self.copy(group_acc_y, p_1.y);
+        self.copy(addend_x, p_2.x);
+        self.copy(addend_y, p_2.y);
+
+        // The scalar bit should always be 1, since we always want to perform the add.
+        let one = self.one_wire();
+        self.copy(scalar_bit, one);
+
+        // It doesn't matter what we pass for the old scalar accumulator, since we don't read the
+        // new accumulator state.
+        self.copy(scalar_acc_old, one);
+
         AffinePointTarget {
             x: result_x,
             y: result_y,
