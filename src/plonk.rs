@@ -5,6 +5,11 @@ use std::time::Instant;
 use anyhow::Result;
 use rayon::prelude::*;
 
+use crate::{
+    AffinePoint, divide_by_z_h, evaluate_all_constraints,
+    fft_with_precomputation_power_of_2, FftPrecomputation, Field, HaloCurve, ifft_with_precomputation_power_of_2,
+    msm_parallel, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof, SchnorrProof,
+};
 use crate::partition::{get_subgroup_shift, TargetPartitions};
 use crate::plonk_challenger::Challenger;
 use crate::plonk_util::{
@@ -15,11 +20,6 @@ use crate::poly_commit::PolynomialCommitment;
 use crate::target::Target;
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::witness::{PartialWitness, Witness, WitnessGenerator};
-use crate::{
-    divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2,
-    ifft_with_precomputation_power_of_2, msm_parallel, AffinePoint, FftPrecomputation, Field,
-    HaloCurve, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof, SchnorrProof,
-};
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
@@ -83,7 +83,7 @@ impl<C: HaloCurve> Circuit<C> {
     // TODO: For now we assume that there's exactly one embedded curve, InnerC.
     // Ideally it should be possible to use any number of embedded curves (including zero),
     // and we should add a set of curve gates for each embedded curve.
-    pub fn generate_proof<InnerC: HaloCurve<BaseField = C::ScalarField>>(
+    pub fn generate_proof<InnerC: HaloCurve<BaseField=C::ScalarField>>(
         &self,
         witness: Witness<C::ScalarField>,
         blinding_commitments: bool,
@@ -231,7 +231,7 @@ impl<C: HaloCurve> Circuit<C> {
             o_public_inputs.clone(),
             vec![o_local.clone(), o_right.clone(), o_below.clone()],
         ]
-        .concat();
+            .concat();
         let all_opened_values_sf: Vec<C::ScalarField> = all_opening_sets
             .iter()
             .map(|os| os.to_vec())
@@ -267,7 +267,7 @@ impl<C: HaloCurve> Circuit<C> {
             vec![c_plonk_z.randomness],
             c_plonk_t.iter().map(|c| c.randomness).collect::<Vec<_>>(),
         ]
-        .concat();
+            .concat();
         let all_coeffs = [
             self.constants_coeffs.clone(),
             self.s_sigma_coeffs.clone(),
@@ -275,7 +275,7 @@ impl<C: HaloCurve> Circuit<C> {
             vec![plonk_z_coeffs],
             plonk_t_coeff_chunks,
         ]
-        .concat();
+            .concat();
 
         // Normally we would reduce these lists using powers of u, but for the sake of efficiency
         // (particularly in the recursive verifier) we instead use n(u^i) for each u^i, where n is
@@ -293,13 +293,6 @@ impl<C: HaloCurve> Circuit<C> {
             }
         }
 
-        // Reduce each opening set to a single point.
-        let opening_set_reductions: Vec<C::ScalarField> = all_opening_sets
-            .iter()
-            .map(|opening_set| {
-                C::ScalarField::inner_product(&actual_scalars, &opening_set.to_vec())
-            })
-            .collect();
 
         let u_scaling_bf = challenger.get_challenge();
         let u_scaling_sf = u_scaling_bf.try_convert::<C::ScalarField>()?;
@@ -319,9 +312,24 @@ impl<C: HaloCurve> Circuit<C> {
                     zeta_sf * self.subgroup_generator_n.exp_usize(GRID_WIDTH),
                 ],
             ]
-            .concat(),
+                .concat(),
             v_sf,
         );
+
+        if cfg!(debug_assertions) {
+            // Reduce each opening set to a single point.
+            let opening_set_reductions: Vec<C::ScalarField> = all_opening_sets
+                .iter()
+                .map(|opening_set| {
+                    C::ScalarField::inner_product(&actual_scalars, &opening_set.to_vec())
+                })
+                .collect();
+            // The reduced opening point should be equal to the inner product of `a` and `b`
+            // for the argument to work.
+            assert_eq!(reduce_with_powers(&opening_set_reductions, v_sf),
+                       C::ScalarField::inner_product(&halo_a, &halo_b));
+        }
+
         let mut halo_g = AffinePoint::batch_to_projective(&self.pedersen_g);
         let mut halo_l = Vec::new();
         let mut halo_r = Vec::new();
@@ -412,7 +420,7 @@ impl<C: HaloCurve> Circuit<C> {
         })
     }
 
-    fn vanishing_poly_coeffs<InnerC: HaloCurve<BaseField = C::ScalarField>>(
+    fn vanishing_poly_coeffs<InnerC: HaloCurve<BaseField=C::ScalarField>>(
         &self,
         wire_values_8n: &[Vec<C::ScalarField>],
         alpha_sf: C::ScalarField,
@@ -431,7 +439,7 @@ impl<C: HaloCurve> Circuit<C> {
         );
 
         // We will evaluate the vanishing polynomial at 8n points, then interpolate.
-        let mut vanishing_points = self
+        let vanishing_points = self
             .subgroup_8n
             .par_iter()
             .enumerate()
@@ -486,7 +494,7 @@ impl<C: HaloCurve> Circuit<C> {
                     vec![vanishing_v_shift_term],
                     constraint_terms,
                 ]
-                .concat();
+                    .concat();
 
                 reduce_with_powers(&vanishing_terms, alpha_sf)
             })
