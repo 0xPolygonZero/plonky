@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use plonky::{BufferGate, Circuit, CircuitBuilder, PartialWitness, recursive_verification_circuit, Tweedledee, Tweedledum, verify_proof_circuit};
+use plonky::{recursive_verification_circuit, verify_proof_circuit, BufferGate, Circuit, CircuitBuilder, PartialWitness, Tweedledee, Tweedledum};
 
 const INNER_PROOF_DEGREE_POW: usize = 14;
 const INNER_PROOF_DEGREE: usize = 1 << INNER_PROOF_DEGREE_POW;
@@ -21,21 +21,36 @@ fn main() {
 
     println!("Generating inner proof");
     let start = Instant::now();
-    let inner_proof = inner_circuit.generate_proof::<Tweedledee>(inner_witness, false).unwrap();
+    let inner_proof = inner_circuit
+        .generate_proof::<Tweedledee>(inner_witness, true)
+        .unwrap();
+    println!("Finished in {}s", start.elapsed().as_secs_f64());
+    println!();
+
+    println!("Verifying inner proof");
+    let start = Instant::now();
+    assert!(
+        verify_proof_circuit::<Tweedledum, Tweedledee>(&[], &inner_proof, &inner_circuit).is_ok()
+    );
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!();
 
     println!("Generating recursion circuit...");
     let start = Instant::now();
     let recursion_circuit = recursive_verification_circuit::<Tweedledee, Tweedledum>(
-        INNER_PROOF_DEGREE_POW, SECURITY_BITS);
+        INNER_PROOF_DEGREE_POW,
+        SECURITY_BITS,
+    );
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!("Gate count: {}", recursion_circuit.circuit.degree());
     println!();
 
     // Populate inputs.
     let mut recursion_inputs = PartialWitness::new();
-    if let Err(e) = recursion_circuit.proof.populate_witness(&mut recursion_inputs, inner_proof) {
+    if let Err(e) = recursion_circuit
+        .proof
+        .populate_witness(&mut recursion_inputs, inner_proof)
+    {
         panic!("Failed to populate inputs: {:?}", e);
     }
 
@@ -47,13 +62,20 @@ fn main() {
 
     println!("Generating recursion proof...");
     let start = Instant::now();
-    let proof = recursion_circuit.circuit.generate_proof::<Tweedledum>(recursion_witness, false).unwrap();
+    let proof = recursion_circuit
+        .circuit
+        .generate_proof::<Tweedledum>(recursion_witness, true)
+        .unwrap();
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!();
 
     println!("Verifying proof...");
     let start = Instant::now();
-    dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &recursion_circuit.circuit));
+    dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
+        &[],
+        &proof,
+        &recursion_circuit.circuit
+    ));
     println!("Finished in {}s", start.elapsed().as_secs_f64());
 }
 
