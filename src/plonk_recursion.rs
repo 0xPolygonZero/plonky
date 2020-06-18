@@ -2,7 +2,12 @@ use crate::plonk_challenger::RecursiveChallenger;
 use crate::plonk_gates::evaluate_all_constraints_recursively;
 use crate::plonk_util::{powers_recursive, reduce_with_powers_recursive};
 use crate::util::ceil_div_usize;
-use crate::{get_subgroup_shift, hash_usize_to_curve, AffinePointTarget, Circuit, CircuitBuilder, CurveMulOp, Field, HaloCurve, OpeningSetTarget, ProofTarget, PublicInput, SchnorrProofTarget, Target, GRID_WIDTH, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER};
+use crate::{
+    get_subgroup_shift, hash_usize_to_curve, AffinePointTarget, Circuit, CircuitBuilder,
+    CurveMulOp, Field, HaloCurve, OpeningSetTarget, ProofTarget, PublicInput, SchnorrProofTarget,
+    Target, GRID_WIDTH, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES,
+    QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER,
+};
 
 /// Wraps a `Circuit` for recursive verification with inputs for the proof data.
 pub struct RecursiveCircuit<C: HaloCurve> {
@@ -117,10 +122,10 @@ pub fn recursive_verification_circuit<
     challenger.observe_affine_points(&proof.c_plonk_t);
     let zeta = challenger.get_challenge(&mut builder);
     challenger.observe_elements(&proof.all_opening_targets());
-    let (v, u) = challenger.get_2_challenges(&mut builder);
-
-    // Challenge for scaling u used in the IPA verification.
-    let u_scaling = challenger.get_challenge(&mut builder);
+    // v: Challenge to combine different opening points.
+    // u: Challenge to combine different polynomials.
+    // u_scaling: Challenge for scaling u used in the IPA verification.
+    let (v, u, u_scaling) = challenger.get_3_challenges(&mut builder);
 
     // Compute IPA challenges.
     let mut ipa_challenges = Vec::new();
@@ -247,12 +252,16 @@ fn verify_all_ipas<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     // Then, we reduce the above opening set reductions to a single value.
     let reduced_opening = reduce_with_powers_recursive(builder, &opening_set_reductions, v);
 
-    let generator_n = builder.constant_wire(C::ScalarField::primitive_root_of_unity(
-        ipa_challenges.len(),
-    ));
+    let generator_n_value = C::ScalarField::primitive_root_of_unity(ipa_challenges.len());
+    let generator_n = builder.constant_wire(generator_n_value);
     let mut points: Vec<Target> = (0..2 * num_public_input_gates)
+        .scan(C::ScalarField::ONE, |acc, _| {
+            let tmp = *acc;
+            *acc = *acc * generator_n_value;
+            Some(tmp)
+        })
         .step_by(2)
-        .map(|i| builder.exp_constant_usize(generator_n, i))
+        .map(|f| builder.constant_wire(f))
         .collect();
     points.extend(&[zeta, builder.mul(zeta, generator_n), {
         let g65 = builder.exp_constant_usize(generator_n, GRID_WIDTH);
@@ -322,6 +331,7 @@ fn verify_ipa<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     for i in 0..proof.halo_l_i.len() {
         let l_i = proof.halo_l_i[i];
         let r_i = proof.halo_r_i[i];
+        // TODO: Fix this to ensure n(l[i]) is a square (see https://github.com/mir-protocol/plonky/pull/41#discussion_r442437830).
         let l_challenge = builder.square(ipa_challenges[i]);
         let r_challenge = builder.inv(l_challenge);
         let r_challenge = builder.square(r_challenge);

@@ -1265,7 +1265,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             &constants_coeffs,
             &pedersen_g_msm_precomputation,
             pedersen_h,
-            true,
+            false, // Circuit blinding is not necessary here.
         );
 
         // Convert sigma's values to scalar field elements and split it into degree-n chunks.
@@ -1278,7 +1278,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             &s_sigma_coeffs,
             &pedersen_g_msm_precomputation,
             pedersen_h,
-            true,
+            false, // Circuit blinding is not necessary here.
         );
 
         Circuit {

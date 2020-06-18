@@ -246,7 +246,7 @@ pub(crate) fn polynomial_degree<F: Field>(
     coeffs.iter().rev().skip_while(|c| c.is_zero()).count() - 1
 }
 
-pub fn build_s<F: Field>(us: &[F]) -> Vec<F> {
+fn halo_s<F: Field>(us: &[F]) -> Vec<F> {
     let n = 1 << us.len();
     let mut res = vec![F::ONE; n];
     let us_inv = F::batch_multiplicative_inverse(us);
@@ -340,7 +340,7 @@ mod test {
         let us = (0..10).map(|_| F::rand()).collect::<Vec<_>>();
         let x = F::rand();
         assert_eq!(
-            F::inner_product(&build_s(&us), &powers(x, 1 << 10)),
+            F::inner_product(&halo_s(&us), &powers(x, 1 << 10)),
             halo_g(x, &us)
         );
     }

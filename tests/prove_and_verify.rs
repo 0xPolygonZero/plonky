@@ -34,6 +34,7 @@ fn test_proof_sum_circuit() {
 }
 
 #[test]
+#[ignore]
 fn test_proof_sum_big_circuit() {
     let now = Instant::now();
     let mut builder = CircuitBuilder::<Tweedledee>::new(128);

@@ -94,7 +94,7 @@ impl<C: HaloCurve> Circuit<C> {
             &wires_coeffs,
             &self.pedersen_g_msm_precomputation,
             self.pedersen_h,
-            true,
+            blinding_commitments,
         );
 
         // Generate a random beta and gamma from the transcript.
@@ -242,9 +242,10 @@ impl<C: HaloCurve> Circuit<C> {
 
         // Generate random v, u, and x from the transcript.
         challenger.observe_elements(&all_opened_values_bf);
-        let (v_bf, u_bf) = challenger.get_2_challenges();
+        let (v_bf, u_bf, u_scaling_bf) = challenger.get_3_challenges();
         let v_sf = v_bf.try_convert::<C::ScalarField>()?;
         let u_sf = u_bf.try_convert::<C::ScalarField>()?;
+        let u_scaling_sf = u_scaling_bf.try_convert::<C::ScalarField>()?;
 
         // Make a list of all polynomials' commitment randomness and coefficients, to be reduced later.
         // This must match the order of OpeningSet::to_vec.
@@ -287,8 +288,6 @@ impl<C: HaloCurve> Circuit<C> {
             }
         }
 
-        let u_scaling_bf = challenger.get_challenge();
-        let u_scaling_sf = u_scaling_bf.try_convert::<C::ScalarField>()?;
         let u_curve = C::convert(u_scaling_sf) * self.u.to_projective();
         // Final IPA proof.
         let mut halo_a = reduced_coeffs;
@@ -297,7 +296,7 @@ impl<C: HaloCurve> Circuit<C> {
             &[
                 (0..2 * num_public_input_gates)
                     .step_by(2)
-                    .map(|i| self.subgroup_generator_n.exp_usize(i))
+                    .map(|i| self.subgroup_n[i])
                     .collect::<Vec<_>>(),
                 vec![
                     zeta_sf,

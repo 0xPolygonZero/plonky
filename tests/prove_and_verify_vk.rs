@@ -36,6 +36,7 @@ fn test_proof_sum_vk() {
 }
 
 #[test]
+#[ignore]
 fn test_proof_sum_big_vk() {
     let now = Instant::now();
     let mut builder = CircuitBuilder::<Tweedledee>::new(128);
