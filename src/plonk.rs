@@ -491,9 +491,8 @@ impl<C: HaloCurve> Circuit<C> {
                 ]
                 .concat();
 
-                reduce_with_powers(&vanishing_terms, alpha_sf)
-            })
-            .collect::<Vec<_>>();
+            reduce_with_powers(&vanishing_terms, alpha_sf)
+        }).collect::<Vec<_>>();
 
         ifft_with_precomputation_power_of_2(&vanishing_points, &self.fft_precomputation_8n)
     }
