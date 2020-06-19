@@ -1,4 +1,3 @@
-use rayon::prelude::*;
 use crate::partition::get_subgroup_shift;
 use crate::witness::Witness;
 use crate::{
@@ -6,6 +5,7 @@ use crate::{
     AffinePoint, CircuitBuilder, Curve, FftPrecomputation, Field, HaloCurve, MsmPrecomputation,
     ProjectivePoint, Target, NUM_ROUTED_WIRES,
 };
+use rayon::prelude::*;
 
 /// Evaluate the polynomial which vanishes on any multiplicative subgroup of a given order `n`.
 pub(crate) fn eval_zero_poly<F: Field>(n: usize, x: F) -> F {
@@ -64,8 +64,12 @@ pub(crate) fn halo_n<C: HaloCurve>(s_bits: &[bool]) -> C::ScalarField {
         let bit_lo = s_bits_chunk[0];
         let bit_hi = s_bits_chunk[1];
 
-        let sign = if bit_lo {C::ScalarField::ONE} else {C::ScalarField::NEG_ONE};
-        let (c, d) = if bit_hi { (zero, sign) } else { (sign, zero) };
+        let sign = if bit_lo {
+            C::ScalarField::ONE
+        } else {
+            C::ScalarField::NEG_ONE
+        };
+        let (c, d) = if bit_hi { (sign, zero) } else { (zero, sign) };
 
         a = a.double() + c;
         b = b.double() + d;
@@ -74,7 +78,7 @@ pub(crate) fn halo_n<C: HaloCurve>(s_bits: &[bool]) -> C::ScalarField {
     a * C::ZETA_SCALAR + b
 }
 
-/// Compute `n(x)` for a given `x`, where `n` is the injective function related to the Halo
+/// Compute `[n(s)].P` for a given `s`, where `n` is the injective function related to the Halo
 /// endomorphism.
 pub(crate) fn halo_n_mul<C: HaloCurve>(s_bits: &[bool], p: AffinePoint<C>) -> AffinePoint<C> {
     // This is based on Algorithm 1 of the Halo paper, except that we start with Acc = O.
@@ -82,9 +86,9 @@ pub(crate) fn halo_n_mul<C: HaloCurve>(s_bits: &[bool], p: AffinePoint<C>) -> Af
     debug_assert_eq!(s_bits.len() % 2, 0, "Number of scalar bits must be even");
 
     let p_p = p.to_projective();
-    let p_n = p_p.neg();
-    let endo_p_p = C::endomorphism(p).to_projective();
-    let endo_p_n = endo_p_p.neg();
+    let p_n = - p_p;
+    let endo_p_p = p.endomorphism().to_projective();
+    let endo_p_n = - endo_p_p;
 
     let mut acc = ProjectivePoint::<C>::ZERO;
 
@@ -92,21 +96,20 @@ pub(crate) fn halo_n_mul<C: HaloCurve>(s_bits: &[bool], p: AffinePoint<C>) -> Af
         let bit_lo = s_bits_chunk[0];
         let bit_hi = s_bits_chunk[1];
 
-        let s;
-        if bit_hi {
+        let s = if bit_hi {
             if bit_lo {
-                s = p_p;
+                endo_p_p
             } else {
-                s = p_n;
+                endo_p_n
             }
         } else {
             if bit_lo {
-                s = endo_p_p;
+                p_p
             } else {
-                s = endo_p_n;
+                p_n
             }
-        }
-        acc = acc + acc + s;
+        };
+        acc = acc.double() + s;
     }
 
     acc.to_affine()
@@ -324,7 +327,10 @@ mod test {
         let r = SF::rand();
         let res = C::convert(halo_n::<C>(&r.to_canonical_bool_vec()[..128])) * p;
         let p = p.to_affine();
-        assert_eq!(res.to_affine(), halo_n_mul::<C>(&r.to_canonical_bool_vec()[..128], p))
+        assert_eq!(
+            res.to_affine(),
+            halo_n_mul::<C>(&r.to_canonical_bool_vec()[..128], p)
+        )
     }
 
     #[test]

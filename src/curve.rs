@@ -45,17 +45,6 @@ pub trait HaloCurve: Curve {
     const ZETA: Self::BaseField;
     const ZETA_SCALAR: Self::ScalarField;
 
-    fn endomorphism(p: AffinePoint<Self>) -> AffinePoint<Self> {
-        if p.zero {
-            p
-        } else {
-            AffinePoint {
-                x: Self::ZETA * p.x,
-                y: p.y,
-                zero: false,
-            }
-        }
-    }
 }
 
 /// A point on a short Weierstrass curve, represented in affine coordinates.
@@ -101,6 +90,20 @@ impl<C: Curve> AffinePoint<C> {
     pub fn double(&self) -> Self {
         // TODO: This is a very lazy implementation...
         self.to_projective().double().to_affine()
+    }
+}
+
+impl<C: HaloCurve> AffinePoint<C> {
+    pub fn endomorphism(&self) -> Self {
+        if self.zero {
+            *self
+        } else {
+            AffinePoint {
+                x: C::ZETA * self.x,
+                y: self.y,
+                zero: false,
+            }
+        }
     }
 }
 

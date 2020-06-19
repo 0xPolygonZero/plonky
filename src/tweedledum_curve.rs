@@ -80,7 +80,7 @@ mod tests {
         type C = Tweedledum;
         let g = C::convert(<C as Curve>::ScalarField::rand()) * C::GENERATOR_PROJECTIVE;
         let g = g.to_affine();
-        let h = C::endomorphism(g);
+        let h = g.endomorphism();
         assert_eq!(
             h,
             mul_naive(C::ZETA_SCALAR, g.to_projective()).to_affine()
