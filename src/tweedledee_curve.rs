@@ -39,7 +39,7 @@ impl HaloCurve for Tweedledee {
 #[cfg(test)]
 mod tests {
     use crate::curve::{AffinePoint, Curve, HaloCurve, ProjectivePoint};
-    use crate::Tweedledee;
+    use crate::{Tweedledee, Field};
 
     /// A simple, somewhat inefficient implementation of multiplication which is used as a reference
     /// for correctness.
@@ -62,12 +62,10 @@ mod tests {
 
     #[test]
     fn test_endomorphism_tweedledee() {
-        let g = Tweedledee::GENERATOR_AFFINE;
-        let h = AffinePoint::<Tweedledee> {
-            x: g.x * Tweedledee::ZETA,
-            y: g.y,
-            zero: false,
-        };
+        type C = Tweedledee;
+        let g = C::convert(<C as Curve>::ScalarField::rand()) * C::GENERATOR_PROJECTIVE;
+        let g = g.to_affine();
+        let h = C::endomorphism(g);
         assert_eq!(
             h,
             mul_naive(Tweedledee::ZETA_SCALAR, g.to_projective()).to_affine()

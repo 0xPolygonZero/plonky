@@ -3,7 +3,7 @@ use anyhow::{anyhow, bail, ensure, Result};
 use crate::partition::get_subgroup_shift;
 use crate::plonk_challenger::Challenger;
 use crate::plonk_gates::evaluate_all_constraints;
-use crate::plonk_util::{halo_g, halo_n, powers, reduce_with_powers};
+use crate::plonk_util::{halo_g, halo_n, powers, reduce_with_powers, halo_n_mul};
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::{blake_hash_usize_to_curve, hash_usize_to_curve, msm_execute_parallel, msm_precompute, AffinePoint, Circuit, Curve, Field, HaloCurve, ProjectivePoint, Proof, SchnorrProof, GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES};
 
@@ -307,7 +307,7 @@ fn verify_all_ipas<C: HaloCurve>(
     // Then, we reduce the above opening set reductions to a single value.
     let reduced_opening = reduce_with_powers(&opening_set_reductions, v);
 
-    let u_prime = C::convert(u_scaling) * u_curve.to_projective();
+    let u_prime = halo_n_mul(&u_scaling.to_canonical_bool_vec()[..security_bits], u_curve).to_projective();
 
     let num_public_input_gates = ceil_div_usize(num_public_inputs, NUM_WIRES);
     let points = [
