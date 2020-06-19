@@ -1,6 +1,7 @@
 use std::borrow::Borrow;
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
+use std::fmt::Debug;
 
 use anyhow::Result;
 use rayon::prelude::*;
@@ -687,5 +688,11 @@ impl<C: HaloCurve> Circuit<C> {
             num_public_inputs: self.num_public_inputs,
             security_bits: self.security_bits,
         }
+    }
+}
+
+impl<C: HaloCurve> Debug for Circuit<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Circuit of size {}.", self.degree())
     }
 }

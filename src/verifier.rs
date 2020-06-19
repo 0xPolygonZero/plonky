@@ -96,6 +96,7 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::Scala
     Ok(())
 }
 
+#[derive(Debug, Clone)]
 pub struct VerificationKey<C: Curve> {
     pub c_constants: Vec<AffinePoint<C>>,
     pub c_s_sigmas: Vec<AffinePoint<C>>,
