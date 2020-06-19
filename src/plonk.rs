@@ -5,21 +5,15 @@ use std::time::Instant;
 use anyhow::Result;
 use rayon::prelude::*;
 
-use crate::{
-    AffinePoint, divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2,
-    FftPrecomputation, Field, HaloCurve, ifft_with_precomputation_power_of_2, msm_parallel,
-    MsmPrecomputation, OpeningSet, ProjectivePoint, Proof,
-};
 use crate::partition::{get_subgroup_shift, TargetPartitions};
 use crate::plonk_challenger::Challenger;
-use crate::plonk_util::{
-    coeffs_to_commitments, coeffs_to_values_padded, eval_coeffs, eval_l_1, eval_poly,
-    eval_zero_poly, halo_n, pad_to_8n, pedersen_hash, permutation_polynomial, powers,
-    reduce_with_powers, values_to_coeffs,
-};
+use crate::plonk_util::{coeffs_to_values_padded, eval_coeffs, eval_l_1, eval_poly, eval_zero_poly, halo_n, pad_to_8n, permutation_polynomial, powers, reduce_with_powers, values_to_coeffs};
+use crate::poly_commit::PolynomialCommitment;
 use crate::target::Target;
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::witness::{PartialWitness, Witness, WitnessGenerator};
+use crate::{divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_parallel, AffinePoint, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof, SchnorrProof, VerificationKey};
+use std::ops::Deref;
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
@@ -56,13 +50,13 @@ pub struct Circuit<C: HaloCurve> {
     /// Each constant polynomial, in point-value form, low-degree extended to be degree 8n.
     pub constants_8n: Vec<Vec<C::ScalarField>>,
     /// A commitment to each constant polynomial.
-    pub c_constants: Vec<AffinePoint<C>>,
+    pub c_constants: Vec<PolynomialCommitment<C>>,
     /// Each permutation polynomial, in coefficient form.
     pub s_sigma_coeffs: Vec<Vec<C::ScalarField>>,
     /// Each permutation polynomial, low-degree extended to be degree 8n.
     pub s_sigma_values_8n: Vec<Vec<C::ScalarField>>,
     /// A commitment to each permutation polynomial.
-    pub c_s_sigmas: Vec<AffinePoint<C>>,
+    pub c_s_sigmas: Vec<PolynomialCommitment<C>>,
     /// A precomputation used for MSMs involving `generators`.
     pub pedersen_g_msm_precomputation: MsmPrecomputation<C>,
     /// A precomputation used for FFTs of degree n, where n is the number of gates.
@@ -86,6 +80,7 @@ impl<C: HaloCurve> Circuit<C> {
     pub fn generate_proof<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &self,
         witness: Witness<C::ScalarField>,
+        blinding_commitments: bool,
     ) -> Result<Proof<C>> {
         let mut challenger = Challenger::new(self.security_bits);
 
@@ -95,10 +90,16 @@ impl<C: HaloCurve> Circuit<C> {
         let wire_values_8n = coeffs_to_values_padded(&wires_coeffs, &self.fft_precomputation_8n);
 
         // Commit to the wire polynomials.
-        let c_wires = coeffs_to_commitments(&wires_coeffs, &self.pedersen_g_msm_precomputation);
+        let c_wires = PolynomialCommitment::coeffs_vec_to_commitments(
+            &wires_coeffs,
+            &self.pedersen_g_msm_precomputation,
+            self.pedersen_h,
+            blinding_commitments,
+        );
 
         // Generate a random beta and gamma from the transcript.
-        challenger.observe_affine_points(&c_wires);
+        challenger
+            .observe_affine_points(&c_wires.iter().map(|c| c.to_affine()).collect::<Vec<_>>());
         let (beta_bf, gamma_bf) = challenger.get_2_challenges();
         let beta_sf = beta_bf.try_convert::<C::ScalarField>()?;
         let gamma_sf = gamma_bf.try_convert::<C::ScalarField>()?;
@@ -114,11 +115,15 @@ impl<C: HaloCurve> Circuit<C> {
         // Commit to Z.
         let plonk_z_coeffs =
             ifft_with_precomputation_power_of_2(&plonk_z_points_n, &self.fft_precomputation_n);
-        let c_plonk_z =
-            pedersen_hash::<C>(&plonk_z_coeffs, &self.pedersen_g_msm_precomputation).to_affine();
+        let c_plonk_z = PolynomialCommitment::coeffs_to_commitment(
+            &plonk_z_coeffs,
+            &self.pedersen_g_msm_precomputation,
+            self.pedersen_h,
+            blinding_commitments,
+        );
 
         // Generate a random alpha from the transcript.
-        challenger.observe_affine_point(c_plonk_z);
+        challenger.observe_affine_point(c_plonk_z.to_affine());
         let alpha_bf = challenger.get_challenge();
         let alpha_sf = alpha_bf.try_convert::<C::ScalarField>()?;
 
@@ -139,7 +144,8 @@ impl<C: HaloCurve> Circuit<C> {
         }
 
         // Compute the quotient polynomial, t(x) = vanishing(x) / Z_H(x).
-        let mut plonk_t_coeffs: Vec<C::ScalarField> = divide_by_z_h(&vanishing_coeffs, self.degree());
+        let mut plonk_t_coeffs: Vec<C::ScalarField> =
+            divide_by_z_h(&vanishing_coeffs, self.degree());
 
         if cfg!(debug_assertions) {
             // Check that division was performed correctly by evaluating at a random point.
@@ -152,8 +158,12 @@ impl<C: HaloCurve> Circuit<C> {
 
         // Pad the coefficients to 7n.
         if plonk_t_coeffs.len() != QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER * self.degree() {
-            plonk_t_coeffs.extend((plonk_t_coeffs.len()..QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER *self.degree()).map(|_| C::ScalarField::ZERO));
+            plonk_t_coeffs.extend(
+                (plonk_t_coeffs.len()..QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER * self.degree())
+                    .map(|_| C::ScalarField::ZERO),
+            );
         }
+
         // Split t into degree-n chunks.
         let plonk_t_coeff_chunks: Vec<Vec<C::ScalarField>> = plonk_t_coeffs
             .chunks(self.degree())
@@ -161,11 +171,16 @@ impl<C: HaloCurve> Circuit<C> {
             .collect();
 
         // Commit to the quotient polynomial.
-        let c_plonk_t =
-            coeffs_to_commitments(&plonk_t_coeff_chunks, &self.pedersen_g_msm_precomputation);
+        let c_plonk_t = PolynomialCommitment::coeffs_vec_to_commitments(
+            &plonk_t_coeff_chunks,
+            &self.pedersen_g_msm_precomputation,
+            self.pedersen_h,
+            blinding_commitments,
+        );
 
         // Generate a random zeta from the transcript.
-        challenger.observe_affine_points(&c_plonk_t);
+        challenger
+            .observe_affine_points(&c_plonk_t.iter().map(|c| c.to_affine()).collect::<Vec<_>>());
         let zeta_bf = challenger.get_challenge();
         let zeta_sf =
             C::try_convert_b2s(zeta_bf).expect("should fit in both fields with high probability");
@@ -227,18 +242,25 @@ impl<C: HaloCurve> Circuit<C> {
 
         // Generate random v, u, and x from the transcript.
         challenger.observe_elements(&all_opened_values_bf);
-        let (v_bf, u_bf) = challenger.get_2_challenges();
+        let (v_bf, u_bf, u_scaling_bf) = challenger.get_3_challenges();
         let v_sf = v_bf.try_convert::<C::ScalarField>()?;
         let u_sf = u_bf.try_convert::<C::ScalarField>()?;
+        let u_scaling_sf = u_scaling_bf.try_convert::<C::ScalarField>()?;
 
-        // Make a list of all polynomials' commitments and coefficients, to be reduced later.
+        // Make a list of all polynomials' commitment randomness and coefficients, to be reduced later.
         // This must match the order of OpeningSet::to_vec.
-        let all_commits = [
-            self.c_constants.clone(),
-            self.c_s_sigmas.clone(),
-            c_wires.clone(),
-            vec![c_plonk_z],
-            c_plonk_t.clone(),
+        let all_randomness = [
+            self.c_constants
+                .iter()
+                .map(|c| c.randomness)
+                .collect::<Vec<_>>(),
+            self.c_s_sigmas
+                .iter()
+                .map(|c| c.randomness)
+                .collect::<Vec<_>>(),
+            c_wires.iter().map(|c| c.randomness).collect::<Vec<_>>(),
+            vec![c_plonk_z.randomness],
+            c_plonk_t.iter().map(|c| c.randomness).collect::<Vec<_>>(),
         ]
         .concat();
         let all_coeffs = [
@@ -253,20 +275,10 @@ impl<C: HaloCurve> Circuit<C> {
         // Normally we would reduce these lists using powers of u, but for the sake of efficiency
         // (particularly in the recursive verifier) we instead use n(u^i) for each u^i, where n is
         // the injective function related to the Halo endomorphism. Here we compute n(u^i).
-        let actual_scalars: Vec<C::ScalarField> = powers(u_sf, all_commits.len())
+        let actual_scalars: Vec<C::ScalarField> = powers(u_sf, all_coeffs.len())
             .iter()
             .map(|u_power| halo_n::<C>(&u_power.to_canonical_bool_vec()[..self.security_bits]))
             .collect();
-
-        // Reduce the commitment list to a single commitment.
-        let _reduced_commit = msm_parallel(
-            &actual_scalars,
-            &all_commits
-                .iter()
-                .map(AffinePoint::to_projective)
-                .collect::<Vec<_>>(),
-            2,
-        );
 
         // Reduce the coefficient list to a single set of polynomial coefficients.
         let mut reduced_coeffs = vec![C::ScalarField::ZERO; self.degree()];
@@ -276,29 +288,46 @@ impl<C: HaloCurve> Circuit<C> {
             }
         }
 
-        // Reduce each opening set to a single point.
-        let opening_set_reductions: Vec<C::ScalarField> = all_opening_sets
-            .iter()
-            .map(|opening_set| {
-                C::ScalarField::inner_product(&actual_scalars, &opening_set.to_vec())
-            })
-            .collect();
-
-        // Then, we reduce the above opening set reductions to a single value.
-        let _reduced_opening = reduce_with_powers(&opening_set_reductions, v_sf);
-
-        let u_scaling_bf = challenger.get_challenge();
-        let u_scaling_sf = u_scaling_bf.try_convert::<C::ScalarField>()?;
         let u_curve = C::convert(u_scaling_sf) * self.u.to_projective();
-
         // Final IPA proof.
         let mut halo_a = reduced_coeffs;
-        let mut halo_b = powers(zeta_sf, self.degree());
+        // The Halo b vector is a random combination of the powers of all opening points.
+        let mut halo_b = self.build_halo_b(
+            &[
+                (0..2 * num_public_input_gates)
+                    .step_by(2)
+                    .map(|i| self.subgroup_n[i])
+                    .collect::<Vec<_>>(),
+                vec![
+                    zeta_sf,
+                    zeta_sf * self.subgroup_generator_n,
+                    zeta_sf * self.subgroup_generator_n.exp_usize(GRID_WIDTH),
+                ],
+            ]
+            .concat(),
+            v_sf,
+        );
+
+        if cfg!(debug_assertions) {
+            // Reduce each opening set to a single point.
+            let opening_set_reductions: Vec<C::ScalarField> = all_opening_sets
+                .iter()
+                .map(|opening_set| {
+                    C::ScalarField::inner_product(&actual_scalars, &opening_set.to_vec())
+                })
+                .collect();
+            // The reduced opening point should be equal to the inner product of `a` and `b`
+            // for the argument to work.
+            assert_eq!(
+                reduce_with_powers(&opening_set_reductions, v_sf),
+                C::ScalarField::inner_product(&halo_a, &halo_b)
+            );
+        }
+
         let mut halo_g = AffinePoint::batch_to_projective(&self.pedersen_g);
         let mut halo_l = Vec::new();
         let mut halo_r = Vec::new();
-        // TODO: Change this to the real randomness used in the polynomial commitments.
-        let mut randomness = C::ScalarField::ZERO;
+        let mut randomness = C::ScalarField::inner_product(&actual_scalars, &all_randomness);
         for j in (1..=self.degree_pow()).rev() {
             let n = 1 << j;
             let middle = n / 2;
@@ -332,11 +361,8 @@ impl<C: HaloCurve> Circuit<C> {
 
             challenger.observe_proj_points(&[halo_l_j, halo_r_j]);
             let l_challenge_bf = challenger.get_challenge();
-            let r_challenge_bf = l_challenge_bf
-                .multiplicative_inverse()
-                .expect("This is improbable!");
             let l_challenge_sf = l_challenge_bf.try_convert::<C::ScalarField>()?;
-            let r_challenge_sf = r_challenge_bf.try_convert::<C::ScalarField>()?;
+            let r_challenge_sf = l_challenge_sf.multiplicative_inverse().expect("Improbable");
 
             randomness = randomness
                 + l_challenge_sf.square() * l_j_blinding_factor
@@ -347,14 +373,15 @@ impl<C: HaloCurve> Circuit<C> {
                 &r_challenge_sf.scale_slice(a_hi),
             );
             halo_b = C::ScalarField::add_slices(
-                &l_challenge_sf.scale_slice(b_lo),
-                &r_challenge_sf.scale_slice(b_hi),
+                &l_challenge_sf.scale_slice(b_hi),
+                &r_challenge_sf.scale_slice(b_lo),
             );
-            halo_g = g_lo.into_par_iter().zip(g_hi)
-                .map(|(&g_lo_i, &g_hi_i)| msm_parallel(
-                    &[l_challenge_sf, r_challenge_sf],
-                    &[g_lo_i, g_hi_i],
-                    4))
+            halo_g = g_lo
+                .into_par_iter()
+                .zip(g_hi)
+                .map(|(&g_lo_i, &g_hi_i)| {
+                    msm_parallel(&[l_challenge_sf, r_challenge_sf], &[g_hi_i, g_lo_i], 4)
+                })
                 .collect();
         }
 
@@ -363,12 +390,19 @@ impl<C: HaloCurve> Circuit<C> {
 
         debug_assert_eq!(halo_a.len(), 1);
         debug_assert_eq!(halo_b.len(), 1);
-        let schnorr_proof = self.schnorr_protocol(halo_a[0], halo_b[0], halo_g, randomness, u_curve, &mut challenger);
+        let schnorr_proof = self.schnorr_protocol(
+            halo_a[0],
+            halo_b[0],
+            halo_g,
+            randomness,
+            u_curve,
+            &mut challenger,
+        );
 
         Ok(Proof {
-            c_wires,
-            c_plonk_z,
-            c_plonk_t,
+            c_wires: c_wires.iter().map(|c| c.to_affine()).collect(),
+            c_plonk_z: c_plonk_z.to_affine(),
+            c_plonk_t: c_plonk_t.iter().map(|c| c.to_affine()).collect(),
             o_public_inputs,
             o_local,
             o_right,
@@ -376,7 +410,7 @@ impl<C: HaloCurve> Circuit<C> {
             halo_l: ProjectivePoint::batch_to_affine(&halo_l),
             halo_r: ProjectivePoint::batch_to_affine(&halo_r),
             halo_g,
-            schnorr_proof
+            schnorr_proof,
         })
     }
 
@@ -390,7 +424,7 @@ impl<C: HaloCurve> Circuit<C> {
     ) -> Vec<C::ScalarField> {
         let degree = self.degree();
         let k_is = (0..NUM_ROUTED_WIRES)
-            .map(|j| get_subgroup_shift::<C::ScalarField>(j))
+            .map(get_subgroup_shift::<C::ScalarField>)
             .collect::<Vec<_>>();
         // Low degree extend Z.
         let plonk_z_points_8n = fft_with_precomputation_power_of_2(
@@ -399,58 +433,62 @@ impl<C: HaloCurve> Circuit<C> {
         );
 
         // We will evaluate the vanishing polynomial at 8n points, then interpolate.
-        let mut vanishing_points = self.subgroup_8n.par_iter().enumerate().map(|(i, &x)| {
-            // Load the constant polynomials' values at x.
-            let mut local_constant_values = Vec::new();
-            for j in 0..NUM_CONSTANTS {
-                local_constant_values.push(self.constants_8n[j][i]);
-            }
+        let vanishing_points = self
+            .subgroup_8n
+            .par_iter()
+            .enumerate()
+            .map(|(i, &x)| {
+                // Load the constant polynomials' values at x.
+                let mut local_constant_values = Vec::new();
+                for j in 0..NUM_CONSTANTS {
+                    local_constant_values.push(self.constants_8n[j][i]);
+                }
 
-            // Load the wire polynomials' values at x, g x (the "right" position), and g^WIDTH x
-            // (the "below" position). Note that a shift of 1 in the degree-n subgroup corresponds
-            // to a shift of 8 in the degree-8n subgroup.
-            let i_right = (i + 8) % (8 * degree);
-            let i_below = (i + 8 * GRID_WIDTH) % (8 * degree);
-            let mut local_wire_values = Vec::new();
-            let mut right_wire_values = Vec::new();
-            let mut below_wire_values = Vec::new();
-            for j in 0..NUM_WIRES {
-                local_wire_values.push(wire_values_8n[j][i]);
-                right_wire_values.push(wire_values_8n[j][i_right]);
-                below_wire_values.push(wire_values_8n[j][i_below]);
-            }
+                // Load the wire polynomials' values at x, g x (the "right" position), and g^WIDTH x
+                // (the "below" position). Note that a shift of 1 in the degree-n subgroup corresponds
+                // to a shift of 8 in the degree-8n subgroup.
+                let i_right = (i + 8) % (8 * degree);
+                let i_below = (i + 8 * GRID_WIDTH) % (8 * degree);
+                let mut local_wire_values = Vec::new();
+                let mut right_wire_values = Vec::new();
+                let mut below_wire_values = Vec::new();
+                for j in 0..NUM_WIRES {
+                    local_wire_values.push(wire_values_8n[j][i]);
+                    right_wire_values.push(wire_values_8n[j][i_right]);
+                    below_wire_values.push(wire_values_8n[j][i_below]);
+                }
 
-            let constraint_terms = evaluate_all_constraints::<C, InnerC>(
-                &local_constant_values,
-                &local_wire_values,
-                &right_wire_values,
-                &below_wire_values,
-            );
+                let constraint_terms = evaluate_all_constraints::<C, InnerC>(
+                    &local_constant_values,
+                    &local_wire_values,
+                    &right_wire_values,
+                    &below_wire_values,
+                );
 
-            // Evaluate the L_1(x) (Z(x) - 1) vanishing term.
-            let z_x = plonk_z_points_8n[i];
-            let z_gz = plonk_z_points_8n[i_right];
-            let vanishing_z_1_term = eval_l_1(degree, x) * (z_x - C::ScalarField::ONE);
+                // Evaluate the L_1(x) (Z(x) - 1) vanishing term.
+                let z_x = plonk_z_points_8n[i];
+                let z_gz = plonk_z_points_8n[i_right];
+                let vanishing_z_1_term = eval_l_1(degree, x) * (z_x - C::ScalarField::ONE);
 
-            // Evaluate the Z(x) f'(x) - g'(x) Z(g x) term.
-            let mut f_prime = C::ScalarField::ONE;
-            let mut g_prime = C::ScalarField::ONE;
-            for j in 0..NUM_ROUTED_WIRES {
-                let wire_value = wire_values_8n[j][i];
-                let k_i = k_is[j];
-                let s_id = k_i * x;
-                let s_sigma = self.s_sigma_values_8n[j][i];
-                f_prime = f_prime * (wire_value + beta_sf * s_id + gamma_sf);
-                g_prime = g_prime * (wire_value + beta_sf * s_sigma + gamma_sf);
-            }
-            let vanishing_v_shift_term = f_prime * z_x - g_prime * z_gz;
+                // Evaluate the Z(x) f'(x) - g'(x) Z(g x) term.
+                let mut f_prime = C::ScalarField::ONE;
+                let mut g_prime = C::ScalarField::ONE;
+                for j in 0..NUM_ROUTED_WIRES {
+                    let wire_value = wire_values_8n[j][i];
+                    let k_i = k_is[j];
+                    let s_id = k_i * x;
+                    let s_sigma = self.s_sigma_values_8n[j][i];
+                    f_prime = f_prime * (wire_value + beta_sf * s_id + gamma_sf);
+                    g_prime = g_prime * (wire_value + beta_sf * s_sigma + gamma_sf);
+                }
+                let vanishing_v_shift_term = f_prime * z_x - g_prime * z_gz;
 
-            let vanishing_terms = [
-                vec![vanishing_z_1_term],
-                vec![vanishing_v_shift_term],
-                constraint_terms,
-            ]
-            .concat();
+                let vanishing_terms = [
+                    vec![vanishing_z_1_term],
+                    vec![vanishing_v_shift_term],
+                    constraint_terms,
+                ]
+                .concat();
 
             reduce_with_powers(&vanishing_terms, alpha_sf)
         }).collect::<Vec<_>>();
@@ -592,6 +630,20 @@ impl<C: HaloCurve> Circuit<C> {
         result
     }
 
+    pub fn build_halo_b(
+        &self,
+        points: &[C::ScalarField],
+        v: C::ScalarField,
+    ) -> Vec<C::ScalarField> {
+        let power_points = points
+            .iter()
+            .map(|&p| powers(p, self.degree()))
+            .collect::<Vec<_>>();
+        (0..self.degree())
+            .map(|i| reduce_with_powers(&power_points.iter().map(|v| v[i]).collect::<Vec<_>>(), v))
+            .collect()
+    }
+
     fn schnorr_protocol(
         &self,
         halo_a: C::ScalarField,
@@ -600,144 +652,40 @@ impl<C: HaloCurve> Circuit<C> {
         randomness: C::ScalarField,
         u_curve: ProjectivePoint<C>,
         challenger: &mut Challenger<C::BaseField>,
-    ) -> (C::ScalarField, C::ScalarField) {
+    ) -> SchnorrProof<C> {
         let (d, s) = (C::ScalarField::rand(), C::ScalarField::rand());
-        let r_curve = C::convert(d)
-            * (halo_g.to_projective() + C::convert(halo_b) * u_curve)
+        let r_curve = C::convert(d) * (halo_g.to_projective() + C::convert(halo_b) * u_curve)
             + C::convert(s) * self.pedersen_h.to_projective();
+
         challenger.observe_proj_point(r_curve);
         let chall_bf = challenger.get_challenge();
-        let chall = chall_bf.try_convert::<C::ScalarField>().expect("Improbable");
+        let chall = chall_bf
+            .try_convert::<C::ScalarField>()
+            .expect("Improbable");
         let z1 = halo_a * chall + d;
         let z2 = randomness * chall + s;
-        (z1, z2)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::{
-        verify_proof_circuit, CircuitBuilder, Curve, Field, PartialWitness, Tweedledee, Tweedledum,
-        NUM_WIRES,
-    };
-
-    #[test]
-    fn test_generate_proof_trivial() {
-        let mut builder = CircuitBuilder::<Tweedledee>::new(128);
-        let t = builder.constant_wire(<Tweedledee as Curve>::ScalarField::ZERO);
-        builder.assert_zero(t);
-        let mut partial_witness = PartialWitness::new();
-        partial_witness.set_target(t, <Tweedledee as Curve>::ScalarField::ZERO);
-        let circuit = builder.build();
-        let witness = circuit.generate_witness(partial_witness);
-        let proof = circuit.generate_proof::<Tweedledum>(witness).unwrap();
-        dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
-            &[],
-            &proof,
-            &circuit,
-        ));
+        SchnorrProof {
+            r: r_curve.to_affine(),
+            z1,
+            z2,
+        }
     }
 
-    #[test]
-    fn test_generate_proof_sum() {
-        let mut builder = CircuitBuilder::<Tweedledee>::new(128);
-        let t1 = builder.constant_wire(<Tweedledee as Curve>::ScalarField::ZERO);
-        let t2 = builder.constant_wire(<Tweedledee as Curve>::ScalarField::ZERO);
-        let s = builder.add(t1, t2);
-        builder.assert_zero(s);
-        let mut partial_witness = PartialWitness::new();
-        partial_witness.set_target(t1, <Tweedledee as Curve>::ScalarField::ZERO);
-        partial_witness.set_target(t2, <Tweedledee as Curve>::ScalarField::ZERO);
-        let circuit = builder.build();
-        let witness = circuit.generate_witness(partial_witness);
-        let proof = circuit.generate_proof::<Tweedledum>(witness).unwrap();
-        dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
-            &[],
-            &proof,
-            &circuit,
-        ));
-    }
-
-    #[test]
-    fn test_generate_proof_quadratic() {
-        let mut builder = CircuitBuilder::<Tweedledee>::new(128);
-        let one = builder.one_wire();
-        let t = builder.add_virtual_target();
-        let t_sq = builder.square(t);
-        let quad = builder.add_many(&[one, t, t_sq]);
-        let seven =
-            builder.constant_wire(<Tweedledee as Curve>::ScalarField::from_canonical_usize(7));
-        let res = builder.sub(quad, seven);
-        builder.assert_zero(res);
-        let mut partial_witness = PartialWitness::new();
-        partial_witness.set_target(t, <Tweedledee as Curve>::ScalarField::TWO);
-        let circuit = builder.build();
-        let witness = circuit.generate_witness(partial_witness);
-        let proof = circuit.generate_proof::<Tweedledum>(witness).unwrap();
-        dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
-            &[],
-            &proof,
-            &circuit,
-        ));
-    }
-
-    #[test]
-    fn test_generate_proof_public_input1() {
-        // Set public inputs pi1 = 2 and check that pi1 - 2 == 0.
-        let mut builder = CircuitBuilder::<Tweedledee>::new(128);
-        let pi = builder.stage_public_input();
-        builder.route_public_inputs();
-        let t1 = pi.routable_target();
-        let t2 = builder.constant_wire(<Tweedledee as Curve>::ScalarField::TWO);
-        let t3 = builder.sub(t1, t2);
-        builder.assert_zero(t3);
-        let mut partial_witness = PartialWitness::new();
-        partial_witness.set_target(t1, <Tweedledee as Curve>::ScalarField::TWO);
-        let circuit = builder.build();
-        let witness = circuit.generate_witness(partial_witness);
-        let proof = circuit.generate_proof::<Tweedledum>(witness).unwrap();
-        // Check that the public input is set correctly in the proof.
-        assert_eq!(
-            proof.o_public_inputs[0].o_wires[0],
-            <Tweedledee as Curve>::ScalarField::TWO
-        );
-        dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
-            &[<Tweedledee as Curve>::ScalarField::TWO],
-            &proof,
-            &circuit,
-        ));
-    }
-
-    #[test]
-    #[ignore]
-    fn test_generate_proof_public_input2() {
-        // Set many random public inputs
-        let mut builder = CircuitBuilder::<Tweedledee>::new(128);
-        let pis = (0..200)
-            .map(|_| builder.stage_public_input())
-            .collect::<Vec<_>>();
-        builder.route_public_inputs();
-        let tis = pis.iter().map(|p| p.original_wire()).collect::<Vec<_>>();
-        let mut partial_witness = PartialWitness::new();
-        let values = tis
-            .iter()
-            .map(|&_t| <Tweedledee as Curve>::ScalarField::rand())
-            .collect::<Vec<_>>();
-        tis.iter().zip(values.iter()).for_each(|(&t, &v)| {
-            partial_witness.set_wire(t, v);
-        });
-        let circuit = builder.build();
-        let witness = circuit.generate_witness(partial_witness);
-        let proof = circuit.generate_proof::<Tweedledum>(witness).unwrap();
-        // Check that the public inputs are set correctly in the proof.
-        values.iter().enumerate().for_each(|(i, &v)| {
-            assert_eq!(
-                v,
-                proof.o_public_inputs[i / NUM_WIRES].o_wires[i % NUM_WIRES],
-            )
-        });
-        dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
-            &values, &proof, &circuit,
-        ));
+    pub fn to_vk(&self) -> VerificationKey<C> {
+        VerificationKey {
+            c_constants: self
+                .c_constants
+                .iter()
+                .map(|c| c.to_affine())
+                .collect::<Vec<_>>(),
+            c_s_sigmas: self
+                .c_s_sigmas
+                .iter()
+                .map(|c| c.to_affine())
+                .collect::<Vec<_>>(),
+            degree: self.degree(),
+            num_public_inputs: self.num_public_inputs,
+            security_bits: self.security_bits,
+        }
     }
 }

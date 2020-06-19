@@ -1,9 +1,10 @@
 use std::collections::{BTreeMap, HashMap};
 
-use crate::{AffinePoint, AffinePointTarget, blake_hash_usize_to_curve, Circuit, Curve, CurveMsmEndoResult, CurveMulEndoResult, CurveMulOp, fft_precompute, Field, generate_rescue_constants, HaloCurve, msm_precompute, NUM_CONSTANTS, NUM_WIRES, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, blake_hash_base_field_to_curve};
 use crate::plonk_gates::*;
-use crate::plonk_util::{coeffs_to_commitments, coeffs_to_values_padded, values_to_coeffs, sigma_polynomials};
+use crate::plonk_util::{coeffs_to_values_padded, sigma_polynomials, values_to_coeffs};
+use crate::poly_commit::PolynomialCommitment;
 use crate::util::{ceil_div_usize, log2_strict, transpose};
+use crate::{blake_hash_base_field_to_curve, blake_hash_usize_to_curve, fft_precompute, generate_rescue_constants, msm_precompute, AffinePoint, AffinePointTarget, Circuit, Curve, CurveMsmEndoResult, CurveMulEndoResult, CurveMulOp, Field, HaloCurve, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, NUM_CONSTANTS, NUM_WIRES};
 
 pub struct CircuitBuilder<C: HaloCurve> {
     pub(crate) security_bits: usize,
@@ -154,10 +155,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         let index = self.num_gates();
         self.add_gate(
             ArithmeticGate::new(index),
-            vec![
-                C::ScalarField::ONE,
-                C::ScalarField::ONE,
-            ],
+            vec![C::ScalarField::ONE, C::ScalarField::ONE],
         );
         self.copy(
             x,
@@ -208,10 +206,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         let index = self.num_gates();
         self.add_gate(
             ArithmeticGate::new(index),
-            vec![
-                C::ScalarField::ONE,
-                C::ScalarField::NEG_ONE,
-            ],
+            vec![C::ScalarField::ONE, C::ScalarField::NEG_ONE],
         );
         self.copy(
             x,
@@ -253,10 +248,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         let index = self.num_gates();
         self.add_gate(
             ArithmeticGate::new(index),
-            vec![
-                C::ScalarField::ONE,
-                C::ScalarField::ZERO,
-            ],
+            vec![C::ScalarField::ONE, C::ScalarField::ZERO],
         );
         self.copy(
             x,
@@ -468,10 +460,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         let index = self.num_gates();
         self.add_gate(
             ArithmeticGate::new(index),
-            vec![
-                C::ScalarField::ONE,
-                C::ScalarField::ONE,
-            ],
+            vec![C::ScalarField::ONE, C::ScalarField::ONE],
         );
         self.copy(
             x,
@@ -505,10 +494,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         let index = self.num_gates();
         self.add_gate(
             ArithmeticGate::new(index),
-            vec![
-                C::ScalarField::ONE,
-                C::ScalarField::NEG_ONE,
-            ],
+            vec![C::ScalarField::ONE, C::ScalarField::NEG_ONE],
         );
         self.copy(
             x,
@@ -648,10 +634,13 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
         // Route the input wires.
         for i in 0..RESCUE_SPONGE_WIDTH {
-            self.copy(inputs[i], Target::Wire(Wire {
-                gate: self.num_gates(),
-                input: RescueStepAGate::<C>::wire_acc(i),
-            }));
+            self.copy(
+                inputs[i],
+                Target::Wire(Wire {
+                    gate: self.num_gates(),
+                    input: RescueStepAGate::<C>::wire_acc(i),
+                }),
+            );
         }
 
         let all_constants = generate_rescue_constants(RESCUE_SPONGE_WIDTH, self.security_bits);
@@ -669,10 +658,12 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         let gate = self.num_gates();
         self.add_gate_no_constants(BufferGate::new(gate));
         (0..RESCUE_SPONGE_WIDTH)
-            .map(|i| Target::Wire(Wire {
-                gate,
-                input: RescueStepBGate::<C>::wire_acc(i),
-            }))
+            .map(|i| {
+                Target::Wire(Wire {
+                    gate,
+                    input: RescueStepBGate::<C>::wire_acc(i),
+                })
+            })
             .collect()
     }
 
@@ -1164,6 +1155,18 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         self.copy_constraints.push((target_1, target_2));
     }
 
+    /// Add a copy constraint between two affine targets.
+    pub fn copy_curve(
+        &mut self,
+        affine_target_1: AffinePointTarget,
+        affine_target_2: AffinePointTarget,
+    ) {
+        self.copy_constraints
+            .push((affine_target_1.x, affine_target_2.x));
+        self.copy_constraints
+            .push((affine_target_1.y, affine_target_2.y));
+    }
+
     /// Adds a gate with random wire values. By adding `k` of these gates, we can ensure that
     /// nothing is learned by opening the wire polynomials at `k` points outside of H.
     fn add_blinding_gate(&mut self) {
@@ -1258,7 +1261,12 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         let constants_coeffs: Vec<Vec<C::ScalarField>> =
             values_to_coeffs(&wire_constants, &fft_precomputation_n);
         let constants_8n = coeffs_to_values_padded(&constants_coeffs, &fft_precomputation_8n);
-        let c_constants = coeffs_to_commitments(&constants_coeffs, &pedersen_g_msm_precomputation);
+        let c_constants = PolynomialCommitment::coeffs_vec_to_commitments(
+            &constants_coeffs,
+            &pedersen_g_msm_precomputation,
+            pedersen_h,
+            false, // Circuit blinding is not necessary here.
+        );
 
         // Convert sigma's values to scalar field elements and split it into degree-n chunks.
         let sigma_chunks = sigma_polynomials(sigma, degree, subgroup_generator_n);
@@ -1266,7 +1274,12 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         // Compute S_sigma, then a commitment to it.
         let s_sigma_coeffs = values_to_coeffs(&sigma_chunks, &fft_precomputation_n);
         let s_sigma_values_8n = coeffs_to_values_padded(&s_sigma_coeffs, &fft_precomputation_8n);
-        let c_s_sigmas = coeffs_to_commitments(&s_sigma_coeffs, &pedersen_g_msm_precomputation);
+        let c_s_sigmas = PolynomialCommitment::coeffs_vec_to_commitments(
+            &s_sigma_coeffs,
+            &pedersen_g_msm_precomputation,
+            pedersen_h,
+            false, // Circuit blinding is not necessary here.
+        );
 
         Circuit {
             security_bits,
