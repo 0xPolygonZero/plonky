@@ -92,6 +92,7 @@ impl<F: Field> PartialWitness<F> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Witness<F: Field> {
     wire_values: Vec<Vec<F>>,
 }
