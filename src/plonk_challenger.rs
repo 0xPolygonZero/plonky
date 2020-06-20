@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 use crate::{rescue_sponge, AffinePoint, AffinePointTarget, CircuitBuilder, Curve, Field, HaloCurve, ProjectivePoint, Target};
 
 /// Observes prover messages, and generates challenges by hashing the transcript.
+#[derive(Clone)]
 pub(crate) struct Challenger<F: Field> {
     transcript: Vec<F>,
     security_bits: usize,

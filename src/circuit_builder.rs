@@ -1,10 +1,11 @@
 use std::collections::{BTreeMap, HashMap};
 
+use crate::{AffinePoint, AffinePointTarget, blake_hash_base_field_to_curve, blake_hash_usize_to_curve, Circuit, Curve, CurveMsmEndoResult, CurveMulEndoResult, CurveMulOp, fft_precompute, Field, generate_rescue_constants, HaloCurve, msm_precompute, NUM_CONSTANTS, NUM_WIRES, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator};
 use crate::gates::*;
 use crate::plonk_util::{coeffs_to_values_padded, sigma_polynomials, values_to_coeffs};
 use crate::poly_commit::PolynomialCommitment;
 use crate::util::{ceil_div_usize, log2_strict, transpose};
-use crate::{blake_hash_base_field_to_curve, blake_hash_usize_to_curve, fft_precompute, generate_rescue_constants, msm_precompute, AffinePoint, AffinePointTarget, Circuit, Curve, CurveMsmEndoResult, CurveMulEndoResult, CurveMulOp, Field, HaloCurve, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, NUM_CONSTANTS, NUM_WIRES};
+use std::marker::PhantomData;
 
 pub struct CircuitBuilder<C: HaloCurve> {
     pub(crate) security_bits: usize,
@@ -838,6 +839,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         self.curve_msm::<InnerC>(&[mul])
     }
 
+    /// Computes `[n(s)] p`.
     pub fn curve_mul_endo<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &mut self,
         mul: CurveMulOp,
@@ -847,6 +849,56 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             mul_result: result.msm_result,
             actual_scalar: result.actual_scalars[0],
         }
+    }
+
+    /// Computes `[1 / n(s)] p`.
+    pub fn curve_mul_inv_endo<InnerC: HaloCurve<BaseField = C::ScalarField>>(
+        &mut self,
+        mul: CurveMulOp,
+    ) -> CurveMulEndoResult {
+        // We witness r = [1 / n(s)] p, then verify that [n(s)] r = p, and return r.
+        let CurveMulOp { scalar, point } = mul;
+
+        struct ResultGenerator<InnerC: HaloCurve> {
+            mul: CurveMulOp,
+            result: AffinePointTarget,
+            _phantom: PhantomData<InnerC>,
+        }
+
+        impl<InnerC: HaloCurve> WitnessGenerator<InnerC::BaseField> for ResultGenerator<InnerC> {
+            fn dependencies(&self) -> Vec<Target> {
+                vec![self.mul.scalar, self.mul.point.x, self.mul.point.y]
+            }
+
+            fn generate(
+                &self,
+                _constants: &Vec<Vec<InnerC::BaseField>>,
+                witness: &PartialWitness<InnerC::BaseField>,
+            ) -> PartialWitness<InnerC::BaseField> {
+                let scalar = witness.get_target(self.mul.scalar)
+                    .try_convert::<InnerC::ScalarField>().expect("Improbable");
+                let scalar_inv = scalar.multiplicative_inverse().expect("Can't invert zero");
+                let point = witness.get_point_target(self.mul.point);
+                let result = (InnerC::convert(scalar_inv) * point.to_projective()).to_affine();
+
+                let mut result_witness = PartialWitness::new();
+                result_witness.set_point_target(self.result, result);
+                result_witness
+            }
+        }
+
+        let result = self.add_virtual_point_target();
+        self.add_generator(ResultGenerator::<InnerC> {
+            mul,
+            result,
+            _phantom: PhantomData,
+        });
+
+        // Compute [n(s)] r, and verify that it matches p.
+        let mul_result = self.curve_mul_endo::<InnerC>(CurveMulOp { scalar, point: result });
+        self.copy_curve(mul_result.mul_result, point);
+
+        CurveMulEndoResult { mul_result: result, actual_scalar: mul_result.actual_scalar }
     }
 
     /// Note: This assumes the most significant bit of each scalar is unset. This occurs with high
@@ -1216,8 +1268,8 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         *self.gate_counts.entry(G::NAME).or_insert(0) += 1;
     }
 
-    pub fn add_generator<G: WitnessGenerator<C::ScalarField>>(&mut self, gate: G) {
-        self.generators.push(Box::new(gate));
+    pub fn add_generator<G: WitnessGenerator<C::ScalarField>>(&mut self, generator: G) {
+        self.generators.push(Box::new(generator));
     }
 
     pub fn num_gates(&self) -> usize {
@@ -1397,5 +1449,45 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
 
         partitions
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Result;
+
+    use crate::{AffinePoint, blake_hash_base_field_to_curve, CircuitBuilder, Curve, CurveMulOp, Field, PartialWitness, Tweedledee, Tweedledum, verify_proof};
+
+    #[test]
+    fn test_curve_mul_inv_endo() -> Result<()> {
+        type C = Tweedledee;
+        type InnerC = Tweedledum;
+        type SF = <C as Curve>::ScalarField;
+        let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+
+        // This is an arbitrary nonzero scalar.
+        let scalar = builder.constant_wire(SF::FIVE);
+
+        // Let p1 be an arbitrary point.
+        let p1 = builder.constant_affine_point::<InnerC>(InnerC::GENERATOR_AFFINE);
+
+        // Let p2 = [n(s)] p1.
+        let mul_result = builder.curve_mul_endo::<InnerC>(CurveMulOp { scalar, point: p1 });
+        let p2 = mul_result.mul_result;
+
+        // Let p3 = [1 / n(s)] p2.
+        let mul_inv_result = builder.curve_mul_inv_endo::<InnerC>(CurveMulOp { scalar, point: p2 });
+        let p3 = mul_inv_result.mul_result;
+
+        // Since the scalars cancel, p1 = p3.
+        builder.copy_curve(p1, p3);
+
+        let circuit = builder.build();
+        let witness = circuit.generate_witness(PartialWitness::new());
+        let proof = circuit.generate_proof::<InnerC>(witness, &[], false)?;
+        let vk = circuit.to_vk();
+        verify_proof::<C, InnerC>(&[], &proof, &[], &vk, true)?;
+
+        Ok(())
     }
 }

@@ -37,6 +37,15 @@ impl<F: Field> PartialWitness<F> {
         self.wire_values[&target]
     }
 
+    pub fn get_point_target<InnerC: Curve<BaseField = F>>(
+        &self,
+        target: AffinePointTarget,
+    ) -> AffinePoint<InnerC> {
+        let x = self.get_target(target.x);
+        let y = self.get_target(target.y);
+        AffinePoint::nonzero(x, y)
+    }
+
     pub fn get_wire(&self, wire: Wire) -> F {
         self.get_target(Target::Wire(wire))
     }

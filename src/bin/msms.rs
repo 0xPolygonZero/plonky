@@ -2,7 +2,7 @@
 
 use std::time::{Instant, Duration};
 
-use plonky::{Curve, Field, msm_execute_parallel, msm_precompute, Tweedledum, ProjectivePoint, MsmPrecomputation};
+use plonky::{Curve, Field, msm_execute_parallel, msm_precompute, Tweedledum, MsmPrecomputation};
 
 type C = Tweedledum;
 type SF = <C as Curve>::ScalarField;

@@ -360,44 +360,58 @@ impl<C: HaloCurve> Circuit<C> {
             let g_lo = &halo_g[..middle];
             let g_hi = &halo_g[middle..];
 
-            let l_j_blinding_factor = C::ScalarField::rand();
-            let r_j_blinding_factor = C::ScalarField::rand();
-
             let window_size = 8;
 
-            // L_i = <a_lo, G_hi> + [l_j] H + [<a_lo, b_hi>] U.
-            let halo_l_j = msm_parallel(a_lo, g_hi, window_size)
-                + C::convert(l_j_blinding_factor) * self.pedersen_h.to_projective()
-                + C::convert(C::ScalarField::inner_product(a_lo, b_hi)) * u_prime;
-            halo_l.push(halo_l_j);
-            // R_i = <a_hi, G_lo> + [r_j] H + [<a_hi, b_lo>] U.
-            let halo_r_j = msm_parallel(a_hi, g_lo, window_size)
-                + C::convert(r_j_blinding_factor) * self.pedersen_h.to_projective()
-                + C::convert(C::ScalarField::inner_product(a_hi, b_lo)) * u_prime;
-            halo_r.push(halo_r_j);
+            // We may need to re-generate L_i/R_i a few times with different blinding factors until
+            // we get a challenge r such that n(r) is square.
+            let u_j = loop {
+                let l_j_blinding_factor = C::ScalarField::rand();
+                let r_j_blinding_factor = C::ScalarField::rand();
 
-            challenger.observe_proj_points(&[halo_l_j, halo_r_j]);
-            let l_challenge_bf = challenger.get_challenge();
-            let l_challenge_sf = l_challenge_bf.try_convert::<C::ScalarField>()?;
-            let r_challenge_sf = l_challenge_sf.multiplicative_inverse().expect("Improbable");
+                // L_i = <a_lo, G_hi> + [l_j] H + [<a_lo, b_hi>] U.
+                let halo_l_j = msm_parallel(a_lo, g_hi, window_size)
+                    + C::convert(l_j_blinding_factor) * self.pedersen_h.to_projective()
+                    + C::convert(C::ScalarField::inner_product(a_lo, b_hi)) * u_prime;
+                // R_i = <a_hi, G_lo> + [r_j] H + [<a_hi, b_lo>] U.
+                let halo_r_j = msm_parallel(a_hi, g_lo, window_size)
+                    + C::convert(r_j_blinding_factor) * self.pedersen_h.to_projective()
+                    + C::convert(C::ScalarField::inner_product(a_hi, b_lo)) * u_prime;
 
-            randomness = randomness
-                + l_challenge_sf.square() * l_j_blinding_factor
-                + r_challenge_sf.square() * r_j_blinding_factor;
+                let mut challenger_fork = challenger.clone();
+                challenger_fork.observe_proj_points(&[halo_l_j, halo_r_j]);
+                let r_bf = challenger_fork.get_challenge();
+                let r_sf = r_bf.try_convert::<C::ScalarField>()?;
+                let r_bits = &r_sf.to_canonical_bool_vec()[..self.security_bits];
+                let u_j_squared = halo_n::<C>(r_bits);
+
+                if let Some(u_j) = u_j_squared.square_root() {
+                    let u_squared_inv = u_j_squared.multiplicative_inverse().expect("Improbable");
+
+                    halo_l.push(halo_l_j);
+                    halo_r.push(halo_r_j);
+                    randomness = randomness
+                        + u_j_squared * l_j_blinding_factor
+                        + u_squared_inv * r_j_blinding_factor;
+                    challenger = challenger_fork;
+
+                    break u_j;
+                }
+            };
+            let u_j_inv = u_j.multiplicative_inverse().expect("Improbable");
 
             halo_a = C::ScalarField::add_slices(
-                &l_challenge_sf.scale_slice(a_lo),
-                &r_challenge_sf.scale_slice(a_hi),
+                &u_j_inv.scale_slice(a_hi),
+                &u_j.scale_slice(a_lo),
             );
             halo_b = C::ScalarField::add_slices(
-                &l_challenge_sf.scale_slice(b_hi),
-                &r_challenge_sf.scale_slice(b_lo),
+                &u_j_inv.scale_slice(b_lo),
+                &u_j.scale_slice(b_hi),
             );
             halo_g = g_lo
                 .into_par_iter()
                 .zip(g_hi)
                 .map(|(&g_lo_i, &g_hi_i)| {
-                    msm_parallel(&[l_challenge_sf, r_challenge_sf], &[g_hi_i, g_lo_i], 4)
+                    msm_parallel(&[u_j_inv, u_j], &[g_lo_i, g_hi_i], 4)
                 })
                 .collect();
         }

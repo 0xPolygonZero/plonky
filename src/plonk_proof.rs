@@ -1,11 +1,11 @@
 use anyhow::{anyhow, bail, ensure, Result};
 
 use crate::plonk_challenger::Challenger;
-use crate::plonk_util::{halo_g, halo_s, pedersen_hash};
-use crate::{AffinePoint, AffinePointTarget, Curve, Field, MsmPrecomputation, PartialWitness, Target, SECURITY_BITS, NUM_WIRES};
+use crate::plonk_util::{halo_g, halo_s, pedersen_hash, halo_n};
+use crate::{AffinePoint, AffinePointTarget, Curve, Field, MsmPrecomputation, PartialWitness, Target, SECURITY_BITS, NUM_WIRES, HaloCurve};
 
 #[derive(Debug, Clone, Copy)]
-pub struct SchnorrProof<C: Curve> {
+pub struct SchnorrProof<C: HaloCurve> {
     pub r: AffinePoint<C>,
     pub z1: C::ScalarField,
     pub z2: C::ScalarField,
@@ -18,7 +18,7 @@ pub struct SchnorrProofTarget {
 }
 
 #[derive(Debug, Clone)]
-pub struct Proof<C: Curve> {
+pub struct Proof<C: HaloCurve> {
     /// A commitment to each wire polynomial.
     pub c_wires: Vec<AffinePoint<C>>,
     /// A commitment to Z, in the context of the permutation argument.
@@ -45,7 +45,7 @@ pub struct Proof<C: Curve> {
     pub schnorr_proof: SchnorrProof<C>,
 }
 
-impl<C: Curve> Proof<C> {
+impl<C: HaloCurve> Proof<C> {
     pub fn get_public_inputs(&self, count: usize) -> Vec<C::ScalarField> {
         (0..count).map(|i| {
             let pi_gate_idx = i / NUM_WIRES;
@@ -91,11 +91,16 @@ impl<C: Curve> Proof<C> {
         let u_scaling = C::try_convert_b2s(u_scaling_bf).map_err(|_| anyhow!(error_msg))?;
 
         // Compute IPA challenges.
-        let mut ipa_challenges = Vec::new();
+        let mut halo_us = Vec::new();
         for i in 0..self.halo_l.len() {
             challenger.observe_affine_points(&[self.halo_l[i], self.halo_r[i]]);
-            let l_challenge = challenger.get_challenge();
-            ipa_challenges.push(C::try_convert_b2s(l_challenge).map_err(|_| anyhow!(error_msg))?);
+            let r_bf = challenger.get_challenge();
+            let r_sf = r_bf.try_convert::<C::ScalarField>()?;
+            let r_bits = &r_sf.to_canonical_bool_vec()[..SECURITY_BITS];
+            let u_j_squared = halo_n::<C>(r_bits);
+            let u_j = u_j_squared.square_root()
+                .expect("Prover should have ensured that n(r) is square");
+            halo_us.push(u_j);
         }
 
         // Compute challenge for Schnorr protocol.
@@ -112,7 +117,7 @@ impl<C: Curve> Proof<C> {
             v,
             u,
             u_scaling,
-            ipa_challenges,
+            halo_us,
             schnorr_challenge,
         })
     }
@@ -127,38 +132,38 @@ pub struct ProofChallenge<C: Curve> {
     pub v: C::ScalarField,
     pub u: C::ScalarField,
     pub u_scaling: C::ScalarField,
-    pub ipa_challenges: Vec<C::ScalarField>,
+    pub halo_us: Vec<C::ScalarField>,
     pub schnorr_challenge: C::ScalarField,
 }
 
 #[derive(Debug, Clone)]
 /// Object returned by the verifier, containing the necessary data to verify `halo_g` at a later time.
-/// In particular, `halo_g = commit(g(X, ipa_challenges))` where `g` is the polynomial defined in section 3.2 of the paper.
-pub struct OldProof<C: Curve> {
+/// In particular, `halo_g = commit(g(X, halo_us))` where `g` is the polynomial defined in section 3.2 of the paper.
+pub struct OldProof<C: HaloCurve> {
     pub halo_g: AffinePoint<C>,
-    pub ipa_challenges: Vec<C::ScalarField>,
+    pub halo_us: Vec<C::ScalarField>,
 }
 
-impl<C: Curve> From<Proof<C>> for OldProof<C> {
+impl<C: HaloCurve> From<Proof<C>> for OldProof<C> {
     fn from(proof: Proof<C>) -> Self {
-        let ProofChallenge { ipa_challenges, .. } = proof.get_challenges().unwrap();
+        let ProofChallenge { halo_us, .. } = proof.get_challenges().unwrap();
         Self {
             halo_g: proof.halo_g,
-            ipa_challenges,
+            halo_us,
         }
     }
 }
 
-impl<C: Curve> OldProof<C> {
+impl<C: HaloCurve> OldProof<C> {
     /// Returns the coefficients of the Halo `g` polynomial.
     /// In particular, `commit(self.coeffs) = self.halo_g`.
     pub fn coeffs(&self) -> Vec<C::ScalarField> {
-        halo_s(&self.ipa_challenges)
+        halo_s(&self.halo_us)
     }
 
     /// Evaluates the Halo g polynomial at a point `x`.
     pub fn evaluate_g(&self, x: C::ScalarField) -> C::ScalarField {
-        halo_g(x, &self.ipa_challenges)
+        halo_g(x, &self.halo_us)
     }
 }
 
@@ -166,20 +171,20 @@ impl<C: Curve> OldProof<C> {
 /// The `Target` version of `OldProof`.
 pub struct OldProofTarget {
     pub halo_g: AffinePointTarget,
-    pub ipa_challenges: Vec<Target>,
+    pub halo_us: Vec<Target>,
 }
 
 impl OldProofTarget {
-    pub fn populate_witness<C: Curve>(
+    pub fn populate_witness<C: HaloCurve>(
         &self,
         witness: &mut PartialWitness<C::BaseField>,
         values: &OldProof<C>,
     ) -> Result<()> {
         witness.set_point_target(self.halo_g, values.halo_g);
-        debug_assert_eq!(self.ipa_challenges.len(), values.ipa_challenges.len());
+        debug_assert_eq!(self.halo_us.len(), values.halo_us.len());
         witness.set_targets(
-            &self.ipa_challenges,
-            &C::ScalarField::try_convert_all(&values.ipa_challenges)?,
+            &self.halo_us,
+            &C::ScalarField::try_convert_all(&values.halo_us)?,
         );
 
         Ok(())
@@ -240,7 +245,7 @@ impl ProofTarget {
         targets_2d.concat()
     }
 
-    pub fn populate_witness<C: Curve>(
+    pub fn populate_witness<C: HaloCurve>(
         &self,
         witness: &mut PartialWitness<C::BaseField>,
         values: Proof<C>,

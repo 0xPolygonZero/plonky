@@ -1,5 +1,5 @@
 use anyhow::Result;
-use plonky::{blake_hash_base_field_to_curve, msm_parallel, rescue_hash_1_to_1, verify_proof_circuit, verify_proof_vk, AffinePoint, Circuit, CircuitBuilder, Curve, CurveMulOp, Field, HaloCurve, PartialWitness, Tweedledee, Tweedledum, Witness};
+use plonky::{blake_hash_base_field_to_curve, msm_parallel, rescue_hash_1_to_1, verify_proof, AffinePoint, Circuit, CircuitBuilder, Curve, CurveMulOp, Field, HaloCurve, PartialWitness, Tweedledee, Tweedledum, Witness};
 use std::time::Instant;
 
 // Make sure it's the same as in `plonk.rs`.
@@ -23,7 +23,7 @@ fn test_proof_trivial_vk() -> Result<()> {
         .generate_proof::<Tweedledum>(witness, &[], true)
         .unwrap();
     let vk = circuit.to_vk();
-    verify_proof_vk::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
+    verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
 
     Ok(())
 }
@@ -37,7 +37,7 @@ fn test_proof_trivial_circuit_many_proofs_vk() -> Result<()> {
             .generate_proof::<Tweedledum>(witness.clone(), &[], true)
             .unwrap();
         let vk = circuit.to_vk();
-        let old_proof = verify_proof_vk::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, false)
+        let old_proof = verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, false)
             .expect("Invalid proof")
             .unwrap();
         old_proofs.push(old_proof);
@@ -47,7 +47,7 @@ fn test_proof_trivial_circuit_many_proofs_vk() -> Result<()> {
         .generate_proof::<Tweedledum>(witness.clone(), &old_proofs, true)
         .unwrap();
     let vk = circuit.to_vk();
-    verify_proof_vk::<Tweedledee, Tweedledum>(&[], &proof, &old_proofs, &vk, true)?;
+    verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &old_proofs, &vk, true)?;
 
     Ok(())
 }
@@ -68,7 +68,7 @@ fn test_proof_sum_vk() -> Result<()> {
         .generate_proof::<Tweedledum>(witness, &[], true)
         .unwrap();
     let vk = circuit.to_vk();
-    verify_proof_vk::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
+    verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
 
     Ok(())
 }
@@ -101,7 +101,7 @@ fn test_proof_sum_big_vk() -> Result<()> {
     dbg!(now.elapsed());
     let vk = circuit.to_vk();
     dbg!(now.elapsed());
-    verify_proof_vk::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
+    verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
     dbg!(now.elapsed());
 
     Ok(())
@@ -125,7 +125,7 @@ fn test_proof_quadratic_vk() -> Result<()> {
         .generate_proof::<Tweedledum>(witness, &[], true)
         .unwrap();
     let vk = circuit.to_vk();
-    verify_proof_vk::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
+    verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
 
     Ok(())
 }
@@ -153,7 +153,7 @@ fn test_proof_public_input1_vk() -> Result<()> {
         <Tweedledee as Curve>::ScalarField::TWO
     );
     let vk = circuit.to_vk();
-    verify_proof_vk::<Tweedledee, Tweedledum>(
+    verify_proof::<Tweedledee, Tweedledum>(
         &[<Tweedledee as Curve>::ScalarField::TWO],
         &proof,
         &[],
@@ -191,7 +191,7 @@ fn test_proof_public_input2_vk() -> Result<()> {
         )
     });
     let vk = circuit.to_vk();
-    verify_proof_vk::<Tweedledee, Tweedledum>(&values, &proof, &[], &vk, true)?;
+    verify_proof::<Tweedledee, Tweedledum>(&values, &proof, &[], &vk, true)?;
 
     Ok(())
 }
@@ -215,7 +215,7 @@ fn test_rescue_hash_vk() -> Result<()> {
         .generate_proof::<Tweedledum>(witness, &[], true)
         .unwrap();
     let vk = circuit.to_vk();
-    verify_proof_vk::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
+    verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
 
     Ok(())
 }
@@ -250,7 +250,7 @@ fn test_curve_add_vk() -> Result<()> {
         .unwrap();
 
     let vk = circuit.to_vk();
-    verify_proof_vk::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
+    verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
 
     Ok(())
 }
@@ -294,7 +294,7 @@ fn test_curve_msm_vk() -> Result<()> {
         .unwrap();
 
     let vk = circuit.to_vk();
-    verify_proof_vk::<Tweedledum, Tweedledee>(&[], &proof, &[], &vk, true)?;
+    verify_proof::<Tweedledum, Tweedledee>(&[], &proof, &[], &vk, true)?;
 
     Ok(())
 }
