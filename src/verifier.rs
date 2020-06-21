@@ -2,8 +2,9 @@ use anyhow::{anyhow, bail, ensure, Result};
 
 use crate::partition::get_subgroup_shift;
 use crate::plonk_challenger::Challenger;
-use crate::plonk_gates::evaluate_all_constraints;
-use crate::plonk_util::{halo_g, halo_n, powers, reduce_with_powers, halo_n_mul};
+
+use crate::gates::evaluate_all_constraints;
+use crate::plonk_util::{halo_g, halo_n, powers, reduce_with_powers};
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::{blake_hash_usize_to_curve, hash_usize_to_curve, msm_execute_parallel, msm_precompute, AffinePoint, Circuit, Curve, Field, HaloCurve, ProjectivePoint, Proof, SchnorrProof, GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES};
 

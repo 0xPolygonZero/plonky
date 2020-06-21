@@ -1,5 +1,5 @@
 use crate::plonk_challenger::RecursiveChallenger;
-use crate::plonk_gates::evaluate_all_constraints_recursively;
+use crate::gates::evaluate_all_constraints_recursively;
 use crate::plonk_util::{powers_recursive, reduce_with_powers_recursive};
 use crate::util::ceil_div_usize;
 use crate::{

@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
-use crate::plonk_gates::*;
+use crate::gates::*;
 use crate::plonk_util::{coeffs_to_values_padded, sigma_polynomials, values_to_coeffs};
 use crate::poly_commit::PolynomialCommitment;
 use crate::util::{ceil_div_usize, log2_strict, transpose};
