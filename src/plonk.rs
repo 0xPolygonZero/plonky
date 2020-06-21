@@ -1,13 +1,14 @@
 use std::borrow::Borrow;
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
+use std::fmt::Debug;
 
 use anyhow::Result;
 use rayon::prelude::*;
 
 use crate::partition::{get_subgroup_shift, TargetPartitions};
 use crate::plonk_challenger::Challenger;
-use crate::plonk_util::{coeffs_to_values_padded, eval_coeffs, eval_l_1, eval_poly, eval_zero_poly, halo_n, pad_to_8n, permutation_polynomial, powers, reduce_with_powers, values_to_coeffs};
+use crate::plonk_util::{coeffs_to_values_padded, eval_coeffs, eval_l_1, eval_poly, eval_zero_poly, halo_n, pad_to_8n, permutation_polynomial, powers, reduce_with_powers, values_to_coeffs, halo_n_mul};
 use crate::poly_commit::PolynomialCommitment;
 use crate::target::Target;
 use crate::util::{ceil_div_usize, log2_strict};
@@ -287,7 +288,7 @@ impl<C: HaloCurve> Circuit<C> {
             }
         }
 
-        let u_curve = C::convert(u_scaling_sf) * self.u.to_projective();
+        let u_prime = halo_n_mul(&u_scaling_sf.to_canonical_bool_vec()[..self.security_bits], self.u).to_projective();
         // Final IPA proof.
         let mut halo_a = reduced_coeffs;
         // The Halo b vector is a random combination of the powers of all opening points.
@@ -350,12 +351,12 @@ impl<C: HaloCurve> Circuit<C> {
             // L_i = <a_lo, G_hi> + [l_j] H + [<a_lo, b_hi>] U.
             let halo_l_j = msm_parallel(a_lo, g_hi, window_size)
                 + C::convert(l_j_blinding_factor) * self.pedersen_h.to_projective()
-                + C::convert(C::ScalarField::inner_product(a_lo, b_hi)) * u_curve;
+                + C::convert(C::ScalarField::inner_product(a_lo, b_hi)) * u_prime;
             halo_l.push(halo_l_j);
             // R_i = <a_hi, G_lo> + [r_j] H + [<a_hi, b_lo>] U.
             let halo_r_j = msm_parallel(a_hi, g_lo, window_size)
                 + C::convert(r_j_blinding_factor) * self.pedersen_h.to_projective()
-                + C::convert(C::ScalarField::inner_product(a_hi, b_lo)) * u_curve;
+                + C::convert(C::ScalarField::inner_product(a_hi, b_lo)) * u_prime;
             halo_r.push(halo_r_j);
 
             challenger.observe_proj_points(&[halo_l_j, halo_r_j]);
@@ -394,7 +395,7 @@ impl<C: HaloCurve> Circuit<C> {
             halo_b[0],
             halo_g,
             randomness,
-            u_curve,
+            u_prime,
             &mut challenger,
         );
 
@@ -686,5 +687,11 @@ impl<C: HaloCurve> Circuit<C> {
             num_public_inputs: self.num_public_inputs,
             security_bits: self.security_bits,
         }
+    }
+}
+
+impl<C: HaloCurve> Debug for Circuit<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Circuit of size {}.", self.degree())
     }
 }

@@ -1,4 +1,3 @@
-use rayon::prelude::*;
 use crate::partition::get_subgroup_shift;
 use crate::witness::Witness;
 use crate::{
@@ -6,6 +5,7 @@ use crate::{
     AffinePoint, CircuitBuilder, Curve, FftPrecomputation, Field, HaloCurve, MsmPrecomputation,
     ProjectivePoint, Target, NUM_ROUTED_WIRES,
 };
+use rayon::prelude::*;
 
 /// Evaluate the polynomial which vanishes on any multiplicative subgroup of a given order `n`.
 pub(crate) fn eval_zero_poly<F: Field>(n: usize, x: F) -> F {
@@ -57,9 +57,6 @@ pub(crate) fn halo_n<C: HaloCurve>(s_bits: &[bool]) -> C::ScalarField {
     debug_assert_eq!(s_bits.len() % 2, 0, "Number of scalar bits must be even");
 
     let zero = C::ScalarField::ZERO;
-    let one = C::ScalarField::ONE;
-    let two = C::ScalarField::TWO;
-
     let mut a = zero;
     let mut b = zero;
 
@@ -67,14 +64,55 @@ pub(crate) fn halo_n<C: HaloCurve>(s_bits: &[bool]) -> C::ScalarField {
         let bit_lo = s_bits_chunk[0];
         let bit_hi = s_bits_chunk[1];
 
-        let sign = two * C::ScalarField::from_canonical_bool(bit_lo) - one;
-        let (c, d) = if bit_hi { (zero, sign) } else { (sign, zero) };
+        let sign = if bit_lo {
+            C::ScalarField::ONE
+        } else {
+            C::ScalarField::NEG_ONE
+        };
+        let (c, d) = if bit_hi { (sign, zero) } else { (zero, sign) };
 
         a = a.double() + c;
         b = b.double() + d;
     }
 
     a * C::ZETA_SCALAR + b
+}
+
+/// Compute `[n(s)].P` for a given `s`, where `n` is the injective function related to the Halo
+/// endomorphism.
+pub(crate) fn halo_n_mul<C: HaloCurve>(s_bits: &[bool], p: AffinePoint<C>) -> AffinePoint<C> {
+    // This is based on Algorithm 1 of the Halo paper, except that we start with Acc = O.
+
+    debug_assert_eq!(s_bits.len() % 2, 0, "Number of scalar bits must be even");
+
+    let p_p = p.to_projective();
+    let p_n = - p_p;
+    let endo_p_p = p.endomorphism().to_projective();
+    let endo_p_n = - endo_p_p;
+
+    let mut acc = ProjectivePoint::<C>::ZERO;
+
+    for s_bits_chunk in s_bits.chunks(2) {
+        let bit_lo = s_bits_chunk[0];
+        let bit_hi = s_bits_chunk[1];
+
+        let s = if bit_hi {
+            if bit_lo {
+                endo_p_p
+            } else {
+                endo_p_n
+            }
+        } else {
+            if bit_lo {
+                p_p
+            } else {
+                p_n
+            }
+        };
+        acc = acc.double() + s;
+    }
+
+    acc.to_affine()
 }
 
 pub(crate) fn eval_poly<F: Field>(coeffs: &[F], x: F) -> F {
@@ -280,6 +318,20 @@ pub fn halo_g<F: Field>(x: F, us: &[F]) -> F {
 mod test {
     use super::*;
     use crate::{Circuit, CircuitBuilder, Curve, Field, PartialWitness, Tweedledee};
+
+    #[test]
+    fn test_halo_n() {
+        type C = Tweedledee;
+        type SF = <Tweedledee as Curve>::ScalarField;
+        let p = C::convert(SF::rand()) * C::GENERATOR_PROJECTIVE;
+        let r = SF::rand();
+        let res = C::convert(halo_n::<C>(&r.to_canonical_bool_vec()[..128])) * p;
+        let p = p.to_affine();
+        assert_eq!(
+            res.to_affine(),
+            halo_n_mul::<C>(&r.to_canonical_bool_vec()[..128], p)
+        )
+    }
 
     #[test]
     fn test_permutation_polynomial() {

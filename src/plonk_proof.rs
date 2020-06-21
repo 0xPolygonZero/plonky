@@ -15,6 +15,7 @@ pub struct SchnorrProofTarget {
     pub z2: Target,
 }
 
+#[derive(Debug, Clone)]
 pub struct Proof<C: Curve> {
     /// A commitment to each wire polynomial.
     pub c_wires: Vec<AffinePoint<C>>,

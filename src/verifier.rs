@@ -2,6 +2,7 @@ use anyhow::{anyhow, bail, ensure, Result};
 
 use crate::partition::get_subgroup_shift;
 use crate::plonk_challenger::Challenger;
+
 use crate::gates::evaluate_all_constraints;
 use crate::plonk_util::{halo_g, halo_n, powers, reduce_with_powers};
 use crate::util::{ceil_div_usize, log2_strict};
@@ -96,6 +97,7 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::Scala
     Ok(())
 }
 
+#[derive(Debug, Clone)]
 pub struct VerificationKey<C: Curve> {
     pub c_constants: Vec<AffinePoint<C>>,
     pub c_s_sigmas: Vec<AffinePoint<C>>,
@@ -306,7 +308,7 @@ fn verify_all_ipas<C: HaloCurve>(
     // Then, we reduce the above opening set reductions to a single value.
     let reduced_opening = reduce_with_powers(&opening_set_reductions, v);
 
-    let u_prime = C::convert(u_scaling) * u_curve.to_projective();
+    let u_prime = halo_n_mul(&u_scaling.to_canonical_bool_vec()[..security_bits], u_curve).to_projective();
 
     let num_public_input_gates = ceil_div_usize(num_public_inputs, NUM_WIRES);
     let points = [

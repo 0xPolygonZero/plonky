@@ -130,7 +130,11 @@ pub trait Field:
     }
 
     fn from_canonical_bool(b: bool) -> Self {
-        Self::from_canonical_u64(if b { 1 } else { 0 })
+        if b {
+            Self::ONE
+        } else {
+            Self::ZERO
+        }
     }
 
     fn is_valid_canonical_u64(v: &Vec<u64>) -> bool;

@@ -44,6 +44,7 @@ pub trait Curve: 'static + Sync + Sized + Copy + Debug {
 pub trait HaloCurve: Curve {
     const ZETA: Self::BaseField;
     const ZETA_SCALAR: Self::ScalarField;
+
 }
 
 /// A point on a short Weierstrass curve, represented in affine coordinates.
@@ -74,7 +75,12 @@ impl<C: Curve> AffinePoint<C> {
 
     pub fn to_projective(&self) -> ProjectivePoint<C> {
         let Self { x, y, zero } = *self;
-        ProjectivePoint { x, y, z: C::BaseField::ONE, zero }
+        ProjectivePoint {
+            x,
+            y,
+            z: C::BaseField::ONE,
+            zero,
+        }
     }
 
     pub fn batch_to_projective(affine_points: &[Self]) -> Vec<ProjectivePoint<C>> {
@@ -87,10 +93,32 @@ impl<C: Curve> AffinePoint<C> {
     }
 }
 
+impl<C: HaloCurve> AffinePoint<C> {
+    pub fn endomorphism(&self) -> Self {
+        if self.zero {
+            *self
+        } else {
+            AffinePoint {
+                x: C::ZETA * self.x,
+                y: self.y,
+                zero: false,
+            }
+        }
+    }
+}
+
 impl<C: Curve> PartialEq for AffinePoint<C> {
     fn eq(&self, other: &Self) -> bool {
-        let AffinePoint { x: x1, y: y1, zero: zero1 } = *self;
-        let AffinePoint { x: x2, y: y2, zero: zero2 } = *other;
+        let AffinePoint {
+            x: x1,
+            y: y1,
+            zero: zero1,
+        } = *self;
+        let AffinePoint {
+            x: x2,
+            y: y2,
+            zero: zero2,
+        } = *other;
         if zero1 || zero2 {
             return zero1 == zero2;
         }
@@ -118,7 +146,12 @@ impl<C: Curve> ProjectivePoint<C> {
     };
 
     pub fn nonzero(x: C::BaseField, y: C::BaseField, z: C::BaseField) -> Self {
-        let point = Self { x, y, z, zero: false };
+        let point = Self {
+            x,
+            y,
+            z,
+            zero: false,
+        };
         debug_assert!(point.is_valid());
         point
     }
@@ -175,19 +208,46 @@ impl<C: Curve> ProjectivePoint<C> {
         let x3 = h * s;
         let y3 = w * (b - h) - rr.double();
         let z3 = s.cube();
-        Self { x: x3, y: y3, z: z3, zero: false }
+        Self {
+            x: x3,
+            y: y3,
+            z: z3,
+            zero: false,
+        }
     }
 
     pub fn add_slices(a: &[Self], b: &[Self]) -> Vec<Self> {
         assert_eq!(a.len(), b.len());
-        a.iter().zip(b.iter()).map(|(&a_i, &b_i)| a_i + b_i).collect()
+        a.iter()
+            .zip(b.iter())
+            .map(|(&a_i, &b_i)| a_i + b_i)
+            .collect()
+    }
+
+    pub fn neg(&self) -> Self {
+        Self {
+            x: self.x,
+            y: -self.y,
+            z: self.z,
+            zero: self.zero
+        }
     }
 }
 
 impl<C: Curve> PartialEq for ProjectivePoint<C> {
     fn eq(&self, other: &Self) -> bool {
-        let ProjectivePoint { x: x1, y: y1, z: z1, zero: zero1 } = *self;
-        let ProjectivePoint { x: x2, y: y2, z: z2, zero: zero2 } = *other;
+        let ProjectivePoint {
+            x: x1,
+            y: y1,
+            z: z1,
+            zero: zero1,
+        } = *self;
+        let ProjectivePoint {
+            x: x2,
+            y: y2,
+            z: z2,
+            zero: zero2,
+        } = *other;
         if zero1 || zero2 {
             return zero1 == zero2;
         }
