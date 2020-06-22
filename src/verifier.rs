@@ -6,6 +6,7 @@ use crate::plonk_challenger::Challenger;
 use crate::gates::evaluate_all_constraints;
 use crate::plonk_util::{halo_g, halo_n, powers, reduce_with_powers, halo_n_mul};
 use crate::util::{ceil_div_usize, log2_strict};
+use crate::plonk_proof::OldProof;
 use crate::{blake_hash_usize_to_curve, hash_usize_to_curve, msm_execute_parallel, msm_precompute, AffinePoint, Circuit, Curve, Field, HaloCurve, ProjectivePoint, Proof, SchnorrProof, GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES};
 
 pub const SECURITY_BITS: usize = 128;
@@ -13,6 +14,7 @@ pub const SECURITY_BITS: usize = 128;
 pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     public_inputs: &[C::ScalarField],
     proof: &Proof<C>,
+    old_proofs: &[OldProof<C>],
     circuit: &Circuit<C>,
 ) -> Result<()> {
     // Verify that the proof parameters are valid.
@@ -85,6 +87,7 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::Scala
     if !verify_all_ipas_circuit::<C>(
         &circuit,
         &proof,
+        old_proofs,
         challs.u,
         challs.v,
         challs.u_scaling,
@@ -109,6 +112,7 @@ pub struct VerificationKey<C: Curve> {
 pub fn verify_proof_vk<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     public_inputs: &[C::ScalarField],
     proof: &Proof<C>,
+    old_proofs: &[OldProof<C>],
     vk: &VerificationKey<C>,
 ) -> Result<()> {
     // Verify that the proof parameters are valid.
@@ -181,6 +185,7 @@ pub fn verify_proof_vk<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarFiel
     if !verify_all_ipas_vk::<C>(
         vk,
         proof,
+        old_proofs,
         challs.u,
         challs.v,
         challs.u_scaling,
@@ -198,6 +203,7 @@ pub fn verify_proof_vk<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarFiel
 fn verify_all_ipas_circuit<C: HaloCurve>(
     circuit: &Circuit<C>,
     proof: &Proof<C>,
+    old_proofs: &[OldProof<C>],
     u: C::ScalarField,
     v: C::ScalarField,
     u_scaling: C::ScalarField,
@@ -221,6 +227,7 @@ fn verify_all_ipas_circuit<C: HaloCurve>(
         circuit.u,
         circuit.pedersen_h,
         proof,
+        old_proofs,
         u,
         v,
         u_scaling,
@@ -236,6 +243,7 @@ fn verify_all_ipas_circuit<C: HaloCurve>(
 fn verify_all_ipas_vk<C: HaloCurve>(
     vk: &VerificationKey<C>,
     proof: &Proof<C>,
+    old_proofs: &[OldProof<C>],
     u: C::ScalarField,
     v: C::ScalarField,
     u_scaling: C::ScalarField,
@@ -254,6 +262,7 @@ fn verify_all_ipas_vk<C: HaloCurve>(
         u_curve,
         pedersen_h,
         proof,
+        old_proofs,
         u,
         v,
         u_scaling,
@@ -273,6 +282,7 @@ fn verify_all_ipas<C: HaloCurve>(
     u_curve: AffinePoint<C>,
     pedersen_h: AffinePoint<C>,
     proof: &Proof<C>,
+    old_proofs: &[OldProof<C>],
     u: C::ScalarField,
     v: C::ScalarField,
     u_scaling: C::ScalarField,
@@ -288,6 +298,7 @@ fn verify_all_ipas<C: HaloCurve>(
         &proof.c_wires,
         &[proof.c_plonk_z],
         &proof.c_plonk_t,
+        &old_proofs.iter().map(|p| p.halo_g).collect::<Vec<_>>()
     ]
     .concat();
     let powers_of_u = powers(u, c_all.len());

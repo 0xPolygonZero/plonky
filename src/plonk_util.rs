@@ -284,7 +284,7 @@ pub(crate) fn polynomial_degree<F: Field>(
     coeffs.iter().rev().skip_while(|c| c.is_zero()).count() - 1
 }
 
-fn halo_s<F: Field>(us: &[F]) -> Vec<F> {
+pub fn halo_s<F: Field>(us: &[F]) -> Vec<F> {
     let n = 1 << us.len();
     let mut res = vec![F::ONE; n];
     let us_inv = F::batch_multiplicative_inverse(us);

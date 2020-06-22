@@ -22,7 +22,7 @@ fn main() {
     println!("Generating inner proof");
     let start = Instant::now();
     let inner_proof = inner_circuit
-        .generate_proof::<Tweedledee>(inner_witness, true)
+        .generate_proof::<Tweedledee>(inner_witness, &[], true)
         .unwrap();
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!();
@@ -30,7 +30,7 @@ fn main() {
     println!("Verifying inner proof");
     let start = Instant::now();
     assert!(
-        verify_proof_circuit::<Tweedledum, Tweedledee>(&[], &inner_proof, &inner_circuit).is_ok()
+        verify_proof_circuit::<Tweedledum, Tweedledee>(&[], &inner_proof, &[], &inner_circuit).is_ok()
     );
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!();
@@ -64,7 +64,7 @@ fn main() {
     let start = Instant::now();
     let proof = recursion_circuit
         .circuit
-        .generate_proof::<Tweedledum>(recursion_witness, true)
+        .generate_proof::<Tweedledum>(recursion_witness, &[], true)
         .unwrap();
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!();
@@ -74,6 +74,7 @@ fn main() {
     dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
         &[],
         &proof,
+        &[],
         &recursion_circuit.circuit
     ));
     println!("Finished in {}s", start.elapsed().as_secs_f64());

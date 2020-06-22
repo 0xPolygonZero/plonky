@@ -1,19 +1,27 @@
 use std::borrow::Borrow;
 use std::collections::{HashMap, HashSet};
-use std::time::Instant;
 use std::fmt::Debug;
+use std::time::Instant;
 
 use anyhow::Result;
 use rayon::prelude::*;
 
 use crate::partition::{get_subgroup_shift, TargetPartitions};
 use crate::plonk_challenger::Challenger;
-use crate::plonk_util::{coeffs_to_values_padded, eval_coeffs, eval_l_1, eval_poly, eval_zero_poly, halo_n, pad_to_8n, permutation_polynomial, powers, reduce_with_powers, values_to_coeffs, halo_n_mul};
+use crate::plonk_proof::{OldProof, Proof, SchnorrProof};
+use crate::plonk_util::{
+    coeffs_to_values_padded, eval_coeffs, eval_l_1, eval_poly, eval_zero_poly, halo_n, halo_n_mul,
+    pad_to_8n, permutation_polynomial, powers, reduce_with_powers, values_to_coeffs,
+};
 use crate::poly_commit::PolynomialCommitment;
 use crate::target::Target;
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::witness::{PartialWitness, Witness, WitnessGenerator};
-use crate::{divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_parallel, AffinePoint, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, OpeningSet, ProjectivePoint, Proof, SchnorrProof, VerificationKey};
+use crate::{
+    divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2,
+    ifft_with_precomputation_power_of_2, msm_parallel, AffinePoint, FftPrecomputation, Field,
+    HaloCurve, MsmPrecomputation, OpeningSet, ProjectivePoint, VerificationKey,
+};
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
@@ -80,6 +88,7 @@ impl<C: HaloCurve> Circuit<C> {
     pub fn generate_proof<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &self,
         witness: Witness<C::ScalarField>,
+        old_proofs: &[OldProof<C>],
         blinding_commitments: bool,
     ) -> Result<Proof<C>> {
         let mut challenger = Challenger::new(self.security_bits);
@@ -178,6 +187,8 @@ impl<C: HaloCurve> Circuit<C> {
             blinding_commitments,
         );
 
+        let old_proofs_coeffs = old_proofs.iter().map(|p| p.coeffs()).collect::<Vec<_>>();
+
         // Generate a random zeta from the transcript.
         challenger
             .observe_affine_points(&c_plonk_t.iter().map(|c| c.to_affine()).collect::<Vec<_>>());
@@ -195,6 +206,7 @@ impl<C: HaloCurve> Circuit<C> {
                     &wires_coeffs,
                     &plonk_z_coeffs,
                     &plonk_t_coeff_chunks,
+                    &old_proofs_coeffs,
                     self.subgroup_generator_n.exp_usize(i),
                 )
             })
@@ -205,18 +217,21 @@ impl<C: HaloCurve> Circuit<C> {
             &wires_coeffs,
             &plonk_z_coeffs,
             &plonk_t_coeff_chunks,
+            &old_proofs_coeffs,
             zeta_sf,
         );
         let o_right = self.open_all_polynomials(
             &wires_coeffs,
             &plonk_z_coeffs,
             &plonk_t_coeff_chunks,
+            &old_proofs_coeffs,
             zeta_sf * self.subgroup_generator_n,
         );
         let o_below = self.open_all_polynomials(
             &wires_coeffs,
             &plonk_z_coeffs,
             &plonk_t_coeff_chunks,
+            &old_proofs_coeffs,
             zeta_sf * self.subgroup_generator_n.exp_usize(GRID_WIDTH),
         );
 
@@ -261,6 +276,7 @@ impl<C: HaloCurve> Circuit<C> {
             c_wires.iter().map(|c| c.randomness).collect::<Vec<_>>(),
             vec![c_plonk_z.randomness],
             c_plonk_t.iter().map(|c| c.randomness).collect::<Vec<_>>(),
+            old_proofs.iter().map(|_| C::ScalarField::ZERO).collect::<Vec<_>>(),
         ]
         .concat();
         let all_coeffs = [
@@ -269,6 +285,7 @@ impl<C: HaloCurve> Circuit<C> {
             wires_coeffs,
             vec![plonk_z_coeffs],
             plonk_t_coeff_chunks,
+            old_proofs_coeffs,
         ]
         .concat();
 
@@ -288,7 +305,11 @@ impl<C: HaloCurve> Circuit<C> {
             }
         }
 
-        let u_prime = halo_n_mul(&u_scaling_sf.to_canonical_bool_vec()[..self.security_bits], self.u).to_projective();
+        let u_prime = halo_n_mul(
+            &u_scaling_sf.to_canonical_bool_vec()[..self.security_bits],
+            self.u,
+        )
+        .to_projective();
         // Final IPA proof.
         let mut halo_a = reduced_coeffs;
         // The Halo b vector is a random combination of the powers of all opening points.
@@ -490,8 +511,9 @@ impl<C: HaloCurve> Circuit<C> {
                 ]
                 .concat();
 
-            reduce_with_powers(&vanishing_terms, alpha_sf)
-        }).collect::<Vec<_>>();
+                reduce_with_powers(&vanishing_terms, alpha_sf)
+            })
+            .collect::<Vec<_>>();
 
         ifft_with_precomputation_power_of_2(&vanishing_points, &self.fft_precomputation_8n)
     }
@@ -502,6 +524,7 @@ impl<C: HaloCurve> Circuit<C> {
         wire_coeffs: &Vec<Vec<C::ScalarField>>,
         plonk_z_coeffs: &Vec<C::ScalarField>,
         plonk_t_coeffs: &Vec<Vec<C::ScalarField>>,
+        old_proofs_coeffs: &Vec<Vec<C::ScalarField>>,
         zeta: C::ScalarField,
     ) -> OpeningSet<C::ScalarField> {
         let powers_of_zeta = powers(zeta, self.degree());
@@ -512,6 +535,7 @@ impl<C: HaloCurve> Circuit<C> {
             o_wires: eval_coeffs(&wire_coeffs, &powers_of_zeta),
             o_plonk_z: C::ScalarField::inner_product(&plonk_z_coeffs, &powers_of_zeta),
             o_plonk_t: eval_coeffs(&plonk_t_coeffs, &powers_of_zeta),
+            o_old_proofs: eval_coeffs(&old_proofs_coeffs, &powers_of_zeta),
         }
     }
 

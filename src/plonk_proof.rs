@@ -1,6 +1,7 @@
 use anyhow::{anyhow, bail, ensure, Result};
 
 use crate::plonk_challenger::Challenger;
+use crate::plonk_util::{halo_s, halo_g};
 use crate::{AffinePoint, AffinePointTarget, Curve, Field, PartialWitness, Target, SECURITY_BITS};
 
 #[derive(Debug, Clone, Copy)]
@@ -122,6 +123,35 @@ pub struct ProofChallenge<C: Curve> {
     pub schnorr_challenge: C::ScalarField,
 }
 
+#[derive(Debug, Clone)]
+pub struct OldProof<C: Curve> {
+    pub halo_g: AffinePoint<C>,
+    pub ipa_challenges: Vec<C::ScalarField>,
+}
+
+impl<C: Curve> From<Proof<C>> for OldProof<C> {
+    fn from(proof: Proof<C>) -> Self {
+        let ProofChallenge { ipa_challenges, .. } = proof.get_challenges().unwrap();
+        Self {
+            halo_g: proof.halo_g,
+            ipa_challenges,
+        }
+    }
+}
+
+impl<C: Curve> OldProof<C> {
+    /// Returns the coefficients of the Halo `g` polynomial.
+    /// In particular, `commit(self.coeffs) = self.halo_g`.
+    pub fn coeffs(&self) -> Vec<C::ScalarField> {
+        halo_s(&self.ipa_challenges)
+    }
+
+    /// Evaluates the Halo g polynomial at a point `x`.
+    pub fn evaluate_g(&self, x: C::ScalarField) -> C::ScalarField {
+        halo_g(x, &self.ipa_challenges)
+    }
+}
+
 pub struct ProofTarget {
     /// A commitment to each wire polynomial.
     pub c_wires: Vec<AffinePointTarget>,
@@ -215,6 +245,8 @@ pub struct OpeningSet<F: Field> {
     pub o_plonk_z: F,
     /// The purported opening of `t`.
     pub o_plonk_t: Vec<F>,
+    /// The purported opening of some old proofs `halo_g` polynomials.
+    pub o_old_proofs: Vec<F>,
 }
 
 impl<F: Field> OpeningSet<F> {
@@ -225,6 +257,7 @@ impl<F: Field> OpeningSet<F> {
             self.o_wires.as_slice(),
             &[self.o_plonk_z],
             self.o_plonk_t.as_slice(),
+            self.o_old_proofs.as_slice(),
         ]
         .concat()
     }
