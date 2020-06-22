@@ -206,7 +206,7 @@ impl<C: HaloCurve> Circuit<C> {
                     &wires_coeffs,
                     &plonk_z_coeffs,
                     &plonk_t_coeff_chunks,
-                    &old_proofs_coeffs,
+                    old_proofs,
                     self.subgroup_generator_n.exp_usize(i),
                 )
             })
@@ -217,21 +217,21 @@ impl<C: HaloCurve> Circuit<C> {
             &wires_coeffs,
             &plonk_z_coeffs,
             &plonk_t_coeff_chunks,
-            &old_proofs_coeffs,
+            old_proofs,
             zeta_sf,
         );
         let o_right = self.open_all_polynomials(
             &wires_coeffs,
             &plonk_z_coeffs,
             &plonk_t_coeff_chunks,
-            &old_proofs_coeffs,
+            old_proofs,
             zeta_sf * self.subgroup_generator_n,
         );
         let o_below = self.open_all_polynomials(
             &wires_coeffs,
             &plonk_z_coeffs,
             &plonk_t_coeff_chunks,
-            &old_proofs_coeffs,
+            old_proofs,
             zeta_sf * self.subgroup_generator_n.exp_usize(GRID_WIDTH),
         );
 
@@ -524,7 +524,7 @@ impl<C: HaloCurve> Circuit<C> {
         wire_coeffs: &Vec<Vec<C::ScalarField>>,
         plonk_z_coeffs: &Vec<C::ScalarField>,
         plonk_t_coeffs: &Vec<Vec<C::ScalarField>>,
-        old_proofs_coeffs: &Vec<Vec<C::ScalarField>>,
+        old_proofs: &[OldProof<C>],
         zeta: C::ScalarField,
     ) -> OpeningSet<C::ScalarField> {
         let powers_of_zeta = powers(zeta, self.degree());
@@ -535,7 +535,7 @@ impl<C: HaloCurve> Circuit<C> {
             o_wires: eval_coeffs(&wire_coeffs, &powers_of_zeta),
             o_plonk_z: C::ScalarField::inner_product(&plonk_z_coeffs, &powers_of_zeta),
             o_plonk_t: eval_coeffs(&plonk_t_coeffs, &powers_of_zeta),
-            o_old_proofs: eval_coeffs(&old_proofs_coeffs, &powers_of_zeta),
+            o_old_proofs: old_proofs.iter().map(|p| p.evaluate_g(zeta)).collect::<Vec<_>>(),
         }
     }
 
