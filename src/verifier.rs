@@ -4,10 +4,14 @@ use crate::partition::get_subgroup_shift;
 use crate::plonk_challenger::Challenger;
 
 use crate::gates::evaluate_all_constraints;
-use crate::plonk_util::{halo_g, halo_n, powers, reduce_with_powers, halo_n_mul};
-use crate::util::{ceil_div_usize, log2_strict};
 use crate::plonk_proof::OldProof;
-use crate::{blake_hash_usize_to_curve, hash_usize_to_curve, msm_execute_parallel, msm_precompute, AffinePoint, Circuit, Curve, Field, HaloCurve, ProjectivePoint, Proof, SchnorrProof, GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES};
+use crate::plonk_util::{halo_g, halo_n, halo_n_mul, powers, reduce_with_powers};
+use crate::util::{ceil_div_usize, log2_strict};
+use crate::{
+    blake_hash_usize_to_curve, hash_usize_to_curve, msm_execute_parallel, msm_precompute,
+    AffinePoint, Circuit, Curve, Field, HaloCurve, ProjectivePoint, Proof, SchnorrProof,
+    GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES,
+};
 
 pub const SECURITY_BITS: usize = 128;
 
@@ -298,7 +302,7 @@ fn verify_all_ipas<C: HaloCurve>(
         &proof.c_wires,
         &[proof.c_plonk_z],
         &proof.c_plonk_t,
-        &old_proofs.iter().map(|p| p.halo_g).collect::<Vec<_>>()
+        &old_proofs.iter().map(|p| p.halo_g).collect::<Vec<_>>(),
     ]
     .concat();
     let powers_of_u = powers(u, c_all.len());
@@ -319,7 +323,8 @@ fn verify_all_ipas<C: HaloCurve>(
     // Then, we reduce the above opening set reductions to a single value.
     let reduced_opening = reduce_with_powers(&opening_set_reductions, v);
 
-    let u_prime = halo_n_mul(&u_scaling.to_canonical_bool_vec()[..security_bits], u_curve).to_projective();
+    let u_prime =
+        halo_n_mul(&u_scaling.to_canonical_bool_vec()[..security_bits], u_curve).to_projective();
 
     let num_public_input_gates = ceil_div_usize(num_public_inputs, NUM_WIRES);
     let points = [
@@ -482,4 +487,3 @@ fn check_proof_parameters<C: Curve>(proof: &Proof<C>) -> Result<()> {
 
     Ok(())
 }
-
