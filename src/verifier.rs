@@ -8,7 +8,7 @@ use crate::plonk_util::{halo_g, halo_n, powers, reduce_with_powers, halo_n_mul};
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::{blake_hash_usize_to_curve, hash_usize_to_curve, msm_execute_parallel, msm_precompute, AffinePoint, Circuit, Curve, Field, HaloCurve, ProjectivePoint, Proof, SchnorrProof, GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES};
 
-const SECURITY_BITS: usize = 128;
+pub const SECURITY_BITS: usize = 128;
 
 pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     public_inputs: &[C::ScalarField],
@@ -22,7 +22,7 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::Scala
     verify_public_inputs(public_inputs, proof, circuit.num_public_inputs)?;
 
     // Observe the transcript and generate the associated challenge points using Fiat-Shamir.
-    let challs = get_challenges(proof, Challenger::new(SECURITY_BITS))?;
+    let challs = proof.get_challenges()?;
 
     let degree = circuit.degree();
 
@@ -118,7 +118,7 @@ pub fn verify_proof_vk<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarFiel
     verify_public_inputs(public_inputs, proof, vk.num_public_inputs)?;
 
     // Observe the transcript and generate the associated challenge points using Fiat-Shamir.
-    let challs = get_challenges(proof, Challenger::new(SECURITY_BITS))?;
+    let challs = proof.get_challenges()?;
 
     let degree = vk.degree;
 
@@ -472,68 +472,3 @@ fn check_proof_parameters<C: Curve>(proof: &Proof<C>) -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug, Clone)]
-struct ProofChallenge<C: Curve> {
-    beta: C::ScalarField,
-    gamma: C::ScalarField,
-    alpha: C::ScalarField,
-    zeta: C::ScalarField,
-    v: C::ScalarField,
-    u: C::ScalarField,
-    u_scaling: C::ScalarField,
-    ipa_challenges: Vec<C::ScalarField>,
-    schnorr_challenge: C::ScalarField,
-}
-
-// Computes all challenges used in the proof verification.
-fn get_challenges<C: Curve>(
-    proof: &Proof<C>,
-    mut challenger: Challenger<C::BaseField>,
-) -> Result<ProofChallenge<C>> {
-    let error_msg = "Conversion from base to scalar field failed.";
-    challenger.observe_affine_points(&proof.c_wires);
-    let (beta_bf, gamma_bf) = challenger.get_2_challenges();
-    let beta = C::try_convert_b2s(beta_bf).map_err(|_| anyhow!(error_msg))?;
-    let gamma = C::try_convert_b2s(gamma_bf).map_err(|_| anyhow!(error_msg))?;
-    challenger.observe_affine_point(proof.c_plonk_z);
-    let alpha_bf = challenger.get_challenge();
-    let alpha = C::try_convert_b2s(alpha_bf).map_err(|_| anyhow!(error_msg))?;
-    challenger.observe_affine_points(&proof.c_plonk_t);
-    let zeta_bf = challenger.get_challenge();
-    let zeta = C::try_convert_b2s(zeta_bf).map_err(|_| anyhow!(error_msg))?;
-    for os in proof.all_opening_sets().iter() {
-        for &f in os.to_vec().iter() {
-            challenger.observe_element(C::try_convert_s2b(f).map_err(|_| anyhow!(error_msg))?);
-        }
-    }
-    let (v_bf, u_bf, u_scaling_bf) = challenger.get_3_challenges();
-    let v = C::try_convert_b2s(v_bf).map_err(|_| anyhow!(error_msg))?;
-    let u = C::try_convert_b2s(u_bf).map_err(|_| anyhow!(error_msg))?;
-    let u_scaling = C::try_convert_b2s(u_scaling_bf).map_err(|_| anyhow!(error_msg))?;
-
-    // Compute IPA challenges.
-    let mut ipa_challenges = Vec::new();
-    for i in 0..proof.halo_l.len() {
-        challenger.observe_affine_points(&[proof.halo_l[i], proof.halo_r[i]]);
-        let l_challenge = challenger.get_challenge();
-        ipa_challenges.push(C::try_convert_b2s(l_challenge).map_err(|_| anyhow!(error_msg))?);
-    }
-
-    // Compute challenge for Schnorr protocol.
-    challenger.observe_affine_point(proof.schnorr_proof.r);
-    let schnorr_challenge_bf = challenger.get_challenge();
-    let schnorr_challenge =
-        C::try_convert_b2s(schnorr_challenge_bf).map_err(|_| anyhow!(error_msg))?;
-
-    Ok(ProofChallenge {
-        beta,
-        gamma,
-        alpha,
-        zeta,
-        v,
-        u,
-        u_scaling,
-        ipa_challenges,
-        schnorr_challenge,
-    })
-}
