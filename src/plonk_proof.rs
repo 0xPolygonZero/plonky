@@ -127,6 +127,8 @@ pub struct ProofChallenge<C: Curve> {
 }
 
 #[derive(Debug, Clone)]
+/// Object returned by the verifier, containing the necessary data to verify `halo_g` at a later time.
+/// In particular, `halo_g = commit(g(X, ipa_challenges))` where `g` is the polynomial defined in section 3.2 of the paper.
 pub struct OldProof<C: Curve> {
     pub halo_g: AffinePoint<C>,
     pub ipa_challenges: Vec<C::ScalarField>,
