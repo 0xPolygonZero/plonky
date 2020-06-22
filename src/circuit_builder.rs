@@ -1244,7 +1244,6 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         let subgroup_8n =
             C::ScalarField::cyclic_subgroup_known_order(subgroup_generator_8n, 8 * degree);
 
-        // TODO: Shouldn't this be random?
         let pedersen_g: Vec<_> = (0..degree)
             .map(|i| blake_hash_usize_to_curve::<C>(i))
             .collect();

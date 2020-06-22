@@ -5,7 +5,9 @@ use crate::plonk_challenger::Challenger;
 
 use crate::gates::evaluate_all_constraints;
 use crate::plonk_proof::OldProof;
-use crate::plonk_util::{halo_g, halo_n, halo_n_mul, powers, reduce_with_powers};
+use crate::plonk_util::{
+    halo_g, halo_n, halo_n_mul, halo_s, pedersen_hash, powers, reduce_with_powers,
+};
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::{
     blake_hash_usize_to_curve, hash_usize_to_curve, msm_execute_parallel, msm_precompute,
@@ -96,11 +98,30 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::Scala
         challs.v,
         challs.u_scaling,
         challs.zeta,
-        challs.ipa_challenges,
+        &challs.ipa_challenges,
         challs.schnorr_challenge,
     ) {
         bail!("Invalid IPA proof.");
     }
+
+    let pedersen_g: Vec<_> = (0..circuit.degree())
+        .map(|i| blake_hash_usize_to_curve::<C>(i))
+        .collect();
+    let w = 8; // TODO: Should really be set dynamically based on MSM size.
+    let pedersen_g_msm_precomputation =
+        msm_precompute(&AffinePoint::batch_to_projective(&pedersen_g), w);
+
+    /// Verify that `self.halo_g = <s, G>`.
+    if proof.halo_g
+        != pedersen_hash(
+            &halo_s(&challs.ipa_challenges),
+            &pedersen_g_msm_precomputation,
+        )
+        .to_affine()
+    {
+        bail!("Invalid G point.");
+    }
+
     Ok(())
 }
 
@@ -194,11 +215,30 @@ pub fn verify_proof_vk<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarFiel
         challs.v,
         challs.u_scaling,
         challs.zeta,
-        challs.ipa_challenges,
+        &challs.ipa_challenges,
         challs.schnorr_challenge,
     ) {
         bail!("Invalid IPA proof.");
     }
+
+    let pedersen_g: Vec<_> = (0..vk.degree)
+        .map(|i| blake_hash_usize_to_curve::<C>(i))
+        .collect();
+    let w = 8; // TODO: Should really be set dynamically based on MSM size.
+    let pedersen_g_msm_precomputation =
+        msm_precompute(&AffinePoint::batch_to_projective(&pedersen_g), w);
+
+    /// Verify that `self.halo_g = <s, G>`.
+    if proof.halo_g
+        != pedersen_hash(
+            &halo_s(&challs.ipa_challenges),
+            &pedersen_g_msm_precomputation,
+        )
+        .to_affine()
+    {
+        bail!("Invalid G point.");
+    }
+
     Ok(())
 }
 
@@ -212,7 +252,7 @@ fn verify_all_ipas_circuit<C: HaloCurve>(
     v: C::ScalarField,
     u_scaling: C::ScalarField,
     zeta: C::ScalarField,
-    ipa_challenges: Vec<C::ScalarField>,
+    ipa_challenges: &[C::ScalarField],
     schnorr_challenge: C::ScalarField,
 ) -> bool {
     verify_all_ipas(
@@ -252,7 +292,7 @@ fn verify_all_ipas_vk<C: HaloCurve>(
     v: C::ScalarField,
     u_scaling: C::ScalarField,
     zeta: C::ScalarField,
-    ipa_challenges: Vec<C::ScalarField>,
+    ipa_challenges: &[C::ScalarField],
     schnorr_challenge: C::ScalarField,
 ) -> bool {
     let subgroup_generator_n = C::ScalarField::primitive_root_of_unity(log2_strict(vk.degree));
@@ -291,7 +331,7 @@ fn verify_all_ipas<C: HaloCurve>(
     v: C::ScalarField,
     u_scaling: C::ScalarField,
     zeta: C::ScalarField,
-    ipa_challenges: Vec<C::ScalarField>,
+    ipa_challenges: &[C::ScalarField],
     schnorr_challenge: C::ScalarField,
     security_bits: usize,
 ) -> bool {
@@ -364,7 +404,7 @@ fn verify_ipa<C: HaloCurve>(
     commitment: ProjectivePoint<C>,
     value: C::ScalarField,
     halo_b: C::ScalarField,
-    ipa_challenges: Vec<C::ScalarField>,
+    ipa_challenges: &[C::ScalarField],
     u_prime: ProjectivePoint<C>,
     pedersen_h: AffinePoint<C>,
     halo_g_curve: AffinePoint<C>,
