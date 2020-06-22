@@ -30,7 +30,7 @@ fn main() {
     println!("Verifying inner proof");
     let start = Instant::now();
     assert!(
-        verify_proof_circuit::<Tweedledum, Tweedledee>(&[], &inner_proof, &[], &inner_circuit).is_ok()
+        verify_proof_circuit::<Tweedledum, Tweedledee>(&[], &inner_proof, &[], &inner_circuit, true).is_ok()
     );
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!();
@@ -75,7 +75,8 @@ fn main() {
         &[],
         &proof,
         &[],
-        &recursion_circuit.circuit
+        &recursion_circuit.circuit,
+        true
     ));
     println!("Finished in {}s", start.elapsed().as_secs_f64());
 }

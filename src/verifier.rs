@@ -17,12 +17,17 @@ use crate::{
 
 pub const SECURITY_BITS: usize = 128;
 
+/// Verifies a proof `proof` and some old proofs G points for a given circuit.
+/// If `verify_g` is `true`, the function completely verifies the proof, including the
+/// linear time check of the G point.
+/// If `verify_g` is `false`, returns an `OldProof` to be checked in a later verification.
 pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     public_inputs: &[C::ScalarField],
     proof: &Proof<C>,
     old_proofs: &[OldProof<C>],
     circuit: &Circuit<C>,
-) -> Result<()> {
+    verify_g: bool,
+) -> Result<Option<OldProof<C>>> {
     // Verify that the proof parameters are valid.
     check_proof_parameters(proof)?;
 
@@ -104,25 +109,32 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::Scala
         bail!("Invalid IPA proof.");
     }
 
-    let pedersen_g: Vec<_> = (0..circuit.degree())
-        .map(|i| blake_hash_usize_to_curve::<C>(i))
-        .collect();
-    let w = 8; // TODO: Should really be set dynamically based on MSM size.
-    let pedersen_g_msm_precomputation =
-        msm_precompute(&AffinePoint::batch_to_projective(&pedersen_g), w);
+    if verify_g {
+        let pedersen_g: Vec<_> = (0..circuit.degree())
+            .map(|i| blake_hash_usize_to_curve::<C>(i))
+            .collect();
+        let w = 8; // TODO: Should really be set dynamically based on MSM size.
+        let pedersen_g_msm_precomputation =
+            msm_precompute(&AffinePoint::batch_to_projective(&pedersen_g), w);
 
-    /// Verify that `self.halo_g = <s, G>`.
-    if proof.halo_g
-        != pedersen_hash(
-            &halo_s(&challs.ipa_challenges),
-            &pedersen_g_msm_precomputation,
-        )
-        .to_affine()
-    {
-        bail!("Invalid G point.");
+        /// Verify that `self.halo_g = <s, G>`.
+        if proof.halo_g
+            == pedersen_hash(
+                &halo_s(&challs.ipa_challenges),
+                &pedersen_g_msm_precomputation,
+            )
+            .to_affine()
+        {
+            Ok(None)
+        } else {
+            bail!("Invalid G point.");
+        }
+    } else {
+        Ok(Some(OldProof {
+            halo_g: proof.halo_g,
+            ipa_challenges: challs.ipa_challenges,
+        }))
     }
-
-    Ok(())
 }
 
 #[derive(Debug, Clone)]
@@ -134,12 +146,17 @@ pub struct VerificationKey<C: Curve> {
     pub security_bits: usize,
 }
 
+/// Verifies a proof `proof` and some old proofs G points for a given verification key.
+/// If `verify_g` is `true`, the function completely verifies the proof, including the
+/// linear time check of the G point.
+/// If `verify_g` is `false`, returns an `OldProof` to be checked in a later verification.
 pub fn verify_proof_vk<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     public_inputs: &[C::ScalarField],
     proof: &Proof<C>,
     old_proofs: &[OldProof<C>],
     vk: &VerificationKey<C>,
-) -> Result<()> {
+    verify_g: bool,
+) -> Result<Option<OldProof<C>>> {
     // Verify that the proof parameters are valid.
     check_proof_parameters(proof)?;
 
@@ -221,25 +238,32 @@ pub fn verify_proof_vk<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarFiel
         bail!("Invalid IPA proof.");
     }
 
-    let pedersen_g: Vec<_> = (0..vk.degree)
-        .map(|i| blake_hash_usize_to_curve::<C>(i))
-        .collect();
-    let w = 8; // TODO: Should really be set dynamically based on MSM size.
-    let pedersen_g_msm_precomputation =
-        msm_precompute(&AffinePoint::batch_to_projective(&pedersen_g), w);
+    if verify_g {
+        let pedersen_g: Vec<_> = (0..vk.degree)
+            .map(|i| blake_hash_usize_to_curve::<C>(i))
+            .collect();
+        let w = 8; // TODO: Should really be set dynamically based on MSM size.
+        let pedersen_g_msm_precomputation =
+            msm_precompute(&AffinePoint::batch_to_projective(&pedersen_g), w);
 
-    /// Verify that `self.halo_g = <s, G>`.
-    if proof.halo_g
-        != pedersen_hash(
-            &halo_s(&challs.ipa_challenges),
-            &pedersen_g_msm_precomputation,
-        )
-        .to_affine()
-    {
-        bail!("Invalid G point.");
+        /// Verify that `self.halo_g = <s, G>`.
+        if proof.halo_g
+            == pedersen_hash(
+                &halo_s(&challs.ipa_challenges),
+                &pedersen_g_msm_precomputation,
+            )
+            .to_affine()
+        {
+            Ok(None)
+        } else {
+            bail!("Invalid G point.");
+        }
+    } else {
+        Ok(Some(OldProof {
+            halo_g: proof.halo_g,
+            ipa_challenges: challs.ipa_challenges,
+        }))
     }
-
-    Ok(())
 }
 
 /// Verify all IPAs in the given proof using a reduction to a single polynomial.

@@ -25,7 +25,7 @@ fn test_proof_trivial_vk() {
         .generate_proof::<Tweedledum>(witness, &[], true)
         .unwrap();
     let vk = circuit.to_vk();
-    assert!(verify_proof_vk::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk,).is_ok());
+    assert!(verify_proof_vk::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true).is_ok());
 }
 
 #[test]
@@ -37,15 +37,17 @@ fn test_proof_trivial_circuit_many_proofs_vk() {
             .generate_proof::<Tweedledum>(witness.clone(), &[], true)
             .unwrap();
         let vk = circuit.to_vk();
-        assert!(verify_proof_vk::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk,).is_ok());
-        old_proofs.push(proof.into());
+        let old_proof = verify_proof_vk::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, false)
+            .expect("Invalid proof")
+            .unwrap();
+        old_proofs.push(old_proof);
     }
     let (circuit, witness) = get_trivial_circuit(<Tweedledee as Curve>::ScalarField::ZERO);
     let proof = circuit
         .generate_proof::<Tweedledum>(witness.clone(), &old_proofs, true)
         .unwrap();
     let vk = circuit.to_vk();
-    assert!(verify_proof_vk::<Tweedledee, Tweedledum>(&[], &proof, &old_proofs, &vk,).is_ok());
+    assert!(verify_proof_vk::<Tweedledee, Tweedledum>(&[], &proof, &old_proofs, &vk, true).is_ok());
 }
 
 #[test]
@@ -64,7 +66,7 @@ fn test_proof_sum_vk() {
         .generate_proof::<Tweedledum>(witness, &[], true)
         .unwrap();
     let vk = circuit.to_vk();
-    assert!(verify_proof_vk::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk,).is_ok());
+    assert!(verify_proof_vk::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true).is_ok());
 }
 
 #[test]
@@ -95,7 +97,7 @@ fn test_proof_sum_big_vk() {
     dbg!(now.elapsed());
     let vk = circuit.to_vk();
     dbg!(now.elapsed());
-    assert!(verify_proof_vk::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk,).is_ok());
+    assert!(verify_proof_vk::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true).is_ok());
     dbg!(now.elapsed());
 }
 
@@ -117,7 +119,7 @@ fn test_proof_quadratic_vk() {
         .generate_proof::<Tweedledum>(witness, &[], true)
         .unwrap();
     let vk = circuit.to_vk();
-    assert!(verify_proof_vk::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk,).is_ok());
+    assert!(verify_proof_vk::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true).is_ok());
 }
 
 #[test]
@@ -148,6 +150,7 @@ fn test_proof_public_input1_vk() {
         &proof,
         &[],
         &vk,
+        true
     )
     .is_ok());
 }
@@ -183,5 +186,5 @@ fn test_proof_public_input2_vk() {
         )
     });
     let vk = circuit.to_vk();
-    assert!(verify_proof_vk::<Tweedledee, Tweedledum>(&values, &proof, &[], &vk,).is_ok());
+    assert!(verify_proof_vk::<Tweedledee, Tweedledum>(&values, &proof, &[], &vk, true).is_ok());
 }

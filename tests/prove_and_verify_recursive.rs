@@ -11,7 +11,7 @@ fn test_proof_trivial_recursive() {
     let circuit = builder.build();
     let witness = circuit.generate_witness(partial_witness);
     let proof = circuit.generate_proof::<Tweedledum>(witness, &[], true).unwrap();
-    assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit,).is_ok());
+    assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok());
 
     let recursion_circuit =
         recursive_verification_circuit::<Tweedledum, Tweedledee>(circuit.degree_pow(), 128);
@@ -31,7 +31,8 @@ fn test_proof_trivial_recursive() {
         &[],
         &proof,
         &[],
-        &recursion_circuit.circuit
+        &recursion_circuit.circuit,
+        true
     )
     .is_ok());
 }
