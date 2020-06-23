@@ -40,6 +40,7 @@ fn main() {
     let recursion_circuit = recursive_verification_circuit::<Tweedledee, Tweedledum>(
         INNER_PROOF_DEGREE_POW,
         SECURITY_BITS,
+        0
     );
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!("Gate count: {}", recursion_circuit.circuit.degree());

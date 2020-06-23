@@ -37,6 +37,9 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::Scala
     // Observe the transcript and generate the associated challenge points using Fiat-Shamir.
     let challs = proof.get_challenges()?;
 
+    // Check the old proofs' openings.
+    verify_old_proof_evaluation(old_proofs, proof, challs.zeta)?;
+
     let degree = circuit.degree();
 
     let constraint_terms = evaluate_all_constraints::<C, InnerC>(
@@ -117,7 +120,7 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::Scala
         let pedersen_g_msm_precomputation =
             msm_precompute(&AffinePoint::batch_to_projective(&pedersen_g), w);
 
-        /// Verify that `self.halo_g = <s, G>`.
+        // Verify that `self.halo_g = <s, G>`.
         if proof.halo_g
             == pedersen_hash(
                 &halo_s(&challs.ipa_challenges),
@@ -165,6 +168,9 @@ pub fn verify_proof_vk<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarFiel
 
     // Observe the transcript and generate the associated challenge points using Fiat-Shamir.
     let challs = proof.get_challenges()?;
+
+    // Check the old proofs' openings.
+    verify_old_proof_evaluation(old_proofs, proof, challs.zeta)?;
 
     let degree = vk.degree;
 
@@ -477,6 +483,24 @@ fn verify_public_inputs<C: Curve>(
     for i in 0..num_public_inputs {
         // If the value `v` doesn't match the corresponding wire in the `PublicInputGate`, return false.
         if public_inputs[i] != proof.o_public_inputs[i / NUM_WIRES].o_wires[i % NUM_WIRES] {
+            bail!("{}-th public input is incorrect", i);
+        }
+    }
+    Ok(())
+}
+
+/// Verifies that the purported openings at `zeta` for the old proofs in `old_proofs` is valid.
+fn verify_old_proof_evaluation<C: Curve>(
+    old_proofs: &[OldProof<C>],
+    proof: &Proof<C>,
+    zeta: C::ScalarField
+) -> Result<()> {
+    if old_proofs.len() != proof.o_local.o_old_proofs.len() {
+        bail!("Incorrect number of old proofs opening.")
+    }
+    for (i,p) in old_proofs.iter().enumerate() {
+        // If the value `v` doesn't match the corresponding wire in the `PublicInputGate`, return false.
+        if halo_g(zeta, &p.ipa_challenges) != proof.o_local.o_old_proofs[i] {
             bail!("{}-th public input is incorrect", i);
         }
     }

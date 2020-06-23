@@ -14,7 +14,7 @@ fn test_proof_trivial_recursive() {
     assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok());
 
     let recursion_circuit =
-        recursive_verification_circuit::<Tweedledum, Tweedledee>(circuit.degree_pow(), 128);
+        recursive_verification_circuit::<Tweedledum, Tweedledee>(circuit.degree_pow(), 128, 0);
     let mut recursion_inputs = PartialWitness::new();
     if let Err(e) = recursion_circuit
         .proof

@@ -93,7 +93,7 @@ fn test_proof_sum_big_circuit() {
         .generate_proof::<Tweedledum>(witness, &[], true)
         .unwrap();
     dbg!(now.elapsed());
-    assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok());
+    assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, false).is_ok());
     dbg!(now.elapsed());
 }
 

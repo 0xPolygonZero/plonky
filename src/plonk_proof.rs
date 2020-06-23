@@ -157,6 +157,12 @@ impl<C: Curve> OldProof<C> {
     }
 }
 
+#[derive(Debug, Clone)]
+/// The `Target` version of `OldProof`. Only the Halo `G` point is required for verification, so we omit the `ipa_challenges` vector.
+pub struct OldProofTarget {
+    pub halo_g: AffinePointTarget,
+}
+
 pub struct ProofTarget {
     /// A commitment to each wire polynomial.
     pub c_wires: Vec<AffinePointTarget>,

@@ -1,5 +1,6 @@
-use crate::plonk_challenger::RecursiveChallenger;
 use crate::gates::evaluate_all_constraints_recursively;
+use crate::plonk_challenger::RecursiveChallenger;
+use crate::plonk_proof::OldProofTarget;
 use crate::plonk_util::{powers_recursive, reduce_with_powers_recursive};
 use crate::util::ceil_div_usize;
 use crate::{
@@ -32,6 +33,7 @@ struct RecursionPublicInputs {
     o_plonk_t: Vec<PublicInput>,
     halo_u_l: Vec<PublicInput>,
     halo_u_r: Vec<PublicInput>,
+    old_proofs: Vec<PublicInput>,
 }
 
 impl RecursionPublicInputs {
@@ -47,6 +49,7 @@ impl RecursionPublicInputs {
             self.o_plonk_t.as_slice(),
             self.halo_u_l.as_slice(),
             self.halo_u_r.as_slice(),
+            self.old_proofs.as_slice(),
         ]
         .concat()
     }
@@ -63,6 +66,7 @@ pub fn recursive_verification_circuit<
 >(
     degree_pow: usize,
     security_bits: usize,
+    num_old_proofs: usize,
 ) -> RecursiveCircuit<C> {
     let mut builder = CircuitBuilder::<C>::new(security_bits);
     let public_inputs = RecursionPublicInputs {
@@ -80,6 +84,7 @@ pub fn recursive_verification_circuit<
         o_plonk_t: builder.stage_public_inputs(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
         halo_u_l: builder.stage_public_inputs(degree_pow),
         halo_u_r: builder.stage_public_inputs(degree_pow),
+        old_proofs: builder.stage_public_inputs(2 * num_old_proofs),
     };
 
     let num_public_inputs = public_inputs.to_vec().len();
@@ -98,7 +103,8 @@ pub fn recursive_verification_circuit<
         halo_g: builder.add_virtual_point_target(),
         schnorr_proof: make_schnorr_proof(&mut builder),
     };
-    builder.route_public_inputs();
+
+    let old_proofs = make_old_proofs(&mut builder, num_old_proofs);
 
     // Flatten the list of public input openings.
     let o_public_inputs: Vec<Target> = proof
@@ -193,6 +199,16 @@ pub fn recursive_verification_circuit<
     for i in 1..degree_pow {
         builder.copy(public_inputs.halo_u_l[i].routable_target(), u_l[i]);
         builder.copy(public_inputs.halo_u_r[i].routable_target(), u_r[i]);
+    }
+    for i in 0..num_old_proofs {
+        builder.copy(
+            old_proofs[i].halo_g.x,
+            public_inputs.old_proofs[2 * i].routable_target(),
+        );
+        builder.copy(
+            old_proofs[i].halo_g.y,
+            public_inputs.old_proofs[2 * i + 1].routable_target(),
+        );
     }
 
     let circuit = builder.build();
@@ -411,6 +427,14 @@ fn make_opening_sets<C: HaloCurve>(
     n: usize,
 ) -> Vec<OpeningSetTarget> {
     (0..n).map(|_i| make_opening_set(builder)).collect()
+}
+
+fn make_old_proofs<C: HaloCurve>(builder: &mut CircuitBuilder<C>, n: usize) -> Vec<OldProofTarget> {
+    (0..n)
+        .map(|_| OldProofTarget {
+            halo_g: builder.add_virtual_point_target(),
+        })
+        .collect()
 }
 
 /// In our recursion scheme, to avoid non-native field arithmetic, each proof in a recursive chain
