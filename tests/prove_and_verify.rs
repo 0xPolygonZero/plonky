@@ -95,6 +95,8 @@ fn test_proof_sum_big_circuit() {
     dbg!(now.elapsed());
     assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, false).is_ok());
     dbg!(now.elapsed());
+    assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok());
+    dbg!(now.elapsed());
 }
 
 #[test]

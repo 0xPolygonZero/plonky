@@ -158,9 +158,10 @@ impl<C: Curve> OldProof<C> {
 }
 
 #[derive(Debug, Clone)]
-/// The `Target` version of `OldProof`. Only the Halo `G` point is required for verification, so we omit the `ipa_challenges` vector.
+/// The `Target` version of `OldProof`.
 pub struct OldProofTarget {
     pub halo_g: AffinePointTarget,
+    pub ipa_challenges: Vec<Target>,
 }
 
 pub struct ProofTarget {
@@ -287,6 +288,8 @@ pub struct OpeningSetTarget {
     pub o_plonk_z: Target,
     /// The purported opening of `t`.
     pub o_plonk_t: Vec<Target>,
+    /// The purported opening of some old proofs `halo_g` polynomials.
+    pub o_old_proofs: Vec<Target>,
 }
 
 impl OpeningSetTarget {
@@ -297,6 +300,7 @@ impl OpeningSetTarget {
             self.o_wires.as_slice(),
             &[self.o_plonk_z],
             self.o_plonk_t.as_slice(),
+            self.o_old_proofs.as_slice(),
         ]
         .concat()
     }
