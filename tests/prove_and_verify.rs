@@ -1,7 +1,4 @@
-use plonky::{
-    verify_proof_circuit, Circuit, CircuitBuilder, Curve, Field, HaloCurve, PartialWitness,
-    Tweedledee, Tweedledum, Witness,
-};
+use plonky::{verify_proof_circuit, Circuit, CircuitBuilder, Curve, Field, HaloCurve, PartialWitness, Tweedledee, Tweedledum, Witness};
 use std::time::Instant;
 
 // Make sure it's the same as in `plonk.rs`.
@@ -24,7 +21,9 @@ fn test_proof_trivial_circuit() {
     let proof = circuit
         .generate_proof::<Tweedledum>(witness.clone(), &[], true)
         .unwrap();
-    assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok());
+    assert!(
+        verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok()
+    );
 }
 
 #[test]
@@ -35,18 +34,24 @@ fn test_proof_trivial_circuit_many_proofs() {
         let proof = circuit
             .generate_proof::<Tweedledum>(witness.clone(), &[], true)
             .unwrap();
-        let old_proof = verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, false)
-            .expect("Invalid proof")
-            .unwrap();
+        let old_proof =
+            verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, false)
+                .expect("Invalid proof")
+                .unwrap();
         old_proofs.push(proof.into());
     }
     let (circuit, witness) = get_trivial_circuit(<Tweedledee as Curve>::ScalarField::ZERO);
     let proof = circuit
         .generate_proof::<Tweedledum>(witness.clone(), &old_proofs, true)
         .unwrap();
-    assert!(
-        verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &old_proofs, &circuit, true).is_ok()
-    );
+    assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(
+        &[],
+        &proof,
+        &old_proofs,
+        &circuit,
+        true
+    )
+    .is_ok());
 }
 
 #[test]
@@ -64,7 +69,9 @@ fn test_proof_sum_circuit() {
     let proof = circuit
         .generate_proof::<Tweedledum>(witness, &[], true)
         .unwrap();
-    assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok());
+    assert!(
+        verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok()
+    );
 }
 
 #[test]
@@ -93,9 +100,17 @@ fn test_proof_sum_big_circuit() {
         .generate_proof::<Tweedledum>(witness, &[], true)
         .unwrap();
     dbg!(now.elapsed());
-    assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, false).is_ok());
+    assert!(
+        verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, false).is_ok()
+    );
     dbg!(now.elapsed());
-    assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok());
+    assert!(
+        verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok()
+    );
+    dbg!(now.elapsed());
+    assert!(
+        verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, false).is_ok()
+    );
     dbg!(now.elapsed());
 }
 
@@ -116,7 +131,9 @@ fn test_proof_quadratic_circuit() {
     let proof = circuit
         .generate_proof::<Tweedledum>(witness, &[], true)
         .unwrap();
-    assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok());
+    assert!(
+        verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok()
+    );
 }
 
 #[test]
@@ -182,7 +199,8 @@ fn test_proof_public_input2_circuit() {
         )
     });
     assert!(
-        verify_proof_circuit::<Tweedledee, Tweedledum>(&values, &proof, &[], &circuit, true).is_ok()
+        verify_proof_circuit::<Tweedledee, Tweedledum>(&values, &proof, &[], &circuit, true)
+            .is_ok()
     );
 }
 
@@ -198,5 +216,7 @@ fn test_proof_sponge_circuit() {
     let proof = circuit
         .generate_proof::<Tweedledum>(witness, &[], true)
         .unwrap();
-    assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok());
+    assert!(
+        verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok()
+    );
 }

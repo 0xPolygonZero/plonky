@@ -2,10 +2,7 @@ use anyhow::{anyhow, bail, ensure, Result};
 
 use crate::plonk_challenger::Challenger;
 use crate::plonk_util::{halo_g, halo_s, pedersen_hash};
-use crate::{
-    AffinePoint, AffinePointTarget, Curve, Field, MsmPrecomputation, PartialWitness, Target,
-    SECURITY_BITS,
-};
+use crate::{AffinePoint, AffinePointTarget, Curve, Field, MsmPrecomputation, PartialWitness, Target, SECURITY_BITS};
 
 #[derive(Debug, Clone, Copy)]
 pub struct SchnorrProof<C: Curve> {
@@ -240,6 +237,16 @@ impl ProofTarget {
         witness.set_point_targets(&self.halo_r_i, &values.halo_r);
         witness.set_point_target(self.halo_g, values.halo_g);
 
+        witness.set_point_target(self.schnorr_proof.r, values.schnorr_proof.r);
+        witness.set_target(
+            self.schnorr_proof.z1,
+            C::ScalarField::try_convert(&values.schnorr_proof.z1)?,
+        );
+        witness.set_target(
+            self.schnorr_proof.z1,
+            C::ScalarField::try_convert(&values.schnorr_proof.z2)?,
+        );
+
         Ok(())
     }
 }
@@ -327,6 +334,10 @@ impl OpeningSetTarget {
         witness.set_targets(
             &self.o_plonk_t,
             &InnerSF::try_convert_all::<InnerBF>(&values.o_plonk_t)?,
+        );
+        witness.set_targets(
+            &self.o_old_proofs,
+            &InnerSF::try_convert_all::<InnerBF>(&values.o_old_proofs)?,
         );
         Ok(())
     }
