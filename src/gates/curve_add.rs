@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
-use crate::{CircuitBuilder, Curve, Field, HaloCurve, PartialWitness, Target, Wire, WitnessGenerator};
 use crate::gates::{assert_binary_recursively, assert_inverses_recursively, Gate};
+use crate::{CircuitBuilder, Curve, Field, HaloCurve, PartialWitness, Target, Wire, WitnessGenerator};
 
 /// A gate which performs incomplete point addition, conditioned on an input bit. In order to
 /// facilitate MSMs which use this gate, it also adds the bit to an accumulator.
@@ -115,7 +115,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveA
 }
 
 impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> WitnessGenerator<C::ScalarField>
-for CurveAddGate<C, InnerC>
+    for CurveAddGate<C, InnerC>
 {
     fn dependencies(&self) -> Vec<Target> {
         vec![
@@ -236,7 +236,7 @@ for CurveAddGate<C, InnerC>
 
 #[cfg(test)]
 mod tests {
-    use crate::{CurveAddGate, test_gate_low_degree, Tweedledee, Tweedledum};
+    use crate::{test_gate_low_degree, CurveAddGate, Tweedledee, Tweedledum};
 
     test_gate_low_degree!(
         low_degree_CurveAddGate,

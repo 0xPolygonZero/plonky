@@ -1,4 +1,4 @@
-use plonky::{verify_proof_circuit, Circuit, CircuitBuilder, Curve, Field, HaloCurve, PartialWitness, Tweedledee, Tweedledum, Witness};
+use plonky::{rescue_hash_n_to_1, rescue_sponge, verify_proof_circuit, Circuit, CircuitBuilder, Curve, Field, HaloCurve, PartialWitness, Tweedledee, Tweedledum, Witness};
 use std::time::Instant;
 
 // Make sure it's the same as in `plonk.rs`.

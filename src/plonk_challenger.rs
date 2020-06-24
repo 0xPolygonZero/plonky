@@ -1,9 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::{
-    AffinePoint, AffinePointTarget, CircuitBuilder, Curve, Field, HaloCurve, ProjectivePoint,
-    rescue_sponge, Target,
-};
+use crate::{rescue_sponge, AffinePoint, AffinePointTarget, CircuitBuilder, Curve, Field, HaloCurve, ProjectivePoint, Target};
 
 /// Observes prover messages, and generates challenges by hashing the transcript.
 pub(crate) struct Challenger<F: Field> {
@@ -29,14 +26,14 @@ impl<F: Field> Challenger<F> {
         }
     }
 
-    pub(crate) fn observe_affine_point<C: Curve<BaseField=F>>(&mut self, point: AffinePoint<C>) {
+    pub(crate) fn observe_affine_point<C: Curve<BaseField = F>>(&mut self, point: AffinePoint<C>) {
         // TODO: Uncomment this.
         // debug_assert!(!point.zero);
         self.observe_element(point.x);
         self.observe_element(point.y);
     }
 
-    pub(crate) fn observe_affine_points<C: Curve<BaseField=F>>(
+    pub(crate) fn observe_affine_points<C: Curve<BaseField = F>>(
         &mut self,
         points: &[AffinePoint<C>],
     ) {
@@ -45,21 +42,21 @@ impl<F: Field> Challenger<F> {
         }
     }
 
-    pub(crate) fn observe_proj_point<C: Curve<BaseField=F>>(
+    pub(crate) fn observe_proj_point<C: Curve<BaseField = F>>(
         &mut self,
         point: ProjectivePoint<C>,
     ) {
         self.observe_affine_point(point.to_affine());
     }
 
-    pub(crate) fn observe_proj_points<C: Curve<BaseField=F>>(
+    pub(crate) fn observe_proj_points<C: Curve<BaseField = F>>(
         &mut self,
         points: &[ProjectivePoint<C>],
     ) {
         self.observe_affine_points(&ProjectivePoint::batch_to_affine(points));
     }
 
-    pub(crate) fn observe_proj_point_other_curve<C: Curve<ScalarField=F>>(
+    pub(crate) fn observe_proj_point_other_curve<C: Curve<ScalarField = F>>(
         &mut self,
         point: ProjectivePoint<C>,
     ) {
@@ -151,6 +148,4 @@ impl<C: HaloCurve> RecursiveChallenger<C> {
         self.transcript = vec![challenges[0]];
         challenges
     }
-
-    // TODO: Implement recursive `get_affine_point`.
 }

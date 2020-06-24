@@ -79,7 +79,8 @@ fn main() {
     let start = Instant::now();
     let proof = recursion_circuit
         .circuit
-        .generate_proof::<Tweedledum>(recursion_witness, &[inner_proof], true)
+        // .generate_proof::<Tweedledum>(recursion_witness, &[inner_proof], true)
+        .generate_proof::<Tweedledum>(recursion_witness, &[], true)
         .unwrap();
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!();

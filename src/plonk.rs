@@ -9,19 +9,12 @@ use rayon::prelude::*;
 use crate::partition::{get_subgroup_shift, TargetPartitions};
 use crate::plonk_challenger::Challenger;
 use crate::plonk_proof::{OldProof, Proof, SchnorrProof};
-use crate::plonk_util::{
-    coeffs_to_values_padded, eval_coeffs, eval_l_1, eval_poly, eval_zero_poly, halo_n, halo_n_mul,
-    pad_to_8n, permutation_polynomial, powers, reduce_with_powers, values_to_coeffs,
-};
+use crate::plonk_util::{coeffs_to_values_padded, eval_coeffs, eval_l_1, eval_poly, eval_zero_poly, halo_n, halo_n_mul, pad_to_8n, permutation_polynomial, powers, reduce_with_powers, values_to_coeffs};
 use crate::poly_commit::PolynomialCommitment;
 use crate::target::Target;
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::witness::{PartialWitness, Witness, WitnessGenerator};
-use crate::{
-    divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2,
-    ifft_with_precomputation_power_of_2, msm_parallel, AffinePoint, FftPrecomputation, Field,
-    HaloCurve, MsmPrecomputation, OpeningSet, ProjectivePoint, VerificationKey,
-};
+use crate::{divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_parallel, AffinePoint, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, OpeningSet, ProjectivePoint, VerificationKey};
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
@@ -276,7 +269,10 @@ impl<C: HaloCurve> Circuit<C> {
             c_wires.iter().map(|c| c.randomness).collect::<Vec<_>>(),
             vec![c_plonk_z.randomness],
             c_plonk_t.iter().map(|c| c.randomness).collect::<Vec<_>>(),
-            old_proofs.iter().map(|_| C::ScalarField::ZERO).collect::<Vec<_>>(),
+            old_proofs
+                .iter()
+                .map(|_| C::ScalarField::ZERO)
+                .collect::<Vec<_>>(),
         ]
         .concat();
         let all_coeffs = [
@@ -456,9 +452,11 @@ impl<C: HaloCurve> Circuit<C> {
         // We will evaluate the vanishing polynomial at 8n points, then interpolate.
         let vanishing_points = self
             .subgroup_8n
-            .par_iter()
+            // .par_iter()
+            .iter()
             .enumerate()
             .map(|(i, &x)| {
+                dbg!(i);
                 // Load the constant polynomials' values at x.
                 let mut local_constant_values = Vec::new();
                 for j in 0..NUM_CONSTANTS {
@@ -535,7 +533,10 @@ impl<C: HaloCurve> Circuit<C> {
             o_wires: eval_coeffs(&wire_coeffs, &powers_of_zeta),
             o_plonk_z: C::ScalarField::inner_product(&plonk_z_coeffs, &powers_of_zeta),
             o_plonk_t: eval_coeffs(&plonk_t_coeffs, &powers_of_zeta),
-            o_old_proofs: old_proofs.iter().map(|p| p.evaluate_g(zeta)).collect::<Vec<_>>(),
+            o_old_proofs: old_proofs
+                .iter()
+                .map(|p| p.evaluate_g(zeta))
+                .collect::<Vec<_>>(),
         }
     }
 

@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
-use crate::{AffinePoint, CircuitBuilder, Field, GRID_WIDTH, HaloCurve, PartialWitness, Target, Wire, WitnessGenerator};
 use crate::gates::{assert_binary_recursively, assert_inverses_recursively, Gate};
+use crate::{AffinePoint, CircuitBuilder, Field, HaloCurve, PartialWitness, Target, Wire, WitnessGenerator, GRID_WIDTH};
 
 /// A gate which performs an iteration of an simultaneous doubling MSM loop, employing the
 /// endomorphism described in the Halo paper. `C` is the curve of the inner proof.
@@ -32,7 +32,7 @@ impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> CurveEndoGate<
 }
 
 impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C>
-for CurveEndoGate<C, InnerC>
+    for CurveEndoGate<C, InnerC>
 {
     const NAME: &'static str = "CurveEndoGate";
 
@@ -154,7 +154,7 @@ for CurveEndoGate<C, InnerC>
 }
 
 impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> WitnessGenerator<C::ScalarField>
-for CurveEndoGate<C, InnerC>
+    for CurveEndoGate<C, InnerC>
 {
     fn dependencies(&self) -> Vec<Target> {
         vec![
@@ -312,7 +312,7 @@ for CurveEndoGate<C, InnerC>
 
 #[cfg(test)]
 mod tests {
-    use crate::{CurveEndoGate, test_gate_low_degree, Tweedledee, Tweedledum};
+    use crate::{test_gate_low_degree, CurveEndoGate, Tweedledee, Tweedledum};
 
     test_gate_low_degree!(
         low_degree_CurveEndoGate,

@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
-use crate::{CircuitBuilder, Curve, Field, HaloCurve, PartialWitness, Target, WitnessGenerator};
 use crate::gates::Gate;
+use crate::{CircuitBuilder, Curve, Field, HaloCurve, PartialWitness, Target, WitnessGenerator};
 
 /// A gate for accumulating base-4 limbs.
 pub struct Base4SumGate<C: Curve> {
@@ -109,7 +109,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for Base4SumGate<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ArithmeticGate, test_gate_low_degree, Tweedledum};
+    use crate::{test_gate_low_degree, ArithmeticGate, Tweedledum};
 
     test_gate_low_degree!(
         low_degree_ArithmeticGate,

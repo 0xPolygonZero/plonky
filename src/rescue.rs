@@ -1,7 +1,7 @@
-use crate::{Field, apply_mds, PRF};
 use crate::util::ceil_div_usize;
-use rand_chacha::ChaCha8Rng;
+use crate::{apply_mds, Field, PRF};
 use rand_chacha::rand_core::SeedableRng;
+use rand_chacha::ChaCha8Rng;
 
 pub struct RescuePrf {
     security_bits: usize,
@@ -9,9 +9,7 @@ pub struct RescuePrf {
 
 impl Default for RescuePrf {
     fn default() -> Self {
-        RescuePrf {
-            security_bits: 128,
-        }
+        RescuePrf { security_bits: 128 }
     }
 }
 
@@ -39,11 +37,7 @@ pub fn rescue_hash_n_to_3<F: Field>(inputs: Vec<F>, security_bits: usize) -> (F,
     (outputs[0], outputs[1], outputs[2])
 }
 
-pub fn rescue_sponge<F: Field>(
-    inputs: Vec<F>,
-    num_outputs: usize,
-    security_bits: usize,
-) -> Vec<F> {
+pub fn rescue_sponge<F: Field>(inputs: Vec<F>, num_outputs: usize, security_bits: usize) -> Vec<F> {
     // This is mostly arbitrary, but we wouldn't want a huge width as the MDS layer could get
     // expensive.
     let rate = 2;
@@ -93,7 +87,8 @@ pub fn rescue_permutation<F: Field>(mut state: Vec<F>, security_bits: usize) -> 
 }
 
 fn add_vecs<F: Field>(a: Vec<F>, b: Vec<F>) -> Vec<F> {
-    a.iter().zip(b.iter())
+    a.iter()
+        .zip(b.iter())
         .map(|(a_i, b_i)| *a_i + *b_i)
         .collect()
 }
@@ -104,7 +99,7 @@ pub(crate) fn generate_rescue_constants<F: Field>(
 ) -> Vec<(Vec<F>, Vec<F>)> {
     // TODO: This should use deterministic randomness.
     // FIX: Use ChaCha CSPRNG with a seed. This is somewhat similar to official implementation
-    // at https://github.com/KULeuven-COSIC/Marvellous/blob/master/instance_generator.sage where they 
+    // at https://github.com/KULeuven-COSIC/Marvellous/blob/master/instance_generator.sage where they
     // use SHAKE256 with a seed to generate randomness.
     let mut rng = ChaCha8Rng::seed_from_u64(1337);
     let mut constants = Vec::new();
@@ -124,9 +119,6 @@ pub(crate) fn generate_rescue_constants<F: Field>(
     constants
 }
 
-pub(crate) fn recommended_rounds<F: Field>(
-    width: usize,
-    security_bits: usize,
-) -> usize {
+pub(crate) fn recommended_rounds<F: Field>(width: usize, security_bits: usize) -> usize {
     ceil_div_usize(security_bits, 2 * width).max(10)
 }
