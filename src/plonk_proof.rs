@@ -161,6 +161,23 @@ pub struct OldProofTarget {
     pub ipa_challenges: Vec<Target>,
 }
 
+impl OldProofTarget {
+    pub fn populate_witness<C: Curve>(
+        &self,
+        witness: &mut PartialWitness<C::BaseField>,
+        values: &OldProof<C>,
+    ) -> Result<()> {
+        witness.set_point_target(self.halo_g, values.halo_g);
+        debug_assert_eq!(self.ipa_challenges.len(), values.ipa_challenges.len());
+        witness.set_targets(
+            &self.ipa_challenges,
+            &C::ScalarField::try_convert_all(&values.ipa_challenges)?,
+        );
+
+        Ok(())
+    }
+}
+
 pub struct ProofTarget {
     /// A commitment to each wire polynomial.
     pub c_wires: Vec<AffinePointTarget>,

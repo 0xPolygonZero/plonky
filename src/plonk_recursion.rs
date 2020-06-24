@@ -3,17 +3,13 @@ use crate::plonk_challenger::RecursiveChallenger;
 use crate::plonk_proof::OldProofTarget;
 use crate::plonk_util::{powers_recursive, reduce_with_powers_recursive};
 use crate::util::ceil_div_usize;
-use crate::{
-    get_subgroup_shift, hash_usize_to_curve, AffinePointTarget, Circuit, CircuitBuilder,
-    CurveMulOp, Field, HaloCurve, OpeningSetTarget, ProofTarget, PublicInput, SchnorrProofTarget,
-    Target, GRID_WIDTH, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES,
-    QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER,
-};
+use crate::{get_subgroup_shift, hash_usize_to_curve, AffinePointTarget, Circuit, CircuitBuilder, CurveMulOp, Field, HaloCurve, OpeningSetTarget, ProofTarget, PublicInput, SchnorrProofTarget, Target, GRID_WIDTH, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER};
 
 /// Wraps a `Circuit` for recursive verification with inputs for the proof data.
 pub struct RecursiveCircuit<C: HaloCurve> {
     pub circuit: Circuit<C>,
     pub proof: ProofTarget,
+    pub old_proofs: Vec<OldProofTarget>,
 }
 
 /// Public inputs of the recursive circuit. This contains data for the inner proof which is needed
@@ -115,8 +111,6 @@ pub fn recursive_verification_circuit<
         .collect();
 
     verify_assumptions::<C, InnerC>(&mut builder, degree_pow, &public_inputs, &o_public_inputs);
-
-
 
     // TODO: Verify that each prover polynomial commitment is on the curve.
     // Can call curve_assert_valid.
@@ -224,7 +218,11 @@ pub fn recursive_verification_circuit<
     }
 
     let circuit = builder.build();
-    RecursiveCircuit { circuit, proof }
+    RecursiveCircuit {
+        circuit,
+        proof,
+        old_proofs,
+    }
 }
 
 /// Verify all IPAs in the given proof. Return `(u_l, u_r)`, which roughly correspond to `u` and
@@ -448,16 +446,20 @@ fn make_opening_sets<C: HaloCurve>(
         .collect()
 }
 
-fn make_old_proofs<C: HaloCurve>(builder: &mut CircuitBuilder<C>, n: usize, degree_pow: usize) -> Vec<OldProofTarget> {
+fn make_old_proofs<C: HaloCurve>(
+    builder: &mut CircuitBuilder<C>,
+    n: usize,
+    degree_pow: usize,
+) -> Vec<OldProofTarget> {
     (0..n)
         .map(|_| OldProofTarget {
             halo_g: builder.add_virtual_point_target(),
-            ipa_challenges: builder.add_virtual_targets(degree_pow)
+            ipa_challenges: builder.add_virtual_targets(degree_pow),
         })
         .collect()
 }
 
-/// In our recursi,on scheme, to avoid non-native field arithmetic, each proof in a recursive chain
+/// In our recursion scheme, to avoid non-native field arithmetic, each proof in a recursive chain
 /// only partially verifies its inner proof. It outputs various challenges and openings, and the
 /// following proof is expected to verify constraints upon that data. This function performs those
 /// final verification steps.
@@ -615,9 +617,6 @@ fn verify_old_proof_evaluation<C: HaloCurve, InnerC: HaloCurve<BaseField = C::Sc
 ) {
     for (i, p) in old_proofs.iter().enumerate() {
         let computed = halo_g_recursive(builder, zeta, &p.ipa_challenges);
-        builder.copy(
-            computed,
-            o_local.o_old_proofs[i],
-        );
+        builder.copy(computed, o_local.o_old_proofs[i]);
     }
 }
