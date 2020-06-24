@@ -452,11 +452,9 @@ impl<C: HaloCurve> Circuit<C> {
         // We will evaluate the vanishing polynomial at 8n points, then interpolate.
         let vanishing_points = self
             .subgroup_8n
-            // .par_iter()
-            .iter()
+            .par_iter()
             .enumerate()
             .map(|(i, &x)| {
-                dbg!(i);
                 // Load the constant polynomials' values at x.
                 let mut local_constant_values = Vec::new();
                 for j in 0..NUM_CONSTANTS {
