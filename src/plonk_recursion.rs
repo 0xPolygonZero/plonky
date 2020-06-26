@@ -1,9 +1,11 @@
+use anyhow::Result;
+
 use crate::gates::evaluate_all_constraints_recursively;
 use crate::plonk_challenger::RecursiveChallenger;
 use crate::plonk_proof::OldProofTarget;
 use crate::plonk_util::{powers_recursive, reduce_with_powers_recursive};
 use crate::util::ceil_div_usize;
-use crate::{get_subgroup_shift, hash_usize_to_curve, AffinePointTarget, Circuit, CircuitBuilder, CurveMulOp, Field, HaloCurve, OpeningSetTarget, ProofTarget, PublicInput, SchnorrProofTarget, Target, GRID_WIDTH, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER};
+use crate::{get_subgroup_shift, hash_usize_to_curve, AffinePointTarget, Circuit, CircuitBuilder, Curve, CurveMulOp, Field, HaloCurve, OldProof, OpeningSetTarget, Proof, ProofTarget, PublicInput, SchnorrProofTarget, Target, GRID_WIDTH, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER};
 
 /// Wraps a `Circuit` for recursive verification with inputs for the proof data.
 pub struct RecursiveCircuit<C: HaloCurve> {
@@ -14,7 +16,7 @@ pub struct RecursiveCircuit<C: HaloCurve> {
 
 /// Public inputs of the recursive circuit. This contains data for the inner proof which is needed
 /// to complete verification of it.
-struct RecursionPublicInputs {
+pub struct RecursionPublicInputs {
     beta: PublicInput,
     gamma: PublicInput,
     alpha: PublicInput,
@@ -48,6 +50,31 @@ impl RecursionPublicInputs {
             self.old_proofs.as_slice(),
         ]
         .concat()
+    }
+
+    pub fn proof_to_public_inputs<C: Curve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
+        proof: &Proof<C>,
+        old_proofs: &[OldProof<InnerC>],
+    ) -> Result<Vec<C::BaseField>> {
+        let challs = proof.get_challenges()?;
+        let mut pis = [
+            &[challs.beta, challs.gamma, challs.alpha, challs.zeta],
+            proof.o_local.o_constants.as_slice(),
+            proof.o_local.o_plonk_sigmas.as_slice(),
+            proof.o_local.o_wires.as_slice(),
+            proof.o_right.o_wires.as_slice(),
+            proof.o_below.o_wires.as_slice(),
+            &[proof.o_local.o_plonk_z, proof.o_right.o_plonk_z],
+            proof.o_local.o_plonk_t.as_slice(),
+            challs.ipa_challenges.as_slice(),
+            C::ScalarField::batch_multiplicative_inverse(&challs.ipa_challenges).as_slice(),
+        ]
+        .concat();
+        old_proofs.iter().for_each(|p| {
+            pis.push(p.halo_g.x);
+            pis.push(p.halo_g.y);
+        });
+        Ok(pis)
     }
 }
 

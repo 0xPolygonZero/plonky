@@ -84,12 +84,15 @@ impl<C: HaloCurve> Circuit<C> {
         old_proofs: &[OldProof<C>],
         blinding_commitments: bool,
     ) -> Result<Proof<C>> {
+        let time = Instant::now();
         let mut challenger = Challenger::new(self.security_bits);
 
+        dbg!(time.elapsed());
         // Convert the witness both to coefficient form and a degree-8n LDE.
         let wire_values_by_wire_index = &witness.transpose();
         let wires_coeffs = values_to_coeffs(&wire_values_by_wire_index, &self.fft_precomputation_n);
         let wire_values_8n = coeffs_to_values_padded(&wires_coeffs, &self.fft_precomputation_8n);
+        dbg!(time.elapsed());
 
         // Commit to the wire polynomials.
         let c_wires = PolynomialCommitment::coeffs_vec_to_commitments(
@@ -98,6 +101,7 @@ impl<C: HaloCurve> Circuit<C> {
             self.pedersen_h,
             blinding_commitments,
         );
+        dbg!(time.elapsed());
 
         // Generate a random beta and gamma from the transcript.
         challenger
@@ -105,6 +109,7 @@ impl<C: HaloCurve> Circuit<C> {
         let (beta_bf, gamma_bf) = challenger.get_2_challenges();
         let beta_sf = beta_bf.try_convert::<C::ScalarField>()?;
         let gamma_sf = gamma_bf.try_convert::<C::ScalarField>()?;
+        dbg!(time.elapsed());
 
         let plonk_z_points_n = permutation_polynomial(
             self.degree(),
@@ -114,6 +119,7 @@ impl<C: HaloCurve> Circuit<C> {
             beta_sf,
             gamma_sf,
         );
+        dbg!(time.elapsed());
         // Commit to Z.
         let plonk_z_coeffs =
             ifft_with_precomputation_power_of_2(&plonk_z_points_n, &self.fft_precomputation_n);
@@ -123,11 +129,13 @@ impl<C: HaloCurve> Circuit<C> {
             self.pedersen_h,
             blinding_commitments,
         );
+        dbg!(time.elapsed());
 
         // Generate a random alpha from the transcript.
         challenger.observe_affine_point(c_plonk_z.to_affine());
         let alpha_bf = challenger.get_challenge();
         let alpha_sf = alpha_bf.try_convert::<C::ScalarField>()?;
+        dbg!(time.elapsed());
 
         // Generate the vanishing polynomial.
         let vanishing_coeffs = self.vanishing_poly_coeffs::<InnerC>(
@@ -137,6 +145,7 @@ impl<C: HaloCurve> Circuit<C> {
             gamma_sf,
             &plonk_z_coeffs,
         );
+        dbg!(time.elapsed());
 
         if cfg!(debug_assertions) {
             // Check that the vanishing polynomial indeed vanishes.
@@ -148,6 +157,7 @@ impl<C: HaloCurve> Circuit<C> {
         // Compute the quotient polynomial, t(x) = vanishing(x) / Z_H(x).
         let mut plonk_t_coeffs: Vec<C::ScalarField> =
             divide_by_z_h(&vanishing_coeffs, self.degree());
+        dbg!(time.elapsed());
 
         if cfg!(debug_assertions) {
             // Check that division was performed correctly by evaluating at a random point.
@@ -165,12 +175,14 @@ impl<C: HaloCurve> Circuit<C> {
                     .map(|_| C::ScalarField::ZERO),
             );
         }
+        dbg!(time.elapsed());
 
         // Split t into degree-n chunks.
         let plonk_t_coeff_chunks: Vec<Vec<C::ScalarField>> = plonk_t_coeffs
             .chunks(self.degree())
             .map(|chunk| chunk.to_vec())
             .collect();
+        dbg!(time.elapsed());
 
         // Commit to the quotient polynomial.
         let c_plonk_t = PolynomialCommitment::coeffs_vec_to_commitments(
@@ -179,8 +191,10 @@ impl<C: HaloCurve> Circuit<C> {
             self.pedersen_h,
             blinding_commitments,
         );
+        dbg!(time.elapsed());
 
         let old_proofs_coeffs = old_proofs.iter().map(|p| p.coeffs()).collect::<Vec<_>>();
+        dbg!(time.elapsed());
 
         // Generate a random zeta from the transcript.
         challenger
@@ -188,6 +202,7 @@ impl<C: HaloCurve> Circuit<C> {
         let zeta_bf = challenger.get_challenge();
         let zeta_sf =
             C::try_convert_b2s(zeta_bf).expect("should fit in both fields with high probability");
+        dbg!(time.elapsed());
 
         // Open all polynomials at each PublicInputGate index.
         let num_public_input_gates = ceil_div_usize(self.num_public_inputs, NUM_WIRES);
@@ -204,6 +219,7 @@ impl<C: HaloCurve> Circuit<C> {
                 )
             })
             .collect();
+        dbg!(time.elapsed());
 
         // Open all polynomials at zeta, zeta * g, and zeta * g^65.
         let o_local = self.open_all_polynomials(
@@ -227,6 +243,7 @@ impl<C: HaloCurve> Circuit<C> {
             old_proofs,
             zeta_sf * self.subgroup_generator_n.exp_usize(GRID_WIDTH),
         );
+        dbg!(time.elapsed());
 
         // Get a list of all opened values, to append to the transcript.
         let all_opening_sets: Vec<OpeningSet<C::ScalarField>> = [
@@ -247,6 +264,7 @@ impl<C: HaloCurve> Circuit<C> {
                     .expect("For now, we assume that all opened values fit in both fields")
             })
             .collect();
+        dbg!(time.elapsed());
 
         // Generate random v, u, and x from the transcript.
         challenger.observe_elements(&all_opened_values_bf);
@@ -254,6 +272,7 @@ impl<C: HaloCurve> Circuit<C> {
         let v_sf = v_bf.try_convert::<C::ScalarField>()?;
         let u_sf = u_bf.try_convert::<C::ScalarField>()?;
         let u_scaling_sf = u_scaling_bf.try_convert::<C::ScalarField>()?;
+        dbg!(time.elapsed());
 
         // Make a list of all polynomials' commitment randomness and coefficients, to be reduced later.
         // This must match the order of OpeningSet::to_vec.
@@ -324,6 +343,7 @@ impl<C: HaloCurve> Circuit<C> {
             .concat(),
             v_sf,
         );
+        dbg!(time.elapsed());
 
         if cfg!(debug_assertions) {
             // Reduce each opening set to a single point.
@@ -416,6 +436,7 @@ impl<C: HaloCurve> Circuit<C> {
             &mut challenger,
         );
 
+        dbg!(time.elapsed());
         Ok(Proof {
             c_wires: c_wires.iter().map(|c| c.to_affine()).collect(),
             c_plonk_z: c_plonk_z.to_affine(),

@@ -1,12 +1,13 @@
+use anyhow::Result;
 use std::time::Instant;
 
-use plonky::{recursive_verification_circuit, verify_proof_circuit, BufferGate, Circuit, CircuitBuilder, PartialWitness, Tweedledee, Tweedledum};
+use plonky::{recursive_verification_circuit, verify_proof_circuit, BufferGate, Circuit, CircuitBuilder, PartialWitness, RecursionPublicInputs, Tweedledee, Tweedledum};
 
 const INNER_PROOF_DEGREE_POW: usize = 14;
 const INNER_PROOF_DEGREE: usize = 1 << INNER_PROOF_DEGREE_POW;
 const SECURITY_BITS: usize = 128;
 
-fn main() {
+fn main() -> Result<()> {
     println!("Generating inner circuit");
     let start = Instant::now();
     let inner_circuit = generate_trivial_circuit();
@@ -87,14 +88,17 @@ fn main() {
 
     println!("Verifying proof...");
     let start = Instant::now();
+    let pis = RecursionPublicInputs::proof_to_public_inputs(&inner_proof, &[])?;
+    dbg!(recursion_circuit.circuit.num_public_inputs);
     dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
-        &[],
+        &pis,
         &proof,
         &[],
         &recursion_circuit.circuit,
         true
     ));
     println!("Finished in {}s", start.elapsed().as_secs_f64());
+    Ok(())
 }
 
 fn generate_trivial_circuit() -> Circuit<Tweedledum> {
