@@ -2,7 +2,7 @@
 
 use std::time::Instant;
 
-use plonky::{Curve, Field, msm_execute_parallel, msm_precompute, Tweedledum, ProjectivePoint};
+use plonky::{Curve, Field, msm_execute_parallel, msm_precompute, Tweedledum};
 
 fn main() {
     type C = Tweedledum;
