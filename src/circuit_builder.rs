@@ -1251,7 +1251,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         let pedersen_h = blake_hash_usize_to_curve::<C>(degree);
         let u = blake_hash_usize_to_curve::<C>(degree + 1);
 
-        let w = 8; // TODO: Should really be set dynamically based on MSM size.
+        let w = 11; // TODO: Should really be set dynamically based on MSM size.
         let pedersen_g_msm_precomputation =
             msm_precompute(&AffinePoint::batch_to_projective(&pedersen_g), w);
 
