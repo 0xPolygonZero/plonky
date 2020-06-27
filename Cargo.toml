@@ -9,6 +9,7 @@ repository = "https://github.com/mir-protocol/plonky"
 keywords = ["cryptography", "SNARK"]
 categories = ["cryptography"]
 edition = "2018"
+default-run = "recursion"
 
 [dependencies]
 getrandom = "0.1.14"
