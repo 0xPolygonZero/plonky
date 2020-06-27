@@ -31,7 +31,7 @@ fn main() {
             durations.sort();
             let average_duration = durations.iter().sum::<Duration>() / durations.len() as u32;
             let median_duration = durations[durations.len() / 2];
-            println!("MSMs with terms=2^{}, threads={}, window_size={}: average={:.4}s, median={:.4}",
+            println!("MSMs with terms=2^{}, threads={}, window_size={}: average={:.4}s, median={:.4}s",
                      terms_log, threads, window_size,
                      average_duration.as_secs_f64(), median_duration.as_secs_f64());
         }
