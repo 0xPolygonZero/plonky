@@ -695,6 +695,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         p_1: AffinePointTarget,
         p_2: AffinePointTarget,
     ) -> AffinePointTarget {
+        // Add a CurveAddGate, then add a BufferGate to receive the updated accumulator state.
         let add_index = self.num_gates();
         self.add_gate_no_constants(CurveAddGate::<C, InnerC>::new(add_index));
         let buffer_index = self.num_gates();
