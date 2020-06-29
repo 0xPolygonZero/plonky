@@ -40,7 +40,7 @@ pub fn rescue_hash_n_to_3<F: Field>(inputs: Vec<F>, security_bits: usize) -> (F,
 pub fn rescue_sponge<F: Field>(inputs: Vec<F>, num_outputs: usize, security_bits: usize) -> Vec<F> {
     // This is mostly arbitrary, but we wouldn't want a huge width as the MDS layer could get
     // expensive.
-    let rate = 2;
+    let rate = 3;
     let capacity = 1;
     let width = rate + capacity;
 
@@ -73,12 +73,12 @@ pub fn rescue_permutation<F: Field>(mut state: Vec<F>, security_bits: usize) -> 
 
     for (step_a_constants, step_b_constants) in constants {
         // Step A.
-        state = state.iter().map(|x| x.exp(F::ALPHA)).collect();
+        state = state.iter().map(|x| x.kth_root(F::ALPHA)).collect();
         state = apply_mds(state);
         state = add_vecs(state, step_a_constants);
 
         // Step B.
-        state = state.iter().map(|x| x.kth_root(F::ALPHA)).collect();
+        state = state.iter().map(|x| x.exp(F::ALPHA)).collect();
         state = apply_mds(state);
         state = add_vecs(state, step_b_constants);
     }
