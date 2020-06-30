@@ -143,6 +143,7 @@ pub(crate) fn get_subgroup_shift<F: Field>(i: usize) -> F {
 
     // Unlike what's shown in the Plonk paper, we do not set k_1=1 to "randomize" the
     // sigmas polynomials evaluations and making them fit in both fields with high probability.
+    // TODO: Go back to k_1=1 if we change the way we deal with values not fitting in both fields.
     let mut rng = ChaCha8Rng::seed_from_u64(i as u64);
     F::rand_from_rng(&mut rng)
 }

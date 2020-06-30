@@ -429,7 +429,9 @@ pub trait Field:
     /// roots, otherwise return `None`.
     /// Inspired by implementation in https://github.com/scipr-lab/zexe/blob/85bae796a411077733ddeefda042d02f4b4772e5/algebra-core/src/fields/arithmetic.rs
     fn square_root(&self) -> Option<Self> {
-        if self.is_quadratic_residue() {
+        if self.is_zero() {
+            Some(*self)
+        } else if self.is_quadratic_residue() {
             let mut z = Self::MULTIPLICATIVE_SUBGROUP_GENERATOR.exp(Self::T);
             let mut w = self.exp((Self::T - Self::ONE) / Self::TWO);
             let mut x = w * *self;
