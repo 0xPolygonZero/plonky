@@ -1,4 +1,4 @@
-use plonky::{rescue_hash_n_to_1, rescue_sponge, verify_proof_circuit, Circuit, CircuitBuilder, Curve, Field, HaloCurve, PartialWitness, Tweedledee, Tweedledum, Witness};
+use plonky::{rescue_hash_1_to_1, rescue_hash_n_to_1, rescue_sponge, verify_proof_circuit, Circuit, CircuitBuilder, Curve, Field, HaloCurve, PartialWitness, Tweedledee, Tweedledum, Witness};
 use std::time::Instant;
 
 // Make sure it's the same as in `plonk.rs`.
@@ -169,23 +169,19 @@ fn test_proof_public_input1_circuit() {
 }
 
 #[test]
-#[ignore]
 fn test_proof_public_input2_circuit() {
     // Set many random public inputs
+    let n = 200;
+    let values = (0..n)
+        .map(|_| <Tweedledee as Curve>::ScalarField::rand())
+        .collect::<Vec<_>>();
     let mut builder = CircuitBuilder::<Tweedledee>::new(128);
-    let pis = (0..200)
+    let pis = (0..n)
         .map(|_| builder.stage_public_input())
         .collect::<Vec<_>>();
     builder.route_public_inputs();
-    let tis = pis.iter().map(|p| p.original_wire()).collect::<Vec<_>>();
     let mut partial_witness = PartialWitness::new();
-    let values = tis
-        .iter()
-        .map(|&_t| <Tweedledee as Curve>::ScalarField::rand())
-        .collect::<Vec<_>>();
-    tis.iter().zip(values.iter()).for_each(|(&t, &v)| {
-        partial_witness.set_wire(t, v);
-    });
+    (0..n).for_each(|i| partial_witness.set_public_input(pis[i], values[i]));
     let circuit = builder.build();
     let witness = circuit.generate_witness(partial_witness);
     let proof = circuit
@@ -211,6 +207,29 @@ fn test_proof_sponge_circuit() {
     let c = builder.constant_wire(F::ZERO);
     let t = builder.rescue_hash_n_to_1(&[c]);
     let mut partial_witness = PartialWitness::new();
+    let circuit = builder.build();
+    let witness = circuit.generate_witness(partial_witness);
+    let proof = circuit
+        .generate_proof::<Tweedledum>(witness, &[], true)
+        .unwrap();
+    assert!(
+        verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok()
+    );
+}
+
+#[test]
+fn test_rescue_hash() {
+    type F = <Tweedledee as Curve>::ScalarField;
+    let x = F::rand();
+    let h = rescue_hash_1_to_1(x, 128);
+    let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+    let t = builder.add_virtual_target();
+    let h_pur = builder.rescue_hash_n_to_1(&[t]);
+    let c = builder.constant_wire(h);
+    let should_be_zero = builder.sub(h_pur, c);
+    builder.assert_zero(should_be_zero);
+    let mut partial_witness = PartialWitness::new();
+    partial_witness.set_target(t, x);
     let circuit = builder.build();
     let witness = circuit.generate_witness(partial_witness);
     let proof = circuit

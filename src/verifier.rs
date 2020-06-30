@@ -5,15 +5,9 @@ use crate::plonk_challenger::Challenger;
 
 use crate::gates::evaluate_all_constraints;
 use crate::plonk_proof::OldProof;
-use crate::plonk_util::{
-    halo_g, halo_n, halo_n_mul, halo_s, pedersen_hash, powers, reduce_with_powers,
-};
+use crate::plonk_util::{halo_g, halo_n, halo_n_mul, halo_s, pedersen_hash, powers, reduce_with_powers};
 use crate::util::{ceil_div_usize, log2_strict};
-use crate::{
-    blake_hash_usize_to_curve, hash_usize_to_curve, msm_execute_parallel, msm_precompute,
-    AffinePoint, Circuit, Curve, Field, HaloCurve, ProjectivePoint, Proof, SchnorrProof,
-    GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES,
-};
+use crate::{blake_hash_usize_to_curve, hash_usize_to_curve, msm_execute_parallel, msm_precompute, AffinePoint, Circuit, Curve, Field, HaloCurve, ProjectivePoint, Proof, SchnorrProof, GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES};
 
 pub const SECURITY_BITS: usize = 128;
 
@@ -480,8 +474,14 @@ fn verify_public_inputs<C: Curve>(
     if public_inputs.len() != num_public_inputs {
         bail!("Incorrect number of public inputs.")
     }
+    dbg!(public_inputs);
+    dbg!(&proof.o_public_inputs);
     for i in 0..num_public_inputs {
         // If the value `v` doesn't match the corresponding wire in the `PublicInputGate`, return false.
+        dbg!(
+            public_inputs[i],
+            proof.o_public_inputs[i / NUM_WIRES].o_wires[i % NUM_WIRES]
+        );
         if public_inputs[i] != proof.o_public_inputs[i / NUM_WIRES].o_wires[i % NUM_WIRES] {
             bail!("{}-th public input is incorrect", i);
         }
@@ -493,15 +493,15 @@ fn verify_public_inputs<C: Curve>(
 fn verify_old_proof_evaluation<C: Curve>(
     old_proofs: &[OldProof<C>],
     proof: &Proof<C>,
-    zeta: C::ScalarField
+    zeta: C::ScalarField,
 ) -> Result<()> {
     if old_proofs.len() != proof.o_local.o_old_proofs.len() {
         bail!("Incorrect number of old proofs opening.")
     }
-    for (i,p) in old_proofs.iter().enumerate() {
+    for (i, p) in old_proofs.iter().enumerate() {
         // If the value `v` doesn't match the corresponding wire in the `PublicInputGate`, return false.
         if halo_g(zeta, &p.ipa_challenges) != proof.o_local.o_old_proofs[i] {
-            bail!("{}-th public input is incorrect", i);
+            bail!("{}-th old proof opening is incorrect", i);
         }
     }
     Ok(())

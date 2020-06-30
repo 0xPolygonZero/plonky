@@ -141,11 +141,8 @@ pub(crate) fn get_subgroup_shift<F: Field>(i: usize) -> F {
     // We will "cheat" and just use random field elements. Since our subgroup has |F*|/degree
     // possible cosets, the probability of a collision is negligible for large fields.
 
-    if i == 0 {
-        // We use a trivial shift of 1 for k_1, as in the paper, to save a multiplication.
-        F::ONE
-    } else {
-        let mut rng = ChaCha8Rng::seed_from_u64(i as u64);
-        F::rand_from_rng(&mut rng)
-    }
+    // Unlike what's shown in the Plonk paper, we do not set k_1=1 to "randomize" the
+    // sigmas polynomials evaluations and making them fit in both fields with high probability.
+    let mut rng = ChaCha8Rng::seed_from_u64(i as u64);
+    F::rand_from_rng(&mut rng)
 }

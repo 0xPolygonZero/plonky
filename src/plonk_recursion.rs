@@ -5,11 +5,12 @@ use crate::plonk_challenger::RecursiveChallenger;
 use crate::plonk_proof::OldProofTarget;
 use crate::plonk_util::{powers_recursive, reduce_with_powers_recursive};
 use crate::util::ceil_div_usize;
-use crate::{get_subgroup_shift, hash_usize_to_curve, AffinePointTarget, Circuit, CircuitBuilder, Curve, CurveMulOp, Field, HaloCurve, OldProof, OpeningSetTarget, Proof, ProofTarget, PublicInput, SchnorrProofTarget, Target, GRID_WIDTH, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER};
+use crate::{get_subgroup_shift, hash_usize_to_curve, AffinePointTarget, Circuit, CircuitBuilder, Curve, CurveMulOp, Field, HaloCurve, OldProof, OpeningSetTarget, PartialWitness, Proof, ProofChallenge, ProofTarget, PublicInput, SchnorrProofTarget, Target, GRID_WIDTH, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER};
 
 /// Wraps a `Circuit` for recursive verification with inputs for the proof data.
 pub struct RecursiveCircuit<C: HaloCurve> {
     pub circuit: Circuit<C>,
+    pub public_inputs: RecursionPublicInputs,
     pub proof: ProofTarget,
     pub old_proofs: Vec<OldProofTarget>,
 }
@@ -52,28 +53,91 @@ impl RecursionPublicInputs {
         .concat()
     }
 
+    pub fn populate_witness<C: Curve>(
+        &self,
+        witness: &mut PartialWitness<C::BaseField>,
+        values: Proof<C>,
+    ) -> Result<()> {
+        let challs = values.get_challenges()?;
+        witness.set_public_input(self.beta, challs.beta.try_convert()?);
+        witness.set_public_input(self.gamma, challs.gamma.try_convert()?);
+        witness.set_public_input(self.alpha, challs.alpha.try_convert()?);
+        witness.set_public_input(self.zeta, challs.zeta.try_convert()?);
+        witness.set_public_input(
+            self.o_plonk_z_local,
+            values.o_local.o_plonk_z.try_convert()?,
+        );
+        witness.set_public_input(
+            self.o_plonk_z_right,
+            values.o_right.o_plonk_z.try_convert()?,
+        );
+        for (&a, b) in self
+            .o_constants
+            .iter()
+            .chain(&self.o_plonk_sigmas)
+            .chain(&self.o_local_wires)
+            .chain(&self.o_right_wires)
+            .chain(&self.o_plonk_t)
+            .chain(&self.halo_u_l)
+            .chain(&self.halo_u_r)
+            .chain(&self.old_proofs)
+            .zip(
+                values
+                    .o_local
+                    .o_constants
+                    .iter()
+                    .chain(&values.o_local.o_plonk_sigmas)
+                    .chain(&values.o_local.o_wires)
+                    .chain(&values.o_right.o_wires)
+                    .chain(&values.o_local.o_plonk_t)
+                    .chain(&challs.ipa_challenges)
+                    .chain(&C::ScalarField::batch_multiplicative_inverse(
+                        &challs.ipa_challenges,
+                    )),
+            )
+        {
+            witness.set_public_input(a, b.try_convert()?);
+        }
+
+        Ok(())
+    }
+
     pub fn proof_to_public_inputs<C: Curve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
         proof: &Proof<C>,
         old_proofs: &[OldProof<InnerC>],
     ) -> Result<Vec<C::BaseField>> {
         let challs = proof.get_challenges()?;
         let mut pis = [
-            &[challs.beta, challs.gamma, challs.alpha, challs.zeta],
-            proof.o_local.o_constants.as_slice(),
-            proof.o_local.o_plonk_sigmas.as_slice(),
-            proof.o_local.o_wires.as_slice(),
-            proof.o_right.o_wires.as_slice(),
-            proof.o_below.o_wires.as_slice(),
-            &[proof.o_local.o_plonk_z, proof.o_right.o_plonk_z],
-            proof.o_local.o_plonk_t.as_slice(),
-            challs.ipa_challenges.as_slice(),
-            C::ScalarField::batch_multiplicative_inverse(&challs.ipa_challenges).as_slice(),
+            C::ScalarField::try_convert_all::<C::BaseField>(&[
+                challs.beta,
+                challs.gamma,
+                challs.alpha,
+                challs.zeta,
+            ])?
+            .as_slice(),
+            C::ScalarField::try_convert_all::<C::BaseField>(&proof.o_local.o_constants)?.as_slice(),
+            C::ScalarField::try_convert_all::<C::BaseField>(&proof.o_local.o_plonk_sigmas)?
+                .as_slice(),
+            C::ScalarField::try_convert_all::<C::BaseField>(&proof.o_local.o_wires)?.as_slice(),
+            C::ScalarField::try_convert_all::<C::BaseField>(&proof.o_right.o_wires)?.as_slice(),
+            C::ScalarField::try_convert_all::<C::BaseField>(&proof.o_below.o_wires)?.as_slice(),
+            C::ScalarField::try_convert_all::<C::BaseField>(&[
+                proof.o_local.o_plonk_z,
+                proof.o_right.o_plonk_z,
+            ])?
+            .as_slice(),
+            C::ScalarField::try_convert_all::<C::BaseField>(&proof.o_local.o_plonk_t)?.as_slice(),
+            C::ScalarField::try_convert_all::<C::BaseField>(&challs.ipa_challenges)?.as_slice(),
+            C::ScalarField::try_convert_all::<C::BaseField>(
+                &C::ScalarField::batch_multiplicative_inverse(&challs.ipa_challenges),
+            )?
+            .as_slice(),
         ]
         .concat();
-        old_proofs.iter().for_each(|p| {
-            pis.push(p.halo_g.x);
-            pis.push(p.halo_g.y);
-        });
+        for p in old_proofs {
+            pis.push(C::ScalarField::try_convert::<C::BaseField>(&p.halo_g.x)?);
+            pis.push(C::ScalarField::try_convert::<C::BaseField>(&p.halo_g.y)?);
+        }
         Ok(pis)
     }
 }
@@ -112,6 +176,8 @@ pub fn recursive_verification_circuit<
 
     let num_public_inputs = public_inputs.to_vec().len();
     let num_public_input_gates = num_public_input_gates(num_public_inputs);
+
+    builder.route_public_inputs();
 
     let proof = ProofTarget {
         c_wires: builder.add_virtual_point_targets(NUM_WIRES),
@@ -247,6 +313,7 @@ pub fn recursive_verification_circuit<
     let circuit = builder.build();
     RecursiveCircuit {
         circuit,
+        public_inputs,
         proof,
         old_proofs,
     }

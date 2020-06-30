@@ -1,5 +1,5 @@
 use crate::util::transpose;
-use crate::{AffinePoint, AffinePointTarget, Curve, Field, Target, Wire, NUM_WIRES};
+use crate::{AffinePoint, AffinePointTarget, Curve, Field, PublicInput, Target, Wire, NUM_WIRES};
 use std::collections::HashMap;
 
 pub struct PartialWitness<F: Field> {
@@ -83,6 +83,11 @@ impl<F: Field> PartialWitness<F> {
 
     pub fn set_wire(&mut self, wire: Wire, value: F) {
         self.set_target(Target::Wire(wire), value);
+    }
+
+    pub fn set_public_input(&mut self, pi: PublicInput, value: F) {
+        self.set_wire(pi.original_wire(), value);
+        self.set_target(pi.routable_target(), value);
     }
 
     pub fn extend(&mut self, other: PartialWitness<F>) {
