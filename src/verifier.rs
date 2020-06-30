@@ -474,8 +474,6 @@ fn verify_public_inputs<C: Curve>(
     if public_inputs.len() != num_public_inputs {
         bail!("Incorrect number of public inputs.")
     }
-    dbg!(public_inputs);
-    dbg!(&proof.o_public_inputs);
     for i in 0..num_public_inputs {
         // If the value `v` doesn't match the corresponding wire in the `PublicInputGate`, return false.
         dbg!(

@@ -243,7 +243,6 @@ impl<C: HaloCurve> Circuit<C> {
             .into_iter()
             .map(|f| {
                 // TODO: Fix this, this can regularly fail if a public input is not in range for example.
-                dbg!(f);
                 C::try_convert_s2b(f)
                     .expect("For now, we assume that all opened values fit in both fields")
             })
