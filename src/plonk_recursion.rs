@@ -77,6 +77,7 @@ impl RecursionPublicInputs {
             .chain(&self.o_plonk_sigmas)
             .chain(&self.o_local_wires)
             .chain(&self.o_right_wires)
+            .chain(&self.o_below_wires)
             .chain(&self.o_plonk_t)
             .chain(&self.halo_u_l)
             .chain(&self.halo_u_r)
@@ -89,6 +90,7 @@ impl RecursionPublicInputs {
                     .chain(&values.o_local.o_plonk_sigmas)
                     .chain(&values.o_local.o_wires)
                     .chain(&values.o_right.o_wires)
+                    .chain(&values.o_below.o_wires)
                     .chain(&values.o_local.o_plonk_t)
                     .chain(&challs.ipa_challenges)
                     .chain(&C::ScalarField::batch_multiplicative_inverse(

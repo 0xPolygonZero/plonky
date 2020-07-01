@@ -476,10 +476,6 @@ fn verify_public_inputs<C: Curve>(
     }
     for i in 0..num_public_inputs {
         // If the value `v` doesn't match the corresponding wire in the `PublicInputGate`, return false.
-        dbg!(
-            public_inputs[i],
-            proof.o_public_inputs[i / NUM_WIRES].o_wires[i % NUM_WIRES]
-        );
         if public_inputs[i] != proof.o_public_inputs[i / NUM_WIRES].o_wires[i % NUM_WIRES] {
             bail!("{}-th public input is incorrect", i);
         }
