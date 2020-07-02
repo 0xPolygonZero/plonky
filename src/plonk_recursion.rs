@@ -155,6 +155,7 @@ pub fn recursive_verification_circuit<
 >(
     degree_pow: usize,
     security_bits: usize,
+    num_public_inputs: usize,
     num_old_proofs: usize,
 ) -> RecursiveCircuit<C> {
     let mut builder = CircuitBuilder::<C>::new(security_bits);
@@ -176,7 +177,6 @@ pub fn recursive_verification_circuit<
         old_proofs: builder.stage_public_inputs((2 + degree_pow) * num_old_proofs),
     };
 
-    let num_public_inputs = public_inputs.to_vec().len();
     let num_public_input_gates = num_public_input_gates(num_public_inputs);
 
     builder.route_public_inputs();
@@ -523,15 +523,6 @@ fn make_opening_set<C: HaloCurve>(
         o_old_proofs: builder.add_virtual_targets(num_old_proofs),
     }
 }
-
-fn make_schnorr_proof<C: HaloCurve>(builder: &mut CircuitBuilder<C>) -> SchnorrProofTarget {
-    SchnorrProofTarget {
-        r: builder.add_virtual_point_target(),
-        z1: builder.add_virtual_target(),
-        z2: builder.add_virtual_target(),
-    }
-}
-
 fn make_opening_sets<C: HaloCurve>(
     builder: &mut CircuitBuilder<C>,
     n: usize,
@@ -540,6 +531,14 @@ fn make_opening_sets<C: HaloCurve>(
     (0..n)
         .map(|_i| make_opening_set(builder, num_old_proofs))
         .collect()
+}
+
+fn make_schnorr_proof<C: HaloCurve>(builder: &mut CircuitBuilder<C>) -> SchnorrProofTarget {
+    SchnorrProofTarget {
+        r: builder.add_virtual_point_target(),
+        z1: builder.add_virtual_target(),
+        z2: builder.add_virtual_target(),
+    }
 }
 
 fn make_old_proofs<C: HaloCurve>(

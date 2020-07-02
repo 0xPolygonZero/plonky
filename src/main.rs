@@ -45,8 +45,10 @@ fn main() -> Result<()> {
     println!("Generating recursion circuit...");
     let start = Instant::now();
     let recursion_circuit = recursive_verification_circuit::<Tweedledee, Tweedledum>(
-        INNER_PROOF_DEGREE_POW,
+        // INNER_PROOF_DEGREE_POW,
+        inner_proof.halo_l.len(),
         SECURITY_BITS,
+        0,
         old_proofs.len(),
     );
     println!("Finished in {}s", start.elapsed().as_secs_f64());
