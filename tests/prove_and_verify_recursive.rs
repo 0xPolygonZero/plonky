@@ -10,11 +10,15 @@ fn test_proof_trivial_recursive() {
     partial_witness.set_target(t, <Tweedledee as Curve>::ScalarField::ZERO);
     let circuit = builder.build();
     let witness = circuit.generate_witness(partial_witness);
-    let proof = circuit.generate_proof::<Tweedledum>(witness, &[], true).unwrap();
-    assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok());
+    let proof = circuit
+        .generate_proof::<Tweedledum>(witness, &[], true)
+        .unwrap();
+    assert!(
+        verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok()
+    );
 
     let recursion_circuit =
-        recursive_verification_circuit::<Tweedledum, Tweedledee>(circuit.degree_pow(), 128, 0);
+        recursive_verification_circuit::<Tweedledum, Tweedledee>(circuit.degree_pow(), 128, 0, 0);
     let mut recursion_inputs = PartialWitness::new();
     if let Err(e) = recursion_circuit
         .proof

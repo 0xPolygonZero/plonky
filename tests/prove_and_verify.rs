@@ -1,4 +1,5 @@
-use plonky::{rescue_hash_1_to_1, rescue_hash_n_to_1, rescue_sponge, verify_proof_circuit, Circuit, CircuitBuilder, Curve, Field, HaloCurve, PartialWitness, Tweedledee, Tweedledum, Witness};
+use plonky::plonk_challenger::RecursiveChallenger;
+use plonky::{blake_hash_base_field_to_curve, msm_parallel, rescue_hash_1_to_1, rescue_hash_n_to_1, rescue_sponge, verify_proof_circuit, AffinePoint, Circuit, CircuitBuilder, Curve, CurveMulOp, Field, HaloCurve, PartialWitness, Tweedledee, Tweedledum, Witness};
 use std::time::Instant;
 
 // Make sure it's the same as in `plonk.rs`.
@@ -237,5 +238,85 @@ fn test_rescue_hash() {
         .unwrap();
     assert!(
         verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok()
+    );
+}
+
+#[test]
+fn test_curve_add() {
+    type F = <Tweedledee as Curve>::ScalarField;
+
+    let a = blake_hash_base_field_to_curve::<Tweedledum>(F::rand());
+    let b = blake_hash_base_field_to_curve::<Tweedledum>(F::rand());
+    let sum = (a + b).to_affine();
+    dbg!(a, b, sum);
+
+    let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+
+    let ta = builder.add_virtual_point_target();
+    let tb = builder.add_virtual_point_target();
+    let tsum_purported = builder.curve_add::<Tweedledum>(ta, tb);
+    let tsum_true = builder.constant_affine_point(sum);
+    // let should_be_zero = builder.curve_sub::<Tweedledum>(tsum_purported, tsum_true);
+    builder.copy_curve(tsum_purported, tsum_true);
+
+    // builder.assert_zero(should_be_zero.x);
+    // builder.assert_zero(should_be_zero.y);
+
+    let mut partial_witness = PartialWitness::new();
+    partial_witness.set_point_target(ta, a);
+    partial_witness.set_point_target(tb, b);
+    partial_witness.set_point_target(tsum_purported, sum);
+
+    let circuit = builder.build();
+    let witness = circuit.generate_witness(partial_witness);
+
+    let proof = circuit
+        .generate_proof::<Tweedledum>(witness, &[], true)
+        .unwrap();
+    assert!(
+        verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok()
+    );
+}
+
+#[test]
+fn test_curve_msm() {
+    type SF = <Tweedledee as Curve>::ScalarField;
+    type BF = <Tweedledee as Curve>::BaseField;
+    let n = 100;
+    let xs = (0..n).map(|_| SF::rand()).collect::<Vec<_>>();
+    let ps = (0..n)
+        .map(|_| blake_hash_base_field_to_curve::<Tweedledee>(BF::rand()))
+        .collect::<Vec<_>>();
+    let res = msm_parallel(&xs, &AffinePoint::batch_to_projective(&ps), 8);
+    let mut builder = CircuitBuilder::<Tweedledum>::new(128);
+    let txs = builder.add_virtual_targets(n);
+    let tps = builder.add_virtual_point_targets(n);
+    let tres_purported = builder.curve_msm::<Tweedledee>(
+        &(0..n)
+            .map(|i| CurveMulOp {
+                scalar: txs[i],
+                point: tps[i],
+            })
+            .collect::<Vec<_>>(),
+    );
+    let tres_true = builder.constant_affine_point(res.to_affine());
+    let should_be_zero = builder.curve_sub::<Tweedledee>(tres_purported, tres_true);
+    builder.assert_zero(should_be_zero.x);
+    builder.assert_zero(should_be_zero.y);
+    let mut partial_witness = PartialWitness::new();
+    partial_witness.set_targets(
+        &txs,
+        &xs.into_iter()
+            .map(|x| x.try_convert().unwrap())
+            .collect::<Vec<_>>(),
+    );
+    partial_witness.set_point_targets(&tps, &ps);
+    let circuit = builder.build();
+    let witness = circuit.generate_witness(partial_witness);
+    let proof = circuit
+        .generate_proof::<Tweedledee>(witness, &[], true)
+        .unwrap();
+    assert!(
+        verify_proof_circuit::<Tweedledum, Tweedledee>(&[], &proof, &[], &circuit, true).is_ok()
     );
 }

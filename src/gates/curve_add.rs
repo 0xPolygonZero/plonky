@@ -53,7 +53,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveA
         let scalar_acc_new = local_wire_values[Self::WIRE_SCALAR_ACC_NEW];
         let x2 = local_wire_values[Self::WIRE_ADDEND_X];
         let y2 = local_wire_values[Self::WIRE_ADDEND_Y];
-        let scalar_bit = local_wire_values[Self::WIRE_SCALAR_BIT];
+        let scalar_bit = C::ScalarField::ONE;
         let inverse = local_wire_values[Self::WIRE_INVERSE];
         let lambda = local_wire_values[Self::WIRE_LAMBDA];
 
@@ -65,7 +65,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveA
             computed_lambda - lambda,
             computed_x3 - x3,
             computed_y3 - y3,
-            scalar_acc_new - scalar_acc_old.double() + scalar_bit,
+            scalar_acc_new - scalar_acc_old.double() - scalar_bit,
             scalar_bit * (scalar_bit - InnerC::BaseField::ONE),
             inverse * (x1 - x2) - InnerC::BaseField::ONE,
         ]
@@ -139,10 +139,6 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> WitnessGenerator<C
                 gate: self.index,
                 input: Self::WIRE_ADDEND_Y,
             }),
-            Target::Wire(Wire {
-                gate: self.index,
-                input: Self::WIRE_SCALAR_BIT,
-            }),
         ]
     }
 
@@ -183,10 +179,6 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> WitnessGenerator<C
             gate: self.index,
             input: Self::WIRE_ADDEND_Y,
         };
-        let scalar_bit_target = Wire {
-            gate: self.index,
-            input: Self::WIRE_SCALAR_BIT,
-        };
         let inverse_target = Wire {
             gate: self.index,
             input: Self::WIRE_INVERSE,
@@ -204,7 +196,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> WitnessGenerator<C
         let addend_x = witness.get_wire(addend_x_target);
         let addend_y = witness.get_wire(addend_y_target);
 
-        let scalar_bit = witness.get_wire(scalar_bit_target);
+        let scalar_bit = C::ScalarField::ONE;
         debug_assert!(scalar_bit.is_zero() || scalar_bit.is_one());
 
         let scalar_acc_new = scalar_acc_old.double() + scalar_bit;
