@@ -31,14 +31,13 @@ fn main() -> Result<()> {
 
     println!("Verifying inner proof");
     let start = Instant::now();
-    assert!(verify_proof_circuit::<Tweedledum, Tweedledee>(
+    verify_proof_circuit::<Tweedledum, Tweedledee>(
         &[],
         &inner_proof,
         &old_proofs,
         &inner_circuit,
         true
-    )
-    .is_ok());
+    )?;
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!();
 

@@ -1418,7 +1418,7 @@ mod tests {
         let circuit = builder.build();
         let witness = circuit.generate_witness(partial_witness);
 
-        let proof = circuit.generate_proof::<Tweedledum>(witness, true).unwrap();
-        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &circuit,).is_ok());
+        let proof = circuit.generate_proof::<Tweedledum>(witness, &[], true).unwrap();
+        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok());
     }
 }
