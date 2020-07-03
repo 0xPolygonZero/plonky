@@ -76,10 +76,10 @@ impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C>
         vec![
             computed_x3 - x3,
             computed_y3 - y3,
-            scalar_acc_unsigned_new - scalar_acc_unsigned_old.quadruple()
+            scalar_acc_unsigned_new - (scalar_acc_unsigned_old.quadruple()
                 + scalar_bit_1.double()
-                + scalar_bit_0,
-            scalar_acc_signed_new - scalar_acc_signed_old.double() + signed_limb,
+                + scalar_bit_0),
+            scalar_acc_signed_new - (scalar_acc_signed_old.double() + signed_limb),
             scalar_bit_0 * (scalar_bit_0 - one),
             scalar_bit_1 * (scalar_bit_1 - one),
             inverse * (x1 - x2) - one,

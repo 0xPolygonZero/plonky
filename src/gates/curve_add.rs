@@ -65,7 +65,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveA
             computed_lambda - lambda,
             computed_x3 - x3,
             computed_y3 - y3,
-            scalar_acc_new - scalar_acc_old.double() - scalar_bit,
+            scalar_acc_new - (scalar_acc_old.double() + scalar_bit),
             scalar_bit * (scalar_bit - InnerC::BaseField::ONE),
             inverse * (x1 - x2) - InnerC::BaseField::ONE,
         ]
