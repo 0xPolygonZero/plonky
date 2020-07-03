@@ -128,6 +128,28 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
     }
 
+    /// Adds a generator to populate the given target with the given constant.
+    pub fn generate_constant(&mut self, target: Target, c: C::ScalarField) {
+        struct ConstantGenerator<F: Field> {
+            target: Target,
+            c: F,
+        }
+
+        impl<F: Field> WitnessGenerator<F> for ConstantGenerator<F> {
+            fn dependencies(&self) -> Vec<Target> {
+                Vec::new()
+            }
+
+            fn generate(&self, _constants: &Vec<Vec<F>>, witness: &PartialWitness<F>) -> PartialWitness<F> {
+                let mut result = PartialWitness::new();
+                result.set_target(self.target, self.c);
+                result
+            }
+        }
+
+        self.add_generator(ConstantGenerator { target, c });
+    }
+
     pub fn assert_zero(&mut self, x: Target) {
         let zero = self.zero_wire();
         self.copy(x, zero);
@@ -692,16 +714,43 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
     pub fn curve_add<InnerC: Curve<BaseField = C::ScalarField>>(
         &mut self,
-        _p_1: AffinePointTarget,
-        _p_2: AffinePointTarget,
+        p_1: AffinePointTarget,
+        p_2: AffinePointTarget,
     ) -> AffinePointTarget {
+        // Add a CurveAddGate, then add a BufferGate to receive the updated accumulator state.
         let add_index = self.num_gates();
         self.add_gate_no_constants(CurveAddGate::<C, InnerC>::new(add_index));
         let buffer_index = self.num_gates();
         self.add_gate_no_constants(BufferGate::new(buffer_index));
 
-        // TODO: Wiring.
-
+        let group_acc_x = Target::Wire(Wire {
+            gate: add_index,
+            input: CurveAddGate::<C, InnerC>::WIRE_GROUP_ACC_X,
+        });
+        let group_acc_y = Target::Wire(Wire {
+            gate: add_index,
+            input: CurveAddGate::<C, InnerC>::WIRE_GROUP_ACC_Y,
+        });
+        let scalar_acc_old = Target::Wire(Wire {
+            gate: add_index,
+            input: CurveAddGate::<C, InnerC>::WIRE_SCALAR_ACC_OLD,
+        });
+        let scalar_acc_new = Target::Wire(Wire {
+            gate: add_index,
+            input: CurveAddGate::<C, InnerC>::WIRE_SCALAR_ACC_NEW,
+        });
+        let addend_x = Target::Wire(Wire {
+            gate: add_index,
+            input: CurveAddGate::<C, InnerC>::WIRE_ADDEND_X,
+        });
+        let addend_y = Target::Wire(Wire {
+            gate: add_index,
+            input: CurveAddGate::<C, InnerC>::WIRE_ADDEND_Y,
+        });
+        let scalar_bit = Target::Wire(Wire {
+            gate: add_index,
+            input: CurveAddGate::<C, InnerC>::WIRE_SCALAR_BIT,
+        });
         let result_x = Target::Wire(Wire {
             gate: buffer_index,
             input: CurveAddGate::<C, InnerC>::WIRE_GROUP_ACC_X,
@@ -710,6 +759,22 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             gate: buffer_index,
             input: CurveAddGate::<C, InnerC>::WIRE_GROUP_ACC_Y,
         });
+
+        // Wire inputs
+        self.copy(group_acc_x, p_1.x);
+        self.copy(group_acc_y, p_1.y);
+        self.copy(addend_x, p_2.x);
+        self.copy(addend_y, p_2.y);
+
+        // The scalar bit should always be 1, since we always want to perform the add.
+        self.generate_constant(scalar_bit, C::ScalarField::ONE);
+
+        // The scalar accumulator should change from 0 to 1. This enforces that scalar_bit = 1.
+        let zero = self.zero_wire();
+        let one = self.one_wire();
+        self.copy(scalar_acc_old, zero);
+        self.copy(scalar_acc_new, one);
+
         AffinePointTarget {
             x: result_x,
             y: result_y,
@@ -1324,5 +1389,37 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
 
         partitions
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{Tweedledee, Curve, blake_hash_base_field_to_curve, Tweedledum, Field, CircuitBuilder, PartialWitness, verify_proof_circuit};
+
+    #[test]
+    fn test_curve_add() {
+        type F = <Tweedledee as Curve>::ScalarField;
+
+        let a = blake_hash_base_field_to_curve::<Tweedledum>(F::rand());
+        let b = blake_hash_base_field_to_curve::<Tweedledum>(F::rand());
+        let sum = (a + b).to_affine();
+
+        let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+
+        let ta =  builder.add_virtual_point_target();
+        let tb =  builder.add_virtual_point_target();
+        let tsum_purported = builder.curve_add::<Tweedledum>(ta, tb);
+        let tsum_true = builder.constant_affine_point(sum);
+        builder.copy_curve(tsum_purported, tsum_true);
+
+        let mut partial_witness = PartialWitness::new();
+        partial_witness.set_point_target(ta, a);
+        partial_witness.set_point_target(tb, b);
+
+        let circuit = builder.build();
+        let witness = circuit.generate_witness(partial_witness);
+
+        let proof = circuit.generate_proof::<Tweedledum>(witness, true).unwrap();
+        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &circuit,).is_ok());
     }
 }
