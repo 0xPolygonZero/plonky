@@ -1391,3 +1391,35 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         partitions
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{Tweedledee, Curve, blake_hash_base_field_to_curve, Tweedledum, Field, CircuitBuilder, PartialWitness, verify_proof_circuit};
+
+    #[test]
+    fn test_curve_add() {
+        type F = <Tweedledee as Curve>::ScalarField;
+
+        let a = blake_hash_base_field_to_curve::<Tweedledum>(F::rand());
+        let b = blake_hash_base_field_to_curve::<Tweedledum>(F::rand());
+        let sum = (a + b).to_affine();
+
+        let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+
+        let ta =  builder.add_virtual_point_target();
+        let tb =  builder.add_virtual_point_target();
+        let tsum_purported = builder.curve_add::<Tweedledum>(ta, tb);
+        let tsum_true = builder.constant_affine_point(sum);
+        builder.copy_curve(tsum_purported, tsum_true);
+
+        let mut partial_witness = PartialWitness::new();
+        partial_witness.set_point_target(ta, a);
+        partial_witness.set_point_target(tb, b);
+
+        let circuit = builder.build();
+        let witness = circuit.generate_witness(partial_witness);
+
+        let proof = circuit.generate_proof::<Tweedledum>(witness, true).unwrap();
+        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &circuit,).is_ok());
+    }
+}
