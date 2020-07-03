@@ -1,4 +1,3 @@
-use plonky::plonk_challenger::RecursiveChallenger;
 use plonky::{blake_hash_base_field_to_curve, msm_parallel, rescue_hash_1_to_1, rescue_hash_n_to_1, rescue_sponge, verify_proof_circuit, AffinePoint, Circuit, CircuitBuilder, Curve, CurveMulOp, Field, HaloCurve, PartialWitness, Tweedledee, Tweedledum, Witness};
 use std::time::Instant;
 
