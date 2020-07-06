@@ -156,12 +156,17 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     pub fn assert_binary(&mut self, x: Target) {
-        let _zero = self.zero_wire();
         let one = self.one_wire();
 
         let x_minus_1 = self.sub(x, one);
         let product = self.mul(x, x_minus_1);
         self.assert_zero(product);
+    }
+
+    /// Returns the negation of a bit `b`, which is assumed to be in `{0, 1}`.
+    pub fn not(&mut self, b: Target) -> Target {
+        let one = self.one_wire();
+        self.sub(one, b)
     }
 
     pub fn add(&mut self, x: Target, y: Target) -> Target {

@@ -36,7 +36,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> CurveAddGate<C, In
 impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveAddGate<C, InnerC> {
     const NAME: &'static str = "CurveAddGate";
 
-    const PREFIX: &'static [bool] = &[true, false, true, false, false, false];
+    const PREFIX: &'static [bool] = &[true, false, true, false, true];
 
     fn evaluate_unfiltered(
         _local_constant_values: &[InnerC::BaseField],
@@ -44,29 +44,42 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveA
         right_wire_values: &[InnerC::BaseField],
         _below_wire_values: &[InnerC::BaseField],
     ) -> Vec<InnerC::BaseField> {
+        // Notation:
+        // - p1 is the accumulator;
+        // - p2 is the addend;
+        // - p3 = p1 + p2;
+        // - p4 = if scalar_bit { p4 } else { p1 }
+
         let x1 = local_wire_values[Self::WIRE_GROUP_ACC_X];
         let y1 = local_wire_values[Self::WIRE_GROUP_ACC_Y];
-        let x3 = right_wire_values[Self::WIRE_GROUP_ACC_X];
-        let y3 = right_wire_values[Self::WIRE_GROUP_ACC_Y];
+        let x4 = right_wire_values[Self::WIRE_GROUP_ACC_X];
+        let y4 = right_wire_values[Self::WIRE_GROUP_ACC_Y];
 
         let scalar_acc_old = local_wire_values[Self::WIRE_SCALAR_ACC_OLD];
         let scalar_acc_new = local_wire_values[Self::WIRE_SCALAR_ACC_NEW];
         let x2 = local_wire_values[Self::WIRE_ADDEND_X];
         let y2 = local_wire_values[Self::WIRE_ADDEND_Y];
-        let scalar_bit = C::ScalarField::ONE;
+        let scalar_bit = local_wire_values[Self::WIRE_SCALAR_BIT];
         let inverse = local_wire_values[Self::WIRE_INVERSE];
         let lambda = local_wire_values[Self::WIRE_LAMBDA];
 
         let computed_lambda = (y1 - y2) * inverse;
-        let computed_x3 = lambda.square() - x1 - x2;
-        let computed_y3 = lambda * (x1 - x3) - y1;
+        let x3 = lambda.square() - x1 - x2;
+        // We subtract x4 instead of x3 in order to minimize degree. This will give an incorrect
+        // result for y3 if x3 != x4, which happens when scalar_bit = 0, but in that case y3 will
+        // be ignored (i.e. multiplied by zero), so we're okay.
+        let y3 = lambda * (x1 - x4) - y1;
+
+        let not_scalar_bit = scalar_bit - InnerC::BaseField::ONE;
+        let computed_x4 = scalar_bit * x3 + not_scalar_bit * x1;
+        let computed_y4 = scalar_bit * y3 + not_scalar_bit * y1;
 
         vec![
             computed_lambda - lambda,
-            computed_x3 - x3,
-            computed_y3 - y3,
+            computed_x4 - x4,
+            computed_y4 - y4,
             scalar_acc_new - (scalar_acc_old.double() + scalar_bit),
-            scalar_bit * (scalar_bit - InnerC::BaseField::ONE),
+            scalar_bit * not_scalar_bit,
             inverse * (x1 - x2) - InnerC::BaseField::ONE,
         ]
     }
@@ -78,10 +91,16 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveA
         right_wire_values: &[Target],
         _below_wire_values: &[Target],
     ) -> Vec<Target> {
+        // Notation:
+        // - p1 is the accumulator;
+        // - p2 is the addend;
+        // - p3 = p1 + p2;
+        // - p4 = if scalar_bit { p4 } else { p1 }
+
         let x1 = local_wire_values[Self::WIRE_GROUP_ACC_X];
         let y1 = local_wire_values[Self::WIRE_GROUP_ACC_Y];
-        let x3 = right_wire_values[Self::WIRE_GROUP_ACC_X];
-        let y3 = right_wire_values[Self::WIRE_GROUP_ACC_Y];
+        let x4 = right_wire_values[Self::WIRE_GROUP_ACC_X];
+        let y4 = right_wire_values[Self::WIRE_GROUP_ACC_Y];
 
         let scalar_acc_old = local_wire_values[Self::WIRE_SCALAR_ACC_OLD];
         let scalar_acc_new = local_wire_values[Self::WIRE_SCALAR_ACC_NEW];
@@ -93,20 +112,26 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveA
 
         let x1_minus_x2 = builder.sub(x1, x2);
         let x1_plus_x2 = builder.add(x1, x2);
-        let x1_minus_x3 = builder.sub(x1, x3);
         let y1_minus_y2 = builder.sub(y1, y2);
 
         let computed_lambda = builder.mul(y1_minus_y2, inverse);
-        let computed_x3 = builder.mul_sub(lambda, lambda, x1_plus_x2);
-        let computed_y3 = builder.mul_sub(lambda, x1_minus_x3, y1);
+        let x3 = builder.mul_sub(lambda, lambda, x1_plus_x2);
+        let x1_minus_x3 = builder.sub(x1, x3);
+        let y3 = builder.mul_sub(lambda, x1_minus_x3, y1);
+
+        let not_scalar_bit = builder.not(scalar_bit);
+        let x1_conditioned = builder.mul(x1, not_scalar_bit);
+        let y1_conditioned = builder.mul(y1, not_scalar_bit);
+        let computed_x4 = builder.mul_add(scalar_bit, x3, x1_conditioned);
+        let computed_y4 = builder.mul_add(scalar_bit, y3, y1_conditioned);
 
         let double_scalar_acc_old = builder.double(scalar_acc_old);
         let computed_scalar_acc_new = builder.add(double_scalar_acc_old, scalar_bit);
 
         vec![
             builder.sub(computed_lambda, lambda),
-            builder.sub(computed_x3, x3),
-            builder.sub(computed_y3, y3),
+            builder.sub(computed_x4, x4),
+            builder.sub(computed_y4, y4),
             builder.sub(computed_scalar_acc_new, scalar_acc_new),
             assert_binary_recursively(builder, scalar_bit),
             assert_inverses_recursively(builder, inverse, x1_minus_x2),
@@ -147,19 +172,25 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> WitnessGenerator<C
         _constants: &Vec<Vec<C::ScalarField>>,
         witness: &PartialWitness<InnerC::BaseField>,
     ) -> PartialWitness<InnerC::BaseField> {
-        let group_acc_old_x_target = Wire {
+        // Notation:
+        // - p1 is the accumulator;
+        // - p2 is the addend;
+        // - p3 = p1 + p2;
+        // - p4 = if scalar_bit { p4 } else { p1 }
+
+        let x1_target = Wire {
             gate: self.index,
             input: Self::WIRE_GROUP_ACC_X,
         };
-        let group_acc_new_x_target = Wire {
+        let x4_target = Wire {
             gate: self.index + 1,
             input: Self::WIRE_GROUP_ACC_X,
         };
-        let group_acc_old_y_target = Wire {
+        let y1_target = Wire {
             gate: self.index,
             input: Self::WIRE_GROUP_ACC_Y,
         };
-        let group_acc_new_y_target = Wire {
+        let y4_target = Wire {
             gate: self.index + 1,
             input: Self::WIRE_GROUP_ACC_Y,
         };
@@ -171,11 +202,11 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> WitnessGenerator<C
             gate: self.index,
             input: Self::WIRE_SCALAR_ACC_NEW,
         };
-        let addend_x_target = Wire {
+        let x2_target = Wire {
             gate: self.index,
             input: Self::WIRE_ADDEND_X,
         };
-        let addend_y_target = Wire {
+        let y2_target = Wire {
             gate: self.index,
             input: Self::WIRE_ADDEND_Y,
         };
@@ -192,37 +223,35 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> WitnessGenerator<C
             input: Self::WIRE_LAMBDA,
         };
 
-        let group_acc_old_x = witness.get_wire(group_acc_old_x_target);
-        let group_acc_old_y = witness.get_wire(group_acc_old_y_target);
+        let x1 = witness.get_wire(x1_target);
+        let y1 = witness.get_wire(y1_target);
 
         let scalar_acc_old = witness.get_wire(scalar_acc_old_target);
 
-        let addend_x = witness.get_wire(addend_x_target);
-        let addend_y = witness.get_wire(addend_y_target);
+        let x2 = witness.get_wire(x2_target);
+        let y2 = witness.get_wire(y2_target);
 
         let scalar_bit = witness.get_wire(scalar_bit_target);
         debug_assert!(scalar_bit.is_zero() || scalar_bit.is_one());
 
         let scalar_acc_new = scalar_acc_old.double() + scalar_bit;
 
-        // Here's where our abstraction leaks a bit. Although we already have the sum, we need to
-        // redo part of the computation in order to populate the purported inverse wire.
-        let dx = group_acc_old_x - addend_x;
-        let dy = group_acc_old_y - addend_y;
+        let dx = x1 - x2;
+        let dy = y1 - y2;
         let inverse = dx.multiplicative_inverse().expect("x_1 = x_2");
         let lambda = dy * inverse;
+        let x3 = lambda.square() - x1 - x2;
+        let y3 = lambda * (x1 - x3) - y1;
 
-        let x_3 = lambda.square() - group_acc_old_x - addend_x;
-        let y_3 = lambda * (group_acc_old_x - x_3) - group_acc_old_y;
-        let (group_acc_new_x, group_acc_new_y) = if scalar_bit.is_one() {
-            (x_3, y_3)
+        let (x4, y4) = if scalar_bit.is_one() {
+            (x3, y3)
         } else {
-            (group_acc_old_x, group_acc_old_y)
+            (x1, y1)
         };
 
         let mut result = PartialWitness::new();
-        result.set_wire(group_acc_new_x_target, group_acc_new_x);
-        result.set_wire(group_acc_new_y_target, group_acc_new_y);
+        result.set_wire(x4_target, x4);
+        result.set_wire(y4_target, y4);
         result.set_wire(scalar_acc_new_target, scalar_acc_new);
         result.set_wire(inverse_target, inverse);
         result.set_wire(lambda_target, lambda);
