@@ -48,7 +48,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveA
         // - p1 is the accumulator;
         // - p2 is the addend;
         // - p3 = p1 + p2;
-        // - p4 = if scalar_bit { p4 } else { p1 }
+        // - p4 = if scalar_bit { p3 } else { p1 }
 
         let x1 = local_wire_values[Self::WIRE_GROUP_ACC_X];
         let y1 = local_wire_values[Self::WIRE_GROUP_ACC_Y];
@@ -70,7 +70,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveA
         // be ignored (i.e. multiplied by zero), so we're okay.
         let y3 = lambda * (x1 - x4) - y1;
 
-        let not_scalar_bit = scalar_bit - InnerC::BaseField::ONE;
+        let not_scalar_bit = InnerC::BaseField::ONE - scalar_bit;
         let computed_x4 = scalar_bit * x3 + not_scalar_bit * x1;
         let computed_y4 = scalar_bit * y3 + not_scalar_bit * y1;
 
@@ -95,7 +95,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveA
         // - p1 is the accumulator;
         // - p2 is the addend;
         // - p3 = p1 + p2;
-        // - p4 = if scalar_bit { p4 } else { p1 }
+        // - p4 = if scalar_bit { p3 } else { p1 }
 
         let x1 = local_wire_values[Self::WIRE_GROUP_ACC_X];
         let y1 = local_wire_values[Self::WIRE_GROUP_ACC_Y];
@@ -179,7 +179,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> WitnessGenerator<C
         // - p1 is the accumulator;
         // - p2 is the addend;
         // - p3 = p1 + p2;
-        // - p4 = if scalar_bit { p4 } else { p1 }
+        // - p4 = if scalar_bit { p3 } else { p1 }
 
         let x1_target = Wire {
             gate: self.index,
