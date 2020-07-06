@@ -53,13 +53,16 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveA
         let scalar_acc_new = local_wire_values[Self::WIRE_SCALAR_ACC_NEW];
         let x2 = local_wire_values[Self::WIRE_ADDEND_X];
         let y2 = local_wire_values[Self::WIRE_ADDEND_Y];
-        let scalar_bit = C::ScalarField::ONE;
+        let scalar_bit = local_wire_values[Self::WIRE_SCALAR_BIT];
         let inverse = local_wire_values[Self::WIRE_INVERSE];
         let lambda = local_wire_values[Self::WIRE_LAMBDA];
-
         let computed_lambda = (y1 - y2) * inverse;
-        let computed_x3 = lambda.square() - x1 - x2;
-        let computed_y3 = lambda * (x1 - x3) - y1;
+
+        let (computed_x3, computed_y3) = if scalar_bit.is_one() {
+            (lambda.square() - x1 - x2, lambda * (x1 - x3) - y1)
+        } else {
+            (x1, y1)
+        };
 
         vec![
             computed_lambda - lambda,
