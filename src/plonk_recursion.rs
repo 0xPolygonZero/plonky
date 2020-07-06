@@ -1,23 +1,23 @@
-use crate::plonk_challenger::RecursiveChallenger;
+use anyhow::Result;
+
 use crate::gates::evaluate_all_constraints_recursively;
+use crate::plonk_challenger::RecursiveChallenger;
+use crate::plonk_proof::OldProofTarget;
 use crate::plonk_util::{powers_recursive, reduce_with_powers_recursive};
 use crate::util::ceil_div_usize;
-use crate::{
-    get_subgroup_shift, hash_usize_to_curve, AffinePointTarget, Circuit, CircuitBuilder,
-    CurveMulOp, Field, HaloCurve, OpeningSetTarget, ProofTarget, PublicInput, SchnorrProofTarget,
-    Target, GRID_WIDTH, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES,
-    QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER,
-};
+use crate::{get_subgroup_shift, hash_usize_to_curve, AffinePointTarget, Circuit, CircuitBuilder, Curve, CurveMulOp, Field, HaloCurve, OldProof, OpeningSetTarget, PartialWitness, Proof, ProofChallenge, ProofTarget, PublicInput, SchnorrProofTarget, Target, GRID_WIDTH, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER};
 
 /// Wraps a `Circuit` for recursive verification with inputs for the proof data.
 pub struct RecursiveCircuit<C: HaloCurve> {
     pub circuit: Circuit<C>,
+    pub public_inputs: RecursionPublicInputs,
     pub proof: ProofTarget,
+    pub old_proofs: Vec<OldProofTarget>,
 }
 
 /// Public inputs of the recursive circuit. This contains data for the inner proof which is needed
 /// to complete verification of it.
-struct RecursionPublicInputs {
+pub struct RecursionPublicInputs {
     beta: PublicInput,
     gamma: PublicInput,
     alpha: PublicInput,
@@ -32,6 +32,7 @@ struct RecursionPublicInputs {
     o_plonk_t: Vec<PublicInput>,
     halo_u_l: Vec<PublicInput>,
     halo_u_r: Vec<PublicInput>,
+    old_proofs: Vec<PublicInput>,
 }
 
 impl RecursionPublicInputs {
@@ -47,8 +48,99 @@ impl RecursionPublicInputs {
             self.o_plonk_t.as_slice(),
             self.halo_u_l.as_slice(),
             self.halo_u_r.as_slice(),
+            self.old_proofs.as_slice(),
         ]
         .concat()
+    }
+
+    pub fn populate_witness<C: Curve>(
+        &self,
+        witness: &mut PartialWitness<C::BaseField>,
+        values: Proof<C>,
+    ) -> Result<()> {
+        let challs = values.get_challenges()?;
+        witness.set_public_input(self.beta, challs.beta.try_convert()?);
+        witness.set_public_input(self.gamma, challs.gamma.try_convert()?);
+        witness.set_public_input(self.alpha, challs.alpha.try_convert()?);
+        witness.set_public_input(self.zeta, challs.zeta.try_convert()?);
+        witness.set_public_input(
+            self.o_plonk_z_local,
+            values.o_local.o_plonk_z.try_convert()?,
+        );
+        witness.set_public_input(
+            self.o_plonk_z_right,
+            values.o_right.o_plonk_z.try_convert()?,
+        );
+        for (&a, b) in self
+            .o_constants
+            .iter()
+            .chain(&self.o_plonk_sigmas)
+            .chain(&self.o_local_wires)
+            .chain(&self.o_right_wires)
+            .chain(&self.o_below_wires)
+            .chain(&self.o_plonk_t)
+            .chain(&self.halo_u_l)
+            .chain(&self.halo_u_r)
+            .chain(&self.old_proofs)
+            .zip(
+                values
+                    .o_local
+                    .o_constants
+                    .iter()
+                    .chain(&values.o_local.o_plonk_sigmas)
+                    .chain(&values.o_local.o_wires)
+                    .chain(&values.o_right.o_wires)
+                    .chain(&values.o_below.o_wires)
+                    .chain(&values.o_local.o_plonk_t)
+                    .chain(&challs.ipa_challenges)
+                    .chain(&C::ScalarField::batch_multiplicative_inverse(
+                        &challs.ipa_challenges,
+                    )),
+            )
+        {
+            witness.set_public_input(a, b.try_convert()?);
+        }
+
+        Ok(())
+    }
+
+    pub fn proof_to_public_inputs<C: Curve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
+        proof: &Proof<C>,
+        old_proofs: &[OldProof<InnerC>],
+    ) -> Result<Vec<C::BaseField>> {
+        let challs = proof.get_challenges()?;
+        let mut pis = [
+            C::ScalarField::try_convert_all::<C::BaseField>(&[
+                challs.beta,
+                challs.gamma,
+                challs.alpha,
+                challs.zeta,
+            ])?
+            .as_slice(),
+            C::ScalarField::try_convert_all::<C::BaseField>(&proof.o_local.o_constants)?.as_slice(),
+            C::ScalarField::try_convert_all::<C::BaseField>(&proof.o_local.o_plonk_sigmas)?
+                .as_slice(),
+            C::ScalarField::try_convert_all::<C::BaseField>(&proof.o_local.o_wires)?.as_slice(),
+            C::ScalarField::try_convert_all::<C::BaseField>(&proof.o_right.o_wires)?.as_slice(),
+            C::ScalarField::try_convert_all::<C::BaseField>(&proof.o_below.o_wires)?.as_slice(),
+            C::ScalarField::try_convert_all::<C::BaseField>(&[
+                proof.o_local.o_plonk_z,
+                proof.o_right.o_plonk_z,
+            ])?
+            .as_slice(),
+            C::ScalarField::try_convert_all::<C::BaseField>(&proof.o_local.o_plonk_t)?.as_slice(),
+            C::ScalarField::try_convert_all::<C::BaseField>(&challs.ipa_challenges)?.as_slice(),
+            C::ScalarField::try_convert_all::<C::BaseField>(
+                &C::ScalarField::batch_multiplicative_inverse(&challs.ipa_challenges),
+            )?
+            .as_slice(),
+        ]
+        .concat();
+        for p in old_proofs {
+            pis.push(C::ScalarField::try_convert::<C::BaseField>(&p.halo_g.x)?);
+            pis.push(C::ScalarField::try_convert::<C::BaseField>(&p.halo_g.y)?);
+        }
+        Ok(pis)
     }
 }
 
@@ -63,6 +155,8 @@ pub fn recursive_verification_circuit<
 >(
     degree_pow: usize,
     security_bits: usize,
+    num_public_inputs: usize,
+    num_old_proofs: usize,
 ) -> RecursiveCircuit<C> {
     let mut builder = CircuitBuilder::<C>::new(security_bits);
     let public_inputs = RecursionPublicInputs {
@@ -80,25 +174,28 @@ pub fn recursive_verification_circuit<
         o_plonk_t: builder.stage_public_inputs(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
         halo_u_l: builder.stage_public_inputs(degree_pow),
         halo_u_r: builder.stage_public_inputs(degree_pow),
+        old_proofs: builder.stage_public_inputs((2 + degree_pow) * num_old_proofs),
     };
 
-    let num_public_inputs = public_inputs.to_vec().len();
     let num_public_input_gates = num_public_input_gates(num_public_inputs);
+
+    builder.route_public_inputs();
 
     let proof = ProofTarget {
         c_wires: builder.add_virtual_point_targets(NUM_WIRES),
         c_plonk_z: builder.add_virtual_point_target(),
         c_plonk_t: builder.add_virtual_point_targets(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
-        o_public_inputs: make_opening_sets(&mut builder, num_public_input_gates),
-        o_local: make_opening_set(&mut builder),
-        o_right: make_opening_set(&mut builder),
-        o_below: make_opening_set(&mut builder),
+        o_public_inputs: make_opening_sets(&mut builder, num_public_input_gates, num_old_proofs),
+        o_local: make_opening_set(&mut builder, num_old_proofs),
+        o_right: make_opening_set(&mut builder, num_old_proofs),
+        o_below: make_opening_set(&mut builder, num_old_proofs),
         halo_l_i: builder.add_virtual_point_targets(degree_pow),
         halo_r_i: builder.add_virtual_point_targets(degree_pow),
         halo_g: builder.add_virtual_point_target(),
         schnorr_proof: make_schnorr_proof(&mut builder),
     };
-    builder.route_public_inputs();
+
+    let old_proofs = make_old_proofs(&mut builder, num_old_proofs, degree_pow);
 
     // Flatten the list of public input openings.
     let o_public_inputs: Vec<Target> = proof
@@ -122,6 +219,9 @@ pub fn recursive_verification_circuit<
     challenger.observe_affine_points(&proof.c_plonk_t);
     let zeta = challenger.get_challenge(&mut builder);
     challenger.observe_elements(&proof.all_opening_targets());
+
+    verify_old_proof_evaluation::<C, InnerC>(&mut builder, &old_proofs, &proof.o_local, zeta);
+
     // v: Challenge to combine different opening points.
     // u: Challenge to combine different polynomials.
     // u_scaling: Challenge for scaling u used in the IPA verification.
@@ -194,9 +294,31 @@ pub fn recursive_verification_circuit<
         builder.copy(public_inputs.halo_u_l[i].routable_target(), u_l[i]);
         builder.copy(public_inputs.halo_u_r[i].routable_target(), u_r[i]);
     }
+    let shift = 2 + degree_pow;
+    for i in 0..num_old_proofs {
+        builder.copy(
+            old_proofs[i].halo_g.x,
+            public_inputs.old_proofs[shift * i].routable_target(),
+        );
+        builder.copy(
+            old_proofs[i].halo_g.y,
+            public_inputs.old_proofs[shift * i + 1].routable_target(),
+        );
+        for j in 0..degree_pow {
+            builder.copy(
+                old_proofs[i].ipa_challenges[j],
+                public_inputs.old_proofs[shift * i + j + 2].routable_target(),
+            );
+        }
+    }
 
     let circuit = builder.build();
-    RecursiveCircuit { circuit, proof }
+    RecursiveCircuit {
+        circuit,
+        public_inputs,
+        proof,
+        old_proofs,
+    }
 }
 
 /// Verify all IPAs in the given proof. Return `(u_l, u_r)`, which roughly correspond to `u` and
@@ -388,14 +510,27 @@ fn verify_ipa<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     (u_l, u_r)
 }
 
-fn make_opening_set<C: HaloCurve>(builder: &mut CircuitBuilder<C>) -> OpeningSetTarget {
+fn make_opening_set<C: HaloCurve>(
+    builder: &mut CircuitBuilder<C>,
+    num_old_proofs: usize,
+) -> OpeningSetTarget {
     OpeningSetTarget {
         o_constants: builder.add_virtual_targets(NUM_CONSTANTS),
         o_plonk_sigmas: builder.add_virtual_targets(NUM_ROUTED_WIRES),
         o_wires: builder.add_virtual_targets(NUM_WIRES),
         o_plonk_z: builder.add_virtual_target(),
         o_plonk_t: builder.add_virtual_targets(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
+        o_old_proofs: builder.add_virtual_targets(num_old_proofs),
     }
+}
+fn make_opening_sets<C: HaloCurve>(
+    builder: &mut CircuitBuilder<C>,
+    n: usize,
+    num_old_proofs: usize,
+) -> Vec<OpeningSetTarget> {
+    (0..n)
+        .map(|_i| make_opening_set(builder, num_old_proofs))
+        .collect()
 }
 
 fn make_schnorr_proof<C: HaloCurve>(builder: &mut CircuitBuilder<C>) -> SchnorrProofTarget {
@@ -406,11 +541,17 @@ fn make_schnorr_proof<C: HaloCurve>(builder: &mut CircuitBuilder<C>) -> SchnorrP
     }
 }
 
-fn make_opening_sets<C: HaloCurve>(
+fn make_old_proofs<C: HaloCurve>(
     builder: &mut CircuitBuilder<C>,
     n: usize,
-) -> Vec<OpeningSetTarget> {
-    (0..n).map(|_i| make_opening_set(builder)).collect()
+    degree_pow: usize,
+) -> Vec<OldProofTarget> {
+    (0..n)
+        .map(|_| OldProofTarget {
+            halo_g: builder.add_virtual_point_target(),
+            ipa_challenges: builder.add_virtual_targets(degree_pow),
+        })
+        .collect()
 }
 
 /// In our recursion scheme, to avoid non-native field arithmetic, each proof in a recursive chain
@@ -423,8 +564,6 @@ fn verify_assumptions<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField
     public_inputs: &RecursionPublicInputs,
     o_public_inputs: &[Target],
 ) {
-    // TODO: Still need to verify evaluation of g().
-
     let degree = 1 << degree_pow;
     let degree_f = C::ScalarField::from_canonical_usize(degree);
     let degree_wire = builder.constant_wire(degree_f);
@@ -558,9 +697,21 @@ fn halo_g_recursive<C: HaloCurve>(
     let mut x_power = x;
     for &u_i in us.iter().rev() {
         let u_i_inv = builder.inv(u_i);
-        let term = builder.mul_add(u_i_inv, x_power, u_i);
+        let term = builder.mul_add(u_i, x_power, u_i_inv);
         product = builder.mul(product, term);
         x_power = builder.double(x_power);
     }
     product
+}
+
+fn verify_old_proof_evaluation<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
+    builder: &mut CircuitBuilder<C>,
+    old_proofs: &[OldProofTarget],
+    o_local: &OpeningSetTarget,
+    zeta: Target,
+) {
+    for (i, p) in old_proofs.iter().enumerate() {
+        let computed = halo_g_recursive(builder, zeta, &p.ipa_challenges);
+        builder.copy(computed, o_local.o_old_proofs[i]);
+    }
 }

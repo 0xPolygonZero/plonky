@@ -396,13 +396,12 @@ macro_rules! test_gate_low_degree {
             // Evaluate constraints at each of our 16n points.
             let mut constraint_values_16n: Vec<Vec<SF>> = Vec::new();
             for i in 0..16 * n {
-                let constraints: Vec<SF> =
-                    <$gate as $crate::gates::Gate<C>>::evaluate_filtered(
-                        &constant_values_16n_t[i],
-                        &wire_values_16n_t[i],
-                        &wire_values_16n_t[(i + 16) % (16 * n)],
-                        &wire_values_16n_t[(i + 16 * $crate::plonk::GRID_WIDTH) % (16 * n)],
-                    );
+                let constraints: Vec<SF> = <$gate as $crate::gates::Gate<C>>::evaluate_filtered(
+                    &constant_values_16n_t[i],
+                    &wire_values_16n_t[i],
+                    &wire_values_16n_t[(i + 16) % (16 * n)],
+                    &wire_values_16n_t[(i + 16 * $crate::plonk::GRID_WIDTH) % (16 * n)],
+                );
                 for (j, &c) in constraints.iter().enumerate() {
                     if constraint_values_16n.len() <= j {
                         constraint_values_16n.push(Vec::new());

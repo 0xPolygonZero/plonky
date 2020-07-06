@@ -1,6 +1,8 @@
-use anyhow::Result;
+use anyhow::{anyhow, bail, ensure, Result};
 
-use crate::{AffinePoint, AffinePointTarget, Curve, Field, PartialWitness, Target};
+use crate::plonk_challenger::Challenger;
+use crate::plonk_util::{halo_g, halo_s, pedersen_hash};
+use crate::{AffinePoint, AffinePointTarget, Curve, Field, MsmPrecomputation, PartialWitness, Target, SECURITY_BITS};
 
 #[derive(Debug, Clone, Copy)]
 pub struct SchnorrProof<C: Curve> {
@@ -54,6 +56,125 @@ impl<C: Curve> Proof<C> {
             ],
         ]
         .concat()
+    }
+
+    // Computes all challenges used in the proof verification.
+    pub fn get_challenges(&self) -> Result<ProofChallenge<C>> {
+        let mut challenger = Challenger::new(SECURITY_BITS);
+        let error_msg = "Conversion from base to scalar field failed.";
+        challenger.observe_affine_points(&self.c_wires);
+        let (beta_bf, gamma_bf) = challenger.get_2_challenges();
+        let beta = C::try_convert_b2s(beta_bf).map_err(|_| anyhow!(error_msg))?;
+        let gamma = C::try_convert_b2s(gamma_bf).map_err(|_| anyhow!(error_msg))?;
+        challenger.observe_affine_point(self.c_plonk_z);
+        let alpha_bf = challenger.get_challenge();
+        let alpha = C::try_convert_b2s(alpha_bf).map_err(|_| anyhow!(error_msg))?;
+        challenger.observe_affine_points(&self.c_plonk_t);
+        let zeta_bf = challenger.get_challenge();
+        let zeta = C::try_convert_b2s(zeta_bf).map_err(|_| anyhow!(error_msg))?;
+        for os in self.all_opening_sets().iter() {
+            for &f in os.to_vec().iter() {
+                challenger.observe_element(C::try_convert_s2b(f).map_err(|_| anyhow!(error_msg))?);
+            }
+        }
+        let (v_bf, u_bf, u_scaling_bf) = challenger.get_3_challenges();
+        let v = C::try_convert_b2s(v_bf).map_err(|_| anyhow!(error_msg))?;
+        let u = C::try_convert_b2s(u_bf).map_err(|_| anyhow!(error_msg))?;
+        let u_scaling = C::try_convert_b2s(u_scaling_bf).map_err(|_| anyhow!(error_msg))?;
+
+        // Compute IPA challenges.
+        let mut ipa_challenges = Vec::new();
+        for i in 0..self.halo_l.len() {
+            challenger.observe_affine_points(&[self.halo_l[i], self.halo_r[i]]);
+            let l_challenge = challenger.get_challenge();
+            ipa_challenges.push(C::try_convert_b2s(l_challenge).map_err(|_| anyhow!(error_msg))?);
+        }
+
+        // Compute challenge for Schnorr protocol.
+        challenger.observe_affine_point(self.schnorr_proof.r);
+        let schnorr_challenge_bf = challenger.get_challenge();
+        let schnorr_challenge =
+            C::try_convert_b2s(schnorr_challenge_bf).map_err(|_| anyhow!(error_msg))?;
+
+        Ok(ProofChallenge {
+            beta,
+            gamma,
+            alpha,
+            zeta,
+            v,
+            u,
+            u_scaling,
+            ipa_challenges,
+            schnorr_challenge,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ProofChallenge<C: Curve> {
+    pub beta: C::ScalarField,
+    pub gamma: C::ScalarField,
+    pub alpha: C::ScalarField,
+    pub zeta: C::ScalarField,
+    pub v: C::ScalarField,
+    pub u: C::ScalarField,
+    pub u_scaling: C::ScalarField,
+    pub ipa_challenges: Vec<C::ScalarField>,
+    pub schnorr_challenge: C::ScalarField,
+}
+
+#[derive(Debug, Clone)]
+/// Object returned by the verifier, containing the necessary data to verify `halo_g` at a later time.
+/// In particular, `halo_g = commit(g(X, ipa_challenges))` where `g` is the polynomial defined in section 3.2 of the paper.
+pub struct OldProof<C: Curve> {
+    pub halo_g: AffinePoint<C>,
+    pub ipa_challenges: Vec<C::ScalarField>,
+}
+
+impl<C: Curve> From<Proof<C>> for OldProof<C> {
+    fn from(proof: Proof<C>) -> Self {
+        let ProofChallenge { ipa_challenges, .. } = proof.get_challenges().unwrap();
+        Self {
+            halo_g: proof.halo_g,
+            ipa_challenges,
+        }
+    }
+}
+
+impl<C: Curve> OldProof<C> {
+    /// Returns the coefficients of the Halo `g` polynomial.
+    /// In particular, `commit(self.coeffs) = self.halo_g`.
+    pub fn coeffs(&self) -> Vec<C::ScalarField> {
+        halo_s(&self.ipa_challenges)
+    }
+
+    /// Evaluates the Halo g polynomial at a point `x`.
+    pub fn evaluate_g(&self, x: C::ScalarField) -> C::ScalarField {
+        halo_g(x, &self.ipa_challenges)
+    }
+}
+
+#[derive(Debug, Clone)]
+/// The `Target` version of `OldProof`.
+pub struct OldProofTarget {
+    pub halo_g: AffinePointTarget,
+    pub ipa_challenges: Vec<Target>,
+}
+
+impl OldProofTarget {
+    pub fn populate_witness<C: Curve>(
+        &self,
+        witness: &mut PartialWitness<C::BaseField>,
+        values: &OldProof<C>,
+    ) -> Result<()> {
+        witness.set_point_target(self.halo_g, values.halo_g);
+        debug_assert_eq!(self.ipa_challenges.len(), values.ipa_challenges.len());
+        witness.set_targets(
+            &self.ipa_challenges,
+            &C::ScalarField::try_convert_all(&values.ipa_challenges)?,
+        );
+
+        Ok(())
     }
 }
 
@@ -133,6 +254,16 @@ impl ProofTarget {
         witness.set_point_targets(&self.halo_r_i, &values.halo_r);
         witness.set_point_target(self.halo_g, values.halo_g);
 
+        witness.set_point_target(self.schnorr_proof.r, values.schnorr_proof.r);
+        witness.set_target(
+            self.schnorr_proof.z1,
+            C::ScalarField::try_convert(&values.schnorr_proof.z1)?,
+        );
+        witness.set_target(
+            self.schnorr_proof.z2,
+            C::ScalarField::try_convert(&values.schnorr_proof.z2)?,
+        );
+
         Ok(())
     }
 }
@@ -150,6 +281,8 @@ pub struct OpeningSet<F: Field> {
     pub o_plonk_z: F,
     /// The purported opening of `t`.
     pub o_plonk_t: Vec<F>,
+    /// The purported opening of some old proofs `halo_g` polynomials.
+    pub o_old_proofs: Vec<F>,
 }
 
 impl<F: Field> OpeningSet<F> {
@@ -160,6 +293,7 @@ impl<F: Field> OpeningSet<F> {
             self.o_wires.as_slice(),
             &[self.o_plonk_z],
             self.o_plonk_t.as_slice(),
+            self.o_old_proofs.as_slice(),
         ]
         .concat()
     }
@@ -178,6 +312,8 @@ pub struct OpeningSetTarget {
     pub o_plonk_z: Target,
     /// The purported opening of `t`.
     pub o_plonk_t: Vec<Target>,
+    /// The purported opening of some old proofs `halo_g` polynomials.
+    pub o_old_proofs: Vec<Target>,
 }
 
 impl OpeningSetTarget {
@@ -188,6 +324,7 @@ impl OpeningSetTarget {
             self.o_wires.as_slice(),
             &[self.o_plonk_z],
             self.o_plonk_t.as_slice(),
+            self.o_old_proofs.as_slice(),
         ]
         .concat()
     }
@@ -214,6 +351,10 @@ impl OpeningSetTarget {
         witness.set_targets(
             &self.o_plonk_t,
             &InnerSF::try_convert_all::<InnerBF>(&values.o_plonk_t)?,
+        );
+        witness.set_targets(
+            &self.o_old_proofs,
+            &InnerSF::try_convert_all::<InnerBF>(&values.o_old_proofs)?,
         );
         Ok(())
     }

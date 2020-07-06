@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
-use crate::{CircuitBuilder, Field, HaloCurve, mds_matrix, PartialWitness, RESCUE_SPONGE_WIDTH, Target, Wire, WitnessGenerator};
 use crate::gates::Gate;
+use crate::{mds_matrix, CircuitBuilder, Field, HaloCurve, PartialWitness, Target, Wire, WitnessGenerator, RESCUE_SPONGE_WIDTH};
 
 /// The first step of Rescue, i.e. the one with the `x^(1/5)` layer.
 pub struct RescueStepAGate<C: HaloCurve> {
@@ -157,7 +157,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for RescueStepAGate<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ArithmeticGate, test_gate_low_degree, Tweedledum};
+    use crate::{test_gate_low_degree, ArithmeticGate, Tweedledum};
 
     test_gate_low_degree!(
         low_degree_ArithmeticGate,

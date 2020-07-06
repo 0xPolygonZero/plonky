@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
-use crate::{CircuitBuilder, HaloCurve, NUM_ADVICE_WIRES, NUM_ROUTED_WIRES, NUM_WIRES, PartialWitness, Target, Wire, WitnessGenerator};
 use crate::gates::Gate;
+use crate::{CircuitBuilder, HaloCurve, PartialWitness, Target, Wire, WitnessGenerator, NUM_ADVICE_WIRES, NUM_ROUTED_WIRES, NUM_WIRES};
 
 /// A gate for receiving public inputs. These gates will be placed at static indices and the wire
 /// polynomials will always be opened at those indices.
@@ -100,7 +100,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for PublicInputGate<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ArithmeticGate, test_gate_low_degree, Tweedledum};
+    use crate::{test_gate_low_degree, ArithmeticGate, Tweedledum};
 
     test_gate_low_degree!(
         low_degree_ArithmeticGate,

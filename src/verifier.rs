@@ -4,17 +4,24 @@ use crate::partition::get_subgroup_shift;
 use crate::plonk_challenger::Challenger;
 
 use crate::gates::evaluate_all_constraints;
-use crate::plonk_util::{halo_g, halo_n, powers, reduce_with_powers, halo_n_mul};
+use crate::plonk_proof::OldProof;
+use crate::plonk_util::{halo_g, halo_n, halo_n_mul, halo_s, pedersen_hash, powers, reduce_with_powers};
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::{blake_hash_usize_to_curve, hash_usize_to_curve, msm_execute_parallel, msm_precompute, AffinePoint, Circuit, Curve, Field, HaloCurve, ProjectivePoint, Proof, SchnorrProof, GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES};
 
-const SECURITY_BITS: usize = 128;
+pub const SECURITY_BITS: usize = 128;
 
+/// Verifies a proof `proof` and some old proofs G points for a given circuit.
+/// If `verify_g` is `true`, the function completely verifies the proof, including the
+/// linear time check of the G point.
+/// If `verify_g` is `false`, returns an `OldProof` to be checked in a later verification.
 pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     public_inputs: &[C::ScalarField],
     proof: &Proof<C>,
+    old_proofs: &[OldProof<C>],
     circuit: &Circuit<C>,
-) -> Result<()> {
+    verify_g: bool,
+) -> Result<Option<OldProof<C>>> {
     // Verify that the proof parameters are valid.
     check_proof_parameters(proof)?;
 
@@ -22,7 +29,10 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::Scala
     verify_public_inputs(public_inputs, proof, circuit.num_public_inputs)?;
 
     // Observe the transcript and generate the associated challenge points using Fiat-Shamir.
-    let challs = get_challenges(proof, Challenger::new(SECURITY_BITS))?;
+    let challs = proof.get_challenges()?;
+
+    // Check the old proofs' openings.
+    verify_old_proof_evaluation(old_proofs, proof, challs.zeta)?;
 
     let degree = circuit.degree();
 
@@ -85,16 +95,43 @@ pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::Scala
     if !verify_all_ipas_circuit::<C>(
         &circuit,
         &proof,
+        old_proofs,
         challs.u,
         challs.v,
         challs.u_scaling,
         challs.zeta,
-        challs.ipa_challenges,
+        &challs.ipa_challenges,
         challs.schnorr_challenge,
     ) {
         bail!("Invalid IPA proof.");
     }
-    Ok(())
+
+    if verify_g {
+        let pedersen_g: Vec<_> = (0..circuit.degree())
+            .map(|i| blake_hash_usize_to_curve::<C>(i))
+            .collect();
+        let w = 8; // TODO: Should really be set dynamically based on MSM size.
+        let pedersen_g_msm_precomputation =
+            msm_precompute(&AffinePoint::batch_to_projective(&pedersen_g), w);
+
+        // Verify that `self.halo_g = <s, G>`.
+        if proof.halo_g
+            == pedersen_hash(
+                &halo_s(&challs.ipa_challenges),
+                &pedersen_g_msm_precomputation,
+            )
+            .to_affine()
+        {
+            Ok(None)
+        } else {
+            bail!("Invalid G point.");
+        }
+    } else {
+        Ok(Some(OldProof {
+            halo_g: proof.halo_g,
+            ipa_challenges: challs.ipa_challenges,
+        }))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -106,11 +143,17 @@ pub struct VerificationKey<C: Curve> {
     pub security_bits: usize,
 }
 
+/// Verifies a proof `proof` and some old proofs G points for a given verification key.
+/// If `verify_g` is `true`, the function completely verifies the proof, including the
+/// linear time check of the G point.
+/// If `verify_g` is `false`, returns an `OldProof` to be checked in a later verification.
 pub fn verify_proof_vk<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     public_inputs: &[C::ScalarField],
     proof: &Proof<C>,
+    old_proofs: &[OldProof<C>],
     vk: &VerificationKey<C>,
-) -> Result<()> {
+    verify_g: bool,
+) -> Result<Option<OldProof<C>>> {
     // Verify that the proof parameters are valid.
     check_proof_parameters(proof)?;
 
@@ -118,7 +161,10 @@ pub fn verify_proof_vk<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarFiel
     verify_public_inputs(public_inputs, proof, vk.num_public_inputs)?;
 
     // Observe the transcript and generate the associated challenge points using Fiat-Shamir.
-    let challs = get_challenges(proof, Challenger::new(SECURITY_BITS))?;
+    let challs = proof.get_challenges()?;
+
+    // Check the old proofs' openings.
+    verify_old_proof_evaluation(old_proofs, proof, challs.zeta)?;
 
     let degree = vk.degree;
 
@@ -181,16 +227,43 @@ pub fn verify_proof_vk<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarFiel
     if !verify_all_ipas_vk::<C>(
         vk,
         proof,
+        old_proofs,
         challs.u,
         challs.v,
         challs.u_scaling,
         challs.zeta,
-        challs.ipa_challenges,
+        &challs.ipa_challenges,
         challs.schnorr_challenge,
     ) {
         bail!("Invalid IPA proof.");
     }
-    Ok(())
+
+    if verify_g {
+        let pedersen_g: Vec<_> = (0..vk.degree)
+            .map(|i| blake_hash_usize_to_curve::<C>(i))
+            .collect();
+        let w = 8; // TODO: Should really be set dynamically based on MSM size.
+        let pedersen_g_msm_precomputation =
+            msm_precompute(&AffinePoint::batch_to_projective(&pedersen_g), w);
+
+        /// Verify that `self.halo_g = <s, G>`.
+        if proof.halo_g
+            == pedersen_hash(
+                &halo_s(&challs.ipa_challenges),
+                &pedersen_g_msm_precomputation,
+            )
+            .to_affine()
+        {
+            Ok(None)
+        } else {
+            bail!("Invalid G point.");
+        }
+    } else {
+        Ok(Some(OldProof {
+            halo_g: proof.halo_g,
+            ipa_challenges: challs.ipa_challenges,
+        }))
+    }
 }
 
 /// Verify all IPAs in the given proof using a reduction to a single polynomial.
@@ -198,11 +271,12 @@ pub fn verify_proof_vk<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarFiel
 fn verify_all_ipas_circuit<C: HaloCurve>(
     circuit: &Circuit<C>,
     proof: &Proof<C>,
+    old_proofs: &[OldProof<C>],
     u: C::ScalarField,
     v: C::ScalarField,
     u_scaling: C::ScalarField,
     zeta: C::ScalarField,
-    ipa_challenges: Vec<C::ScalarField>,
+    ipa_challenges: &[C::ScalarField],
     schnorr_challenge: C::ScalarField,
 ) -> bool {
     verify_all_ipas(
@@ -221,6 +295,7 @@ fn verify_all_ipas_circuit<C: HaloCurve>(
         circuit.u,
         circuit.pedersen_h,
         proof,
+        old_proofs,
         u,
         v,
         u_scaling,
@@ -236,11 +311,12 @@ fn verify_all_ipas_circuit<C: HaloCurve>(
 fn verify_all_ipas_vk<C: HaloCurve>(
     vk: &VerificationKey<C>,
     proof: &Proof<C>,
+    old_proofs: &[OldProof<C>],
     u: C::ScalarField,
     v: C::ScalarField,
     u_scaling: C::ScalarField,
     zeta: C::ScalarField,
-    ipa_challenges: Vec<C::ScalarField>,
+    ipa_challenges: &[C::ScalarField],
     schnorr_challenge: C::ScalarField,
 ) -> bool {
     let subgroup_generator_n = C::ScalarField::primitive_root_of_unity(log2_strict(vk.degree));
@@ -254,6 +330,7 @@ fn verify_all_ipas_vk<C: HaloCurve>(
         u_curve,
         pedersen_h,
         proof,
+        old_proofs,
         u,
         v,
         u_scaling,
@@ -273,11 +350,12 @@ fn verify_all_ipas<C: HaloCurve>(
     u_curve: AffinePoint<C>,
     pedersen_h: AffinePoint<C>,
     proof: &Proof<C>,
+    old_proofs: &[OldProof<C>],
     u: C::ScalarField,
     v: C::ScalarField,
     u_scaling: C::ScalarField,
     zeta: C::ScalarField,
-    ipa_challenges: Vec<C::ScalarField>,
+    ipa_challenges: &[C::ScalarField],
     schnorr_challenge: C::ScalarField,
     security_bits: usize,
 ) -> bool {
@@ -288,6 +366,7 @@ fn verify_all_ipas<C: HaloCurve>(
         &proof.c_wires,
         &[proof.c_plonk_z],
         &proof.c_plonk_t,
+        &old_proofs.iter().map(|p| p.halo_g).collect::<Vec<_>>(),
     ]
     .concat();
     let powers_of_u = powers(u, c_all.len());
@@ -308,7 +387,8 @@ fn verify_all_ipas<C: HaloCurve>(
     // Then, we reduce the above opening set reductions to a single value.
     let reduced_opening = reduce_with_powers(&opening_set_reductions, v);
 
-    let u_prime = halo_n_mul(&u_scaling.to_canonical_bool_vec()[..security_bits], u_curve).to_projective();
+    let u_prime =
+        halo_n_mul(&u_scaling.to_canonical_bool_vec()[..security_bits], u_curve).to_projective();
 
     let num_public_input_gates = ceil_div_usize(num_public_inputs, NUM_WIRES);
     let points = [
@@ -348,7 +428,7 @@ fn verify_ipa<C: HaloCurve>(
     commitment: ProjectivePoint<C>,
     value: C::ScalarField,
     halo_b: C::ScalarField,
-    ipa_challenges: Vec<C::ScalarField>,
+    ipa_challenges: &[C::ScalarField],
     u_prime: ProjectivePoint<C>,
     pedersen_h: AffinePoint<C>,
     halo_g_curve: AffinePoint<C>,
@@ -398,6 +478,24 @@ fn verify_public_inputs<C: Curve>(
         // If the value `v` doesn't match the corresponding wire in the `PublicInputGate`, return false.
         if public_inputs[i] != proof.o_public_inputs[i / NUM_WIRES].o_wires[i % NUM_WIRES] {
             bail!("{}-th public input is incorrect", i);
+        }
+    }
+    Ok(())
+}
+
+/// Verifies that the purported openings at `zeta` for the old proofs in `old_proofs` is valid.
+fn verify_old_proof_evaluation<C: Curve>(
+    old_proofs: &[OldProof<C>],
+    proof: &Proof<C>,
+    zeta: C::ScalarField,
+) -> Result<()> {
+    if old_proofs.len() != proof.o_local.o_old_proofs.len() {
+        bail!("Incorrect number of old proofs opening.")
+    }
+    for (i, p) in old_proofs.iter().enumerate() {
+        // If the value `v` doesn't match the corresponding wire in the `PublicInputGate`, return false.
+        if halo_g(zeta, &p.ipa_challenges) != proof.o_local.o_old_proofs[i] {
+            bail!("{}-th old proof opening is incorrect", i);
         }
     }
     Ok(())
@@ -470,70 +568,4 @@ fn check_proof_parameters<C: Curve>(proof: &Proof<C>) -> Result<()> {
     );
 
     Ok(())
-}
-
-#[derive(Debug, Clone)]
-struct ProofChallenge<C: Curve> {
-    beta: C::ScalarField,
-    gamma: C::ScalarField,
-    alpha: C::ScalarField,
-    zeta: C::ScalarField,
-    v: C::ScalarField,
-    u: C::ScalarField,
-    u_scaling: C::ScalarField,
-    ipa_challenges: Vec<C::ScalarField>,
-    schnorr_challenge: C::ScalarField,
-}
-
-// Computes all challenges used in the proof verification.
-fn get_challenges<C: Curve>(
-    proof: &Proof<C>,
-    mut challenger: Challenger<C::BaseField>,
-) -> Result<ProofChallenge<C>> {
-    let error_msg = "Conversion from base to scalar field failed.";
-    challenger.observe_affine_points(&proof.c_wires);
-    let (beta_bf, gamma_bf) = challenger.get_2_challenges();
-    let beta = C::try_convert_b2s(beta_bf).map_err(|_| anyhow!(error_msg))?;
-    let gamma = C::try_convert_b2s(gamma_bf).map_err(|_| anyhow!(error_msg))?;
-    challenger.observe_affine_point(proof.c_plonk_z);
-    let alpha_bf = challenger.get_challenge();
-    let alpha = C::try_convert_b2s(alpha_bf).map_err(|_| anyhow!(error_msg))?;
-    challenger.observe_affine_points(&proof.c_plonk_t);
-    let zeta_bf = challenger.get_challenge();
-    let zeta = C::try_convert_b2s(zeta_bf).map_err(|_| anyhow!(error_msg))?;
-    for os in proof.all_opening_sets().iter() {
-        for &f in os.to_vec().iter() {
-            challenger.observe_element(C::try_convert_s2b(f).map_err(|_| anyhow!(error_msg))?);
-        }
-    }
-    let (v_bf, u_bf, u_scaling_bf) = challenger.get_3_challenges();
-    let v = C::try_convert_b2s(v_bf).map_err(|_| anyhow!(error_msg))?;
-    let u = C::try_convert_b2s(u_bf).map_err(|_| anyhow!(error_msg))?;
-    let u_scaling = C::try_convert_b2s(u_scaling_bf).map_err(|_| anyhow!(error_msg))?;
-
-    // Compute IPA challenges.
-    let mut ipa_challenges = Vec::new();
-    for i in 0..proof.halo_l.len() {
-        challenger.observe_affine_points(&[proof.halo_l[i], proof.halo_r[i]]);
-        let l_challenge = challenger.get_challenge();
-        ipa_challenges.push(C::try_convert_b2s(l_challenge).map_err(|_| anyhow!(error_msg))?);
-    }
-
-    // Compute challenge for Schnorr protocol.
-    challenger.observe_affine_point(proof.schnorr_proof.r);
-    let schnorr_challenge_bf = challenger.get_challenge();
-    let schnorr_challenge =
-        C::try_convert_b2s(schnorr_challenge_bf).map_err(|_| anyhow!(error_msg))?;
-
-    Ok(ProofChallenge {
-        beta,
-        gamma,
-        alpha,
-        zeta,
-        v,
-        u,
-        u_scaling,
-        ipa_challenges,
-        schnorr_challenge,
-    })
 }

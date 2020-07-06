@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
-use crate::{CircuitBuilder, HaloCurve, PartialWitness, Target, WitnessGenerator};
 use crate::gates::Gate;
+use crate::{CircuitBuilder, HaloCurve, PartialWitness, Target, WitnessGenerator};
 
 /// A gate which doesn't perform any arithmetic, but just acts as a buffer for receiving data.
 /// Some gates, such as the Rescue round gate, "output" their results using one of the next gate's
@@ -62,7 +62,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for BufferGate<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ArithmeticGate, test_gate_low_degree, Tweedledum};
+    use crate::{test_gate_low_degree, ArithmeticGate, Tweedledum};
 
     test_gate_low_degree!(
         low_degree_ArithmeticGate,

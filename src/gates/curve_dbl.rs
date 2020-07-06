@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
-use crate::{CircuitBuilder, Curve, Field, HaloCurve, PartialWitness, Target, Wire, WitnessGenerator};
 use crate::gates::{assert_inverses_recursively, Gate};
+use crate::{CircuitBuilder, Curve, Field, HaloCurve, PartialWitness, Target, Wire, WitnessGenerator};
 
 /// A curve which performs point doubling.
 pub struct CurveDblGate<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> {
@@ -106,7 +106,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveD
 }
 
 impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> WitnessGenerator<C::ScalarField>
-for CurveDblGate<C, InnerC>
+    for CurveDblGate<C, InnerC>
 {
     fn dependencies(&self) -> Vec<Target> {
         vec![
@@ -170,7 +170,7 @@ for CurveDblGate<C, InnerC>
 
 #[cfg(test)]
 mod tests {
-    use crate::{CurveDblGate, test_gate_low_degree, Tweedledee, Tweedledum};
+    use crate::{test_gate_low_degree, CurveDblGate, Tweedledee, Tweedledum};
 
     test_gate_low_degree!(
         low_degree_CurveDblGate,

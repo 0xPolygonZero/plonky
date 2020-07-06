@@ -1309,7 +1309,6 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         let subgroup_8n =
             C::ScalarField::cyclic_subgroup_known_order(subgroup_generator_8n, 8 * degree);
 
-        // TODO: Shouldn't this be random?
         let pedersen_g: Vec<_> = (0..degree)
             .map(|i| blake_hash_usize_to_curve::<C>(i))
             .collect();
@@ -1419,7 +1418,7 @@ mod tests {
         let circuit = builder.build();
         let witness = circuit.generate_witness(partial_witness);
 
-        let proof = circuit.generate_proof::<Tweedledum>(witness, true).unwrap();
-        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &circuit,).is_ok());
+        let proof = circuit.generate_proof::<Tweedledum>(witness, &[], true).unwrap();
+        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok());
     }
 }
