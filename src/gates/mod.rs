@@ -383,10 +383,10 @@ macro_rules! test_gate_low_degree {
                 })
                 .collect();
 
-            // Make sure each extended polynomial is still degree n.
+            // Make sure each extended polynomial is still degree <n.
             for values_16n in constant_values_16n.iter().chain(wire_values_16n.iter()) {
                 assert!(
-                    $crate::plonk_util::polynomial_degree(values_16n, &fft_precomputation_16n) < n
+                    $crate::plonk_util::polynomial_degree_plus_1(values_16n, &fft_precomputation_16n) <= n
                 );
             }
 
@@ -411,17 +411,17 @@ macro_rules! test_gate_low_degree {
             }
 
             // Check that the degree of each constraint is within the limit.
-            let constraint_degrees = constraint_values_16n
+            let constraint_degrees_plus_1 = constraint_values_16n
                 .iter()
-                .map(|c| $crate::plonk_util::polynomial_degree(c, &fft_precomputation_16n))
+                .map(|c| $crate::plonk_util::polynomial_degree_plus_1(c, &fft_precomputation_16n))
                 .collect::<Vec<_>>();
             let max_degree_excl = (crate::plonk::QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER + 1) * n;
-            for (i, &deg) in constraint_degrees.iter().enumerate() {
+            for (i, &deg_plus_1) in constraint_degrees_plus_1.iter().enumerate() {
                 assert!(
-                    deg < max_degree_excl,
-                    "Constraint at index {} has degree {}; should be less than {}n = {}",
+                    deg_plus_1 <= max_degree_excl,
+                    "Constraint at index {} has degree+1 {}; should be at most {}n = {}",
                     i,
-                    deg,
+                    deg_plus_1,
                     crate::plonk::QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER + 1,
                     max_degree_excl
                 );

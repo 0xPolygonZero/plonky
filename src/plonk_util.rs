@@ -272,12 +272,12 @@ pub fn sigma_polynomials<F: Field>(
         .collect()
 }
 
-pub(crate) fn polynomial_degree<F: Field>(
+pub(crate) fn polynomial_degree_plus_1<F: Field>(
     points: &[F],
     fft_precomputation: &FftPrecomputation<F>,
 ) -> usize {
     let coeffs = ifft_with_precomputation_power_of_2(&points, fft_precomputation);
-    coeffs.iter().rev().skip_while(|c| c.is_zero()).count() - 1
+    coeffs.iter().rev().skip_while(|c| c.is_zero()).count()
 }
 
 // TODO: Maybe a streaming version using an `Iterator` would be faster and wouldn't require as much memory for large circuits.
