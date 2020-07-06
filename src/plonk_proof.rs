@@ -2,7 +2,7 @@ use anyhow::{anyhow, bail, ensure, Result};
 
 use crate::plonk_challenger::Challenger;
 use crate::plonk_util::{halo_g, halo_s, pedersen_hash};
-use crate::{AffinePoint, AffinePointTarget, Curve, Field, MsmPrecomputation, PartialWitness, Target, SECURITY_BITS};
+use crate::{AffinePoint, AffinePointTarget, Curve, Field, MsmPrecomputation, PartialWitness, Target, SECURITY_BITS, NUM_WIRES};
 
 #[derive(Debug, Clone, Copy)]
 pub struct SchnorrProof<C: Curve> {
@@ -46,6 +46,14 @@ pub struct Proof<C: Curve> {
 }
 
 impl<C: Curve> Proof<C> {
+    pub fn get_public_inputs(&self, count: usize) -> Vec<C::ScalarField> {
+        (0..count).map(|i| {
+            let pi_gate_idx = i / NUM_WIRES;
+            let wire_idx = i % NUM_WIRES;
+            self.o_public_inputs[pi_gate_idx].o_wires[wire_idx]
+        }).collect()
+    }
+
     pub fn all_opening_sets(&self) -> Vec<OpeningSet<C::ScalarField>> {
         [
             self.o_public_inputs.as_slice(),
