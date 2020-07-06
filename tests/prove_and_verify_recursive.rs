@@ -1,8 +1,9 @@
+use anyhow::Result;
 use plonky::{recursive_verification_circuit, verify_proof_circuit, CircuitBuilder, Curve, Field, PartialWitness, Tweedledee, Tweedledum};
 use std::time::Instant;
 
 #[test]
-fn test_proof_trivial_recursive() {
+fn test_proof_trivial_recursive() -> Result<()> {
     let mut builder = CircuitBuilder::<Tweedledee>::new(128);
     let t = builder.constant_wire(<Tweedledee as Curve>::ScalarField::ZERO);
     // builder.assert_zero(t);
@@ -31,12 +32,13 @@ fn test_proof_trivial_recursive() {
         .circuit
         .generate_proof::<Tweedledee>(recursion_witness, &[], true)
         .unwrap();
-    assert!(verify_proof_circuit::<Tweedledum, Tweedledee>(
+    verify_proof_circuit::<Tweedledum, Tweedledee>(
         &[],
         &proof,
         &[],
         &recursion_circuit.circuit,
-        true
-    )
-    .is_ok());
+        true,
+    )?;
+
+    Ok(())
 }

@@ -260,7 +260,7 @@ impl ProofTarget {
             C::ScalarField::try_convert(&values.schnorr_proof.z1)?,
         );
         witness.set_target(
-            self.schnorr_proof.z1,
+            self.schnorr_proof.z2,
             C::ScalarField::try_convert(&values.schnorr_proof.z2)?,
         );
 

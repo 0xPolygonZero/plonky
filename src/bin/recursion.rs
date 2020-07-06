@@ -97,14 +97,14 @@ fn main() -> Result<()> {
     let start = Instant::now();
     let pis =
         RecursionPublicInputs::proof_to_public_inputs::<Tweedledum, Tweedledee>(&inner_proof, &[])?;
-    dbg!(recursion_circuit.circuit.num_public_inputs);
-    dbg!(verify_proof_circuit::<Tweedledee, Tweedledum>(
+    println!("Number of public inputs: {}", recursion_circuit.circuit.num_public_inputs);
+    verify_proof_circuit::<Tweedledee, Tweedledum>(
         &pis,
         &proof,
         &[],
         &recursion_circuit.circuit,
         true
-    ));
+    )?;
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     Ok(())
 }

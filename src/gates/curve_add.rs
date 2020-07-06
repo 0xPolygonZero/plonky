@@ -179,6 +179,10 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> WitnessGenerator<C
             gate: self.index,
             input: Self::WIRE_ADDEND_Y,
         };
+        let scalar_bit_target = Wire {
+            gate: self.index,
+            input: Self::WIRE_SCALAR_BIT,
+        };
         let inverse_target = Wire {
             gate: self.index,
             input: Self::WIRE_INVERSE,
@@ -196,7 +200,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> WitnessGenerator<C
         let addend_x = witness.get_wire(addend_x_target);
         let addend_y = witness.get_wire(addend_y_target);
 
-        let scalar_bit = C::ScalarField::ONE;
+        let scalar_bit = witness.get_wire(scalar_bit_target);
         debug_assert!(scalar_bit.is_zero() || scalar_bit.is_one());
 
         let scalar_acc_new = scalar_acc_old.double() + scalar_bit;

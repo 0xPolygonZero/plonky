@@ -1,6 +1,6 @@
 use crate::partition::get_subgroup_shift;
 use crate::witness::Witness;
-use crate::{fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, AffinePoint, CircuitBuilder, Curve, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, ProjectivePoint, Target, NUM_ROUTED_WIRES, msm_execute_parallel};
+use crate::{fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_execute_parallel, AffinePoint, CircuitBuilder, Curve, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, ProjectivePoint, Target, NUM_ROUTED_WIRES};
 use rayon::prelude::*;
 
 /// Evaluate the polynomial which vanishes on any multiplicative subgroup of a given order `n`.
@@ -82,9 +82,9 @@ pub(crate) fn halo_n_mul<C: HaloCurve>(s_bits: &[bool], p: AffinePoint<C>) -> Af
     debug_assert_eq!(s_bits.len() % 2, 0, "Number of scalar bits must be even");
 
     let p_p = p.to_projective();
-    let p_n = - p_p;
+    let p_n = -p_p;
     let endo_p_p = p.endomorphism().to_projective();
-    let endo_p_n = - endo_p_p;
+    let endo_p_n = -endo_p_p;
 
     let mut acc = ProjectivePoint::<C>::ZERO;
 
@@ -280,7 +280,8 @@ pub(crate) fn polynomial_degree<F: Field>(
     coeffs.iter().rev().skip_while(|c| c.is_zero()).count() - 1
 }
 
-// TODO: Maybe a streaming version using an `Iterator` would be faster and wouldn't require as much memory for large circuits. 
+// TODO: Maybe a streaming version using an `Iterator` would be faster and wouldn't require as much memory for large circuits.
+// TODO: Optimize this.
 pub fn halo_s<F: Field>(us: &[F]) -> Vec<F> {
     let n = 1 << us.len();
     let mut res = vec![F::ONE; n];

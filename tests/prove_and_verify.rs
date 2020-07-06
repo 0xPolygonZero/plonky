@@ -1,3 +1,4 @@
+use anyhow::Result;
 use plonky::{blake_hash_base_field_to_curve, msm_parallel, rescue_hash_1_to_1, rescue_hash_n_to_1, rescue_sponge, verify_proof_circuit, AffinePoint, Circuit, CircuitBuilder, Curve, CurveMulOp, Field, HaloCurve, PartialWitness, Tweedledee, Tweedledum, Witness};
 use std::time::Instant;
 
@@ -16,18 +17,18 @@ fn get_trivial_circuit<C: HaloCurve>(x: C::ScalarField) -> (Circuit<C>, Witness<
 }
 
 #[test]
-fn test_proof_trivial_circuit() {
+fn test_proof_trivial_circuit() -> Result<()> {
     let (circuit, witness) = get_trivial_circuit(<Tweedledee as Curve>::ScalarField::ZERO);
     let proof = circuit
         .generate_proof::<Tweedledum>(witness.clone(), &[], true)
         .unwrap();
-    assert!(
-        verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok()
-    );
+    verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true)?;
+
+    Ok(())
 }
 
 #[test]
-fn test_proof_trivial_circuit_many_proofs() {
+fn test_proof_trivial_circuit_many_proofs() -> Result<()> {
     let mut old_proofs = Vec::new();
     for _ in 0..10 {
         let (circuit, witness) = get_trivial_circuit(<Tweedledee as Curve>::ScalarField::ZERO);
@@ -44,18 +45,13 @@ fn test_proof_trivial_circuit_many_proofs() {
     let proof = circuit
         .generate_proof::<Tweedledum>(witness.clone(), &old_proofs, true)
         .unwrap();
-    assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(
-        &[],
-        &proof,
-        &old_proofs,
-        &circuit,
-        true
-    )
-    .is_ok());
+    verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &old_proofs, &circuit, true)?;
+
+    Ok(())
 }
 
 #[test]
-fn test_proof_sum_circuit() {
+fn test_proof_sum_circuit() -> Result<()> {
     let mut builder = CircuitBuilder::<Tweedledee>::new(128);
     let t1 = builder.constant_wire(<Tweedledee as Curve>::ScalarField::ZERO);
     let t2 = builder.constant_wire(<Tweedledee as Curve>::ScalarField::ZERO);
@@ -69,14 +65,14 @@ fn test_proof_sum_circuit() {
     let proof = circuit
         .generate_proof::<Tweedledum>(witness, &[], true)
         .unwrap();
-    assert!(
-        verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok()
-    );
+    verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true)?;
+
+    Ok(())
 }
 
 #[test]
 #[ignore]
-fn test_proof_sum_big_circuit() {
+fn test_proof_sum_big_circuit() -> Result<()> {
     let now = Instant::now();
     let mut builder = CircuitBuilder::<Tweedledee>::new(128);
     let ts = (0..10_000)
@@ -100,22 +96,16 @@ fn test_proof_sum_big_circuit() {
         .generate_proof::<Tweedledum>(witness, &[], true)
         .unwrap();
     dbg!(now.elapsed());
-    assert!(
-        verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, false).is_ok()
-    );
+    verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, false)?;
     dbg!(now.elapsed());
-    assert!(
-        verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok()
-    );
+    verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true)?;
     dbg!(now.elapsed());
-    assert!(
-        verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, false).is_ok()
-    );
-    dbg!(now.elapsed());
+
+    Ok(())
 }
 
 #[test]
-fn test_proof_quadratic_circuit() {
+fn test_proof_quadratic_circuit() -> Result<()> {
     let mut builder = CircuitBuilder::<Tweedledee>::new(128);
     let one = builder.one_wire();
     let t = builder.add_virtual_target();
@@ -131,13 +121,13 @@ fn test_proof_quadratic_circuit() {
     let proof = circuit
         .generate_proof::<Tweedledum>(witness, &[], true)
         .unwrap();
-    assert!(
-        verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok()
-    );
+    verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true)?;
+
+    Ok(())
 }
 
 #[test]
-fn test_proof_public_input1_circuit() {
+fn test_proof_public_input1_circuit() -> Result<()> {
     // Set public inputs pi1 = 2 and check that pi1 - 2 == 0.
     let mut builder = CircuitBuilder::<Tweedledee>::new(128);
     let pi = builder.stage_public_input();
@@ -158,18 +148,19 @@ fn test_proof_public_input1_circuit() {
         proof.o_public_inputs[0].o_wires[0],
         <Tweedledee as Curve>::ScalarField::TWO
     );
-    assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(
+    verify_proof_circuit::<Tweedledee, Tweedledum>(
         &[<Tweedledee as Curve>::ScalarField::TWO],
         &proof,
         &[],
         &circuit,
-        true
-    )
-    .is_ok());
+        true,
+    )?;
+
+    Ok(())
 }
 
 #[test]
-fn test_proof_public_input2_circuit() {
+fn test_proof_public_input2_circuit() -> Result<()> {
     // Set many random public inputs
     let n = 200;
     let values = (0..n)
@@ -194,14 +185,13 @@ fn test_proof_public_input2_circuit() {
             proof.o_public_inputs[i / NUM_WIRES].o_wires[i % NUM_WIRES],
         )
     });
-    assert!(
-        verify_proof_circuit::<Tweedledee, Tweedledum>(&values, &proof, &[], &circuit, true)
-            .is_ok()
-    );
+    verify_proof_circuit::<Tweedledee, Tweedledum>(&values, &proof, &[], &circuit, true)?;
+
+    Ok(())
 }
 
 #[test]
-fn test_proof_sponge_circuit() {
+fn test_proof_sponge_circuit() -> Result<()> {
     type F = <Tweedledee as Curve>::ScalarField;
     let mut builder = CircuitBuilder::<Tweedledee>::new(128);
     let c = builder.constant_wire(F::ZERO);
@@ -212,13 +202,13 @@ fn test_proof_sponge_circuit() {
     let proof = circuit
         .generate_proof::<Tweedledum>(witness, &[], true)
         .unwrap();
-    assert!(
-        verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok()
-    );
+    verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true)?;
+
+    Ok(())
 }
 
 #[test]
-fn test_rescue_hash() {
+fn test_rescue_hash() -> Result<()> {
     type F = <Tweedledee as Curve>::ScalarField;
     let x = F::rand();
     let h = rescue_hash_1_to_1(x, 128);
@@ -235,13 +225,13 @@ fn test_rescue_hash() {
     let proof = circuit
         .generate_proof::<Tweedledum>(witness, &[], true)
         .unwrap();
-    assert!(
-        verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok()
-    );
+    verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true)?;
+
+    Ok(())
 }
 
 #[test]
-fn test_curve_add() {
+fn test_curve_add() -> Result<()> {
     type F = <Tweedledee as Curve>::ScalarField;
 
     let a = blake_hash_base_field_to_curve::<Tweedledum>(F::rand());
@@ -255,11 +245,7 @@ fn test_curve_add() {
     let tb = builder.add_virtual_point_target();
     let tsum_purported = builder.curve_add::<Tweedledum>(ta, tb);
     let tsum_true = builder.constant_affine_point(sum);
-    // let should_be_zero = builder.curve_sub::<Tweedledum>(tsum_purported, tsum_true);
     builder.copy_curve(tsum_purported, tsum_true);
-
-    // builder.assert_zero(should_be_zero.x);
-    // builder.assert_zero(should_be_zero.y);
 
     let mut partial_witness = PartialWitness::new();
     partial_witness.set_point_target(ta, a);
@@ -272,13 +258,13 @@ fn test_curve_add() {
     let proof = circuit
         .generate_proof::<Tweedledum>(witness, &[], true)
         .unwrap();
-    assert!(
-        verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok()
-    );
+    verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true)?;
+
+    Ok(())
 }
 
 #[test]
-fn test_curve_msm() {
+fn test_curve_msm() -> Result<()> {
     type SF = <Tweedledee as Curve>::ScalarField;
     type BF = <Tweedledee as Curve>::BaseField;
     let n = 100;
@@ -299,9 +285,8 @@ fn test_curve_msm() {
             .collect::<Vec<_>>(),
     );
     let tres_true = builder.constant_affine_point(res.to_affine());
-    let should_be_zero = builder.curve_sub::<Tweedledee>(tres_purported, tres_true);
-    builder.assert_zero(should_be_zero.x);
-    builder.assert_zero(should_be_zero.y);
+    builder.copy_curve(tres_purported, tres_true);
+
     let mut partial_witness = PartialWitness::new();
     partial_witness.set_targets(
         &txs,
@@ -315,7 +300,7 @@ fn test_curve_msm() {
     let proof = circuit
         .generate_proof::<Tweedledee>(witness, &[], true)
         .unwrap();
-    assert!(
-        verify_proof_circuit::<Tweedledum, Tweedledee>(&[], &proof, &[], &circuit, true).is_ok()
-    );
+    verify_proof_circuit::<Tweedledum, Tweedledee>(&[], &proof, &[], &circuit, true)?;
+
+    Ok(())
 }
