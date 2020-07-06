@@ -116,8 +116,11 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveA
 
         let computed_lambda = builder.mul(y1_minus_y2, inverse);
         let x3 = builder.mul_sub(lambda, lambda, x1_plus_x2);
-        let x1_minus_x3 = builder.sub(x1, x3);
-        let y3 = builder.mul_sub(lambda, x1_minus_x3, y1);
+        let x1_minus_x4 = builder.sub(x1, x4);
+        // We subtract x4 instead of x3 in order to minimize degree. This will give an incorrect
+        // result for y3 if x3 != x4, which happens when scalar_bit = 0, but in that case y3 will
+        // be ignored (i.e. multiplied by zero), so we're okay.
+        let y3 = builder.mul_sub(lambda, x1_minus_x4, y1);
 
         let not_scalar_bit = builder.not(scalar_bit);
         let x1_conditioned = builder.mul(x1, not_scalar_bit);
