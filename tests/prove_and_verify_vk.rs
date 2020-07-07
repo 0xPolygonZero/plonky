@@ -259,7 +259,7 @@ fn test_curve_add_vk() -> Result<()> {
 fn test_curve_msm_vk() -> Result<()> {
     type SF = <Tweedledee as Curve>::ScalarField;
     type BF = <Tweedledee as Curve>::BaseField;
-    let n = 100;
+    let n = 10;
     let xs = (0..n).map(|_| SF::rand()).collect::<Vec<_>>();
     let ps = (0..n)
         .map(|_| blake_hash_base_field_to_curve::<Tweedledee>(BF::rand()))

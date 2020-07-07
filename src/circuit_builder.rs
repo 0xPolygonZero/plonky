@@ -160,12 +160,17 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     pub fn assert_binary(&mut self, x: Target) {
-        let _zero = self.zero_wire();
         let one = self.one_wire();
 
         let x_minus_1 = self.sub(x, one);
         let product = self.mul(x, x_minus_1);
         self.assert_zero(product);
+    }
+
+    /// Returns the negation of a bit `b`, which is assumed to be in `{0, 1}`.
+    pub fn not(&mut self, b: Target) -> Target {
+        let one = self.one_wire();
+        self.sub(one, b)
     }
 
     pub fn add(&mut self, x: Target, y: Target) -> Target {
@@ -1392,37 +1397,5 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
 
         partitions
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::{Tweedledee, Curve, blake_hash_base_field_to_curve, Tweedledum, Field, CircuitBuilder, PartialWitness, verify_proof_circuit};
-
-    #[test]
-    fn test_curve_add() {
-        type F = <Tweedledee as Curve>::ScalarField;
-
-        let a = blake_hash_base_field_to_curve::<Tweedledum>(F::rand());
-        let b = blake_hash_base_field_to_curve::<Tweedledum>(F::rand());
-        let sum = (a + b).to_affine();
-
-        let mut builder = CircuitBuilder::<Tweedledee>::new(128);
-
-        let ta =  builder.add_virtual_point_target();
-        let tb =  builder.add_virtual_point_target();
-        let tsum_purported = builder.curve_add::<Tweedledum>(ta, tb);
-        let tsum_true = builder.constant_affine_point(sum);
-        builder.copy_curve(tsum_purported, tsum_true);
-
-        let mut partial_witness = PartialWitness::new();
-        partial_witness.set_point_target(ta, a);
-        partial_witness.set_point_target(tb, b);
-
-        let circuit = builder.build();
-        let witness = circuit.generate_witness(partial_witness);
-
-        let proof = circuit.generate_proof::<Tweedledum>(witness, &[], true).unwrap();
-        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok());
     }
 }

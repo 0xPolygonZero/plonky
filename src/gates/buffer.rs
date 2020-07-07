@@ -24,7 +24,7 @@ impl<C: HaloCurve> BufferGate<C> {
 impl<C: HaloCurve> Gate<C> for BufferGate<C> {
     const NAME: &'static str = "BufferGate";
 
-    const PREFIX: &'static [bool] = &[true, false, true, false, true, false];
+    const PREFIX: &'static [bool] = &[true, false, true, false, false, false];
 
     fn evaluate_unfiltered(
         _local_constant_values: &[C::ScalarField],
