@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::time::Instant;
 
-use plonky::{recursive_verification_circuit, verify_proof_circuit, BufferGate, Circuit, CircuitBuilder, Field, PartialWitness, RecursionPublicInputs, Tweedledee, Tweedledum};
+use plonky::{recursive_verification_circuit, verify_proof, BufferGate, Circuit, CircuitBuilder, Field, PartialWitness, RecursionPublicInputs, Tweedledee, Tweedledum};
 
 const INNER_PROOF_DEGREE_POW: usize = 14;
 const INNER_PROOF_DEGREE: usize = 1 << INNER_PROOF_DEGREE_POW;
@@ -31,13 +31,8 @@ fn main() -> Result<()> {
 
     println!("Verifying inner proof");
     let start = Instant::now();
-    verify_proof_circuit::<Tweedledum, Tweedledee>(
-        &[],
-        &inner_proof,
-        &old_proofs,
-        &inner_circuit,
-        true
-    )?;
+    let inner_vk = inner_circuit.to_vk();
+    verify_proof::<Tweedledum, Tweedledee>(&[], &inner_proof, &old_proofs, &inner_vk, true)?;
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!();
 
@@ -96,14 +91,12 @@ fn main() -> Result<()> {
     println!("Verifying proof...");
     let start = Instant::now();
     let pis = proof.get_public_inputs(recursion_circuit.circuit.num_public_inputs);
-    println!("Number of public inputs: {}", recursion_circuit.circuit.num_public_inputs);
-    verify_proof_circuit::<Tweedledee, Tweedledum>(
-        &pis,
-        &proof,
-        &[],
-        &recursion_circuit.circuit,
-        true
-    )?;
+    println!(
+        "Number of public inputs: {}",
+        recursion_circuit.circuit.num_public_inputs
+    );
+    let vk = recursion_circuit.circuit.to_vk();
+    verify_proof::<Tweedledee, Tweedledum>(&pis, &proof, &[], &vk, true)?;
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     Ok(())
 }

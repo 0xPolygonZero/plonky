@@ -11,129 +11,6 @@ use crate::{blake_hash_usize_to_curve, hash_usize_to_curve, msm_execute_parallel
 
 pub const SECURITY_BITS: usize = 128;
 
-/// Verifies a proof `proof` and some old proofs G points for a given circuit.
-/// If `verify_g` is `true`, the function completely verifies the proof, including the
-/// linear time check of the G point.
-/// If `verify_g` is `false`, returns an `OldProof` to be checked in a later verification.
-pub fn verify_proof_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
-    public_inputs: &[C::ScalarField],
-    proof: &Proof<C>,
-    old_proofs: &[OldProof<C>],
-    circuit: &Circuit<C>,
-    verify_g: bool,
-) -> Result<Option<OldProof<C>>> {
-    // Verify that the proof parameters are valid.
-    check_proof_parameters(proof)?;
-
-    // Check public inputs.
-    verify_public_inputs(public_inputs, proof, circuit.num_public_inputs)?;
-
-    // Observe the transcript and generate the associated challenge points using Fiat-Shamir.
-    let challs = proof.get_challenges()?;
-
-    // Check the old proofs' openings.
-    verify_old_proof_evaluation(old_proofs, proof, challs.zeta)?;
-
-    let degree = circuit.degree();
-
-    let constraint_terms = evaluate_all_constraints::<C, InnerC>(
-        &proof.o_local.o_constants,
-        &proof.o_local.o_wires,
-        &proof.o_right.o_wires,
-        &proof.o_below.o_wires,
-    );
-
-    // Evaluate zeta^degree.
-    let zeta_power_d = challs.zeta.exp_usize(degree);
-    // Evaluate Z_H(zeta).
-    let one = <C::ScalarField as Field>::ONE;
-    let zero_of_zeta = zeta_power_d - one;
-
-    // Evaluate L_1(zeta) = (zeta^degree - 1) / (degree * (zeta - 1)).
-    let lagrange_1_eval =
-        zero_of_zeta / (C::ScalarField::from_canonical_usize(degree) * (challs.zeta - one));
-
-    // Get z(zeta), z(g.zeta) from the proof openings.
-    let (z_x, z_gx) = (proof.o_local.o_plonk_z, proof.o_right.o_plonk_z);
-    // Evaluate the L_1(x) (Z(x) - 1) vanishing term.
-    let vanishing_z_1_term = lagrange_1_eval * (z_x - one);
-
-    // Compute Z(zeta) f'(zeta) - Z(g * zeta) g'(zeta), which should vanish on H.
-    let mut f_prime = one;
-    let mut g_prime = one;
-    for i in 0..NUM_ROUTED_WIRES {
-        let k_i = get_subgroup_shift::<C::ScalarField>(i);
-        let s_id = k_i * challs.zeta;
-        let beta_s_id = challs.beta * s_id;
-        let beta_s_sigma = challs.beta * proof.o_local.o_plonk_sigmas[i];
-        let f_prime_part = proof.o_local.o_wires[i] + beta_s_id + challs.gamma;
-        let g_prime_part = proof.o_local.o_wires[i] + beta_s_sigma + challs.gamma;
-        f_prime = f_prime * f_prime_part;
-        g_prime = g_prime * g_prime_part;
-    }
-    let vanishing_v_shift_term = f_prime * z_x - g_prime * z_gx;
-
-    let vanishing_terms = [
-        vec![vanishing_z_1_term],
-        vec![vanishing_v_shift_term],
-        constraint_terms,
-    ]
-    .concat();
-
-    // Compute t(zeta).
-    let computed_t_opening = reduce_with_powers(&vanishing_terms, challs.alpha) / zero_of_zeta;
-
-    // Compute the purported opening of t(zeta).
-    let purported_t_opening = reduce_with_powers(&proof.o_local.o_plonk_t, zeta_power_d);
-
-    // If the two values differ, the proof is invalid.
-    if computed_t_opening != purported_t_opening {
-        bail!("Incorrect opening of the t polynomial.");
-    }
-
-    // Verify polynomial commitment openings.
-    if !verify_all_ipas_circuit::<C>(
-        &circuit,
-        &proof,
-        old_proofs,
-        challs.u,
-        challs.v,
-        challs.u_scaling,
-        challs.zeta,
-        &challs.ipa_challenges,
-        challs.schnorr_challenge,
-    ) {
-        bail!("Invalid IPA proof.");
-    }
-
-    if verify_g {
-        let pedersen_g: Vec<_> = (0..circuit.degree())
-            .map(|i| blake_hash_usize_to_curve::<C>(i))
-            .collect();
-        let w = 8; // TODO: Should really be set dynamically based on MSM size.
-        let pedersen_g_msm_precomputation =
-            msm_precompute(&AffinePoint::batch_to_projective(&pedersen_g), w);
-
-        // Verify that `self.halo_g = <s, G>`.
-        if proof.halo_g
-            == pedersen_hash(
-                &halo_s(&challs.ipa_challenges),
-                &pedersen_g_msm_precomputation,
-            )
-            .to_affine()
-        {
-            Ok(None)
-        } else {
-            bail!("Invalid G point.");
-        }
-    } else {
-        Ok(Some(OldProof {
-            halo_g: proof.halo_g,
-            ipa_challenges: challs.ipa_challenges,
-        }))
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct VerificationKey<C: Curve> {
     pub c_constants: Vec<AffinePoint<C>>,
@@ -143,11 +20,17 @@ pub struct VerificationKey<C: Curve> {
     pub security_bits: usize,
 }
 
+impl<C: HaloCurve> From<Circuit<C>> for VerificationKey<C> {
+    fn from(circuit: Circuit<C>) -> Self {
+        circuit.to_vk()
+    }
+}
+
 /// Verifies a proof `proof` and some old proofs G points for a given verification key.
 /// If `verify_g` is `true`, the function completely verifies the proof, including the
 /// linear time check of the G point.
 /// If `verify_g` is `false`, returns an `OldProof` to be checked in a later verification.
-pub fn verify_proof_vk<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
+pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     public_inputs: &[C::ScalarField],
     proof: &Proof<C>,
     old_proofs: &[OldProof<C>],
@@ -224,8 +107,16 @@ pub fn verify_proof_vk<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarFiel
     }
 
     // Verify polynomial commitment openings.
-    if !verify_all_ipas_vk::<C>(
-        vk,
+    let subgroup_generator_n = C::ScalarField::primitive_root_of_unity(log2_strict(vk.degree));
+    let pedersen_h = blake_hash_usize_to_curve(vk.degree);
+    let u_curve = blake_hash_usize_to_curve(vk.degree + 1);
+    if !verify_all_ipas::<C>(
+        &vk.c_constants,
+        &vk.c_s_sigmas,
+        vk.num_public_inputs,
+        subgroup_generator_n,
+        u_curve,
+        pedersen_h,
         proof,
         old_proofs,
         challs.u,
@@ -234,6 +125,7 @@ pub fn verify_proof_vk<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarFiel
         challs.zeta,
         &challs.ipa_challenges,
         challs.schnorr_challenge,
+        vk.security_bits,
     ) {
         bail!("Invalid IPA proof.");
     }
@@ -264,81 +156,6 @@ pub fn verify_proof_vk<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarFiel
             ipa_challenges: challs.ipa_challenges,
         }))
     }
-}
-
-/// Verify all IPAs in the given proof using a reduction to a single polynomial.
-/// Uses a Circuit struct if available to access pre-computed data, e.g, pedersen_h, subgroup_generator_n, etc.
-fn verify_all_ipas_circuit<C: HaloCurve>(
-    circuit: &Circuit<C>,
-    proof: &Proof<C>,
-    old_proofs: &[OldProof<C>],
-    u: C::ScalarField,
-    v: C::ScalarField,
-    u_scaling: C::ScalarField,
-    zeta: C::ScalarField,
-    ipa_challenges: &[C::ScalarField],
-    schnorr_challenge: C::ScalarField,
-) -> bool {
-    verify_all_ipas(
-        &circuit
-            .c_constants
-            .iter()
-            .map(|c| c.to_affine())
-            .collect::<Vec<_>>(),
-        &circuit
-            .c_s_sigmas
-            .iter()
-            .map(|c| c.to_affine())
-            .collect::<Vec<_>>(),
-        circuit.num_public_inputs,
-        circuit.subgroup_generator_n,
-        circuit.u,
-        circuit.pedersen_h,
-        proof,
-        old_proofs,
-        u,
-        v,
-        u_scaling,
-        zeta,
-        ipa_challenges,
-        schnorr_challenge,
-        circuit.security_bits,
-    )
-}
-
-/// Verify all IPAs in the given proof using a reduction to a single polynomial.
-/// Uses a VerificationKey struct to compute necessary data.
-fn verify_all_ipas_vk<C: HaloCurve>(
-    vk: &VerificationKey<C>,
-    proof: &Proof<C>,
-    old_proofs: &[OldProof<C>],
-    u: C::ScalarField,
-    v: C::ScalarField,
-    u_scaling: C::ScalarField,
-    zeta: C::ScalarField,
-    ipa_challenges: &[C::ScalarField],
-    schnorr_challenge: C::ScalarField,
-) -> bool {
-    let subgroup_generator_n = C::ScalarField::primitive_root_of_unity(log2_strict(vk.degree));
-    let pedersen_h = blake_hash_usize_to_curve(vk.degree);
-    let u_curve = blake_hash_usize_to_curve(vk.degree + 1);
-    verify_all_ipas(
-        &vk.c_constants,
-        &vk.c_s_sigmas,
-        vk.num_public_inputs,
-        subgroup_generator_n,
-        u_curve,
-        pedersen_h,
-        proof,
-        old_proofs,
-        u,
-        v,
-        u_scaling,
-        zeta,
-        ipa_challenges,
-        schnorr_challenge,
-        vk.security_bits,
-    )
 }
 
 /// Verify all IPAs in the given proof using a reduction to a single polynomial.

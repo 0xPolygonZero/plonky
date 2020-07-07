@@ -140,7 +140,11 @@ impl<C: HaloCurve> CircuitBuilder<C> {
                 Vec::new()
             }
 
-            fn generate(&self, _constants: &Vec<Vec<F>>, witness: &PartialWitness<F>) -> PartialWitness<F> {
+            fn generate(
+                &self,
+                _constants: &Vec<Vec<F>>,
+                witness: &PartialWitness<F>,
+            ) -> PartialWitness<F> {
                 let mut result = PartialWitness::new();
                 result.set_target(self.target, self.c);
                 result
@@ -1398,7 +1402,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Tweedledee, Curve, blake_hash_base_field_to_curve, Tweedledum, Field, CircuitBuilder, PartialWitness, verify_proof_circuit};
+    use crate::{blake_hash_base_field_to_curve, verify_proof, CircuitBuilder, Curve, Field, PartialWitness, Tweedledee, Tweedledum};
 
     #[test]
     fn test_curve_add() {
@@ -1410,8 +1414,8 @@ mod tests {
 
         let mut builder = CircuitBuilder::<Tweedledee>::new(128);
 
-        let ta =  builder.add_virtual_point_target();
-        let tb =  builder.add_virtual_point_target();
+        let ta = builder.add_virtual_point_target();
+        let tb = builder.add_virtual_point_target();
         let tsum_purported = builder.curve_add::<Tweedledum>(ta, tb);
         let tsum_true = builder.constant_affine_point(sum);
         builder.copy_curve(tsum_purported, tsum_true);
@@ -1423,7 +1427,10 @@ mod tests {
         let circuit = builder.build();
         let witness = circuit.generate_witness(partial_witness);
 
-        let proof = circuit.generate_proof::<Tweedledum>(witness, &[], true).unwrap();
-        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok());
+        let proof = circuit
+            .generate_proof::<Tweedledum>(witness, &[], true)
+            .unwrap();
+        let vk = circuit.to_vk();
+        assert!(verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true).is_ok());
     }
 }
