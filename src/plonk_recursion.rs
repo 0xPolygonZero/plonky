@@ -103,45 +103,6 @@ impl RecursionPublicInputs {
 
         Ok(())
     }
-
-    pub fn proof_to_public_inputs<C: Curve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
-        proof: &Proof<C>,
-        old_proofs: &[OldProof<InnerC>],
-    ) -> Result<Vec<C::BaseField>> {
-        let challs = proof.get_challenges()?;
-        let mut pis = [
-            C::ScalarField::try_convert_all::<C::BaseField>(&[
-                challs.beta,
-                challs.gamma,
-                challs.alpha,
-                challs.zeta,
-            ])?
-            .as_slice(),
-            C::ScalarField::try_convert_all::<C::BaseField>(&proof.o_local.o_constants)?.as_slice(),
-            C::ScalarField::try_convert_all::<C::BaseField>(&proof.o_local.o_plonk_sigmas)?
-                .as_slice(),
-            C::ScalarField::try_convert_all::<C::BaseField>(&proof.o_local.o_wires)?.as_slice(),
-            C::ScalarField::try_convert_all::<C::BaseField>(&proof.o_right.o_wires)?.as_slice(),
-            C::ScalarField::try_convert_all::<C::BaseField>(&proof.o_below.o_wires)?.as_slice(),
-            C::ScalarField::try_convert_all::<C::BaseField>(&[
-                proof.o_local.o_plonk_z,
-                proof.o_right.o_plonk_z,
-            ])?
-            .as_slice(),
-            C::ScalarField::try_convert_all::<C::BaseField>(&proof.o_local.o_plonk_t)?.as_slice(),
-            C::ScalarField::try_convert_all::<C::BaseField>(&challs.ipa_challenges)?.as_slice(),
-            C::ScalarField::try_convert_all::<C::BaseField>(
-                &C::ScalarField::batch_multiplicative_inverse(&challs.ipa_challenges),
-            )?
-            .as_slice(),
-        ]
-        .concat();
-        for p in old_proofs {
-            pis.push(C::ScalarField::try_convert::<C::BaseField>(&p.halo_g.x)?);
-            pis.push(C::ScalarField::try_convert::<C::BaseField>(&p.halo_g.y)?);
-        }
-        Ok(pis)
-    }
 }
 
 /// The number of `PublicInputGate`s needed to route the given number of public inputs.

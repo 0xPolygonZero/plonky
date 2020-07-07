@@ -95,8 +95,7 @@ fn main() -> Result<()> {
 
     println!("Verifying proof...");
     let start = Instant::now();
-    let pis =
-        RecursionPublicInputs::proof_to_public_inputs::<Tweedledum, Tweedledee>(&inner_proof, &[])?;
+    let pis = proof.get_public_inputs(recursion_circuit.circuit.num_public_inputs);
     println!("Number of public inputs: {}", recursion_circuit.circuit.num_public_inputs);
     verify_proof_circuit::<Tweedledee, Tweedledum>(
         &pis,
