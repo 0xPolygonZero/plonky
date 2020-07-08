@@ -140,7 +140,11 @@ impl<C: HaloCurve> CircuitBuilder<C> {
                 Vec::new()
             }
 
-            fn generate(&self, _constants: &Vec<Vec<F>>, witness: &PartialWitness<F>) -> PartialWitness<F> {
+            fn generate(
+                &self,
+                _constants: &Vec<Vec<F>>,
+                witness: &PartialWitness<F>,
+            ) -> PartialWitness<F> {
                 let mut result = PartialWitness::new();
                 result.set_target(self.target, self.c);
                 result
@@ -933,7 +937,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             // Normally, we will take the double gate's outputs as the new accumulator. If we just
             // completed the last iteration of the MSM though, then we don't want to perform a final
             // doubling, so we will take its inputs as the result instead.
-            if i == f_bits - 1 {
+            if i == 0 {
                 acc = AffinePointTarget {
                     x: Target::Wire(Wire {
                         gate: idx_dbl,
@@ -955,10 +959,10 @@ impl<C: HaloCurve> CircuitBuilder<C> {
                         input: CurveDblGate::<C, InnerC>::WIRE_Y_NEW,
                     }),
                 };
-            }
 
-            // Also double the filler, so we can subtract out a rescaled version later.
-            filler = filler.double();
+                // Also double the filler, so we can subtract out a rescaled version later.
+                filler = filler.double();
+            }
         }
 
         // Subtract (a rescaled version of) the arbitrary nonzero value that we started with.
@@ -1393,37 +1397,5 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
 
         partitions
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::{Tweedledee, Curve, blake_hash_base_field_to_curve, Tweedledum, Field, CircuitBuilder, PartialWitness, verify_proof_circuit};
-
-    #[test]
-    fn test_curve_add() {
-        type F = <Tweedledee as Curve>::ScalarField;
-
-        let a = blake_hash_base_field_to_curve::<Tweedledum>(F::rand());
-        let b = blake_hash_base_field_to_curve::<Tweedledum>(F::rand());
-        let sum = (a + b).to_affine();
-
-        let mut builder = CircuitBuilder::<Tweedledee>::new(128);
-
-        let ta =  builder.add_virtual_point_target();
-        let tb =  builder.add_virtual_point_target();
-        let tsum_purported = builder.curve_add::<Tweedledum>(ta, tb);
-        let tsum_true = builder.constant_affine_point(sum);
-        builder.copy_curve(tsum_purported, tsum_true);
-
-        let mut partial_witness = PartialWitness::new();
-        partial_witness.set_point_target(ta, a);
-        partial_witness.set_point_target(tb, b);
-
-        let circuit = builder.build();
-        let witness = circuit.generate_witness(partial_witness);
-
-        let proof = circuit.generate_proof::<Tweedledum>(witness, &[], true).unwrap();
-        assert!(verify_proof_circuit::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit, true).is_ok());
     }
 }
