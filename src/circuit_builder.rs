@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::{AffinePoint, AffinePointTarget, blake_hash_base_field_to_curve, blake_hash_usize_to_curve, Circuit, Curve, CurveMsmEndoResult, CurveMulEndoResult, CurveMulOp, fft_precompute, Field, generate_rescue_constants, HaloCurve, msm_precompute, NUM_CONSTANTS, NUM_WIRES, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator};
 use crate::gates::*;
-use crate::plonk_util::{coeffs_to_values_padded, sigma_polynomials, values_to_coeffs};
+use crate::plonk_util::{coeffs_to_values_padded, sigma_polynomials, values_to_coeffs, halo_n};
 use crate::poly_commit::PolynomialCommitment;
 use crate::util::{ceil_div_usize, log2_strict, transpose};
 use std::marker::PhantomData;
@@ -862,6 +862,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         struct ResultGenerator<InnerC: HaloCurve> {
             mul: CurveMulOp,
             result: AffinePointTarget,
+            security_bits: usize,
             _phantom: PhantomData<InnerC>,
         }
 
@@ -877,9 +878,12 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             ) -> PartialWitness<InnerC::BaseField> {
                 let scalar = witness.get_target(self.mul.scalar)
                     .try_convert::<InnerC::ScalarField>().expect("Improbable");
-                let scalar_inv = scalar.multiplicative_inverse().expect("Can't invert zero");
+                let scalar_bits = &scalar.to_canonical_bool_vec()[..self.security_bits];
+                let n_scalar = halo_n::<InnerC>(scalar_bits);
+                let n_scalar_inv = n_scalar.multiplicative_inverse().expect("Can't invert zero");
+
                 let point = witness.get_point_target(self.mul.point);
-                let result = (InnerC::convert(scalar_inv) * point.to_projective()).to_affine();
+                let result = (InnerC::convert(n_scalar_inv) * point.to_projective()).to_affine();
 
                 let mut result_witness = PartialWitness::new();
                 result_witness.set_point_target(self.result, result);
@@ -891,14 +895,19 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         self.add_generator(ResultGenerator::<InnerC> {
             mul,
             result,
+            security_bits: self.security_bits,
             _phantom: PhantomData,
         });
 
         // Compute [n(s)] r, and verify that it matches p.
-        let mul_result = self.curve_mul_endo::<InnerC>(CurveMulOp { scalar, point: result });
+        let mul_result = self.curve_mul_endo::<InnerC>(
+            CurveMulOp { scalar, point: result });
         self.copy_curve(mul_result.mul_result, point);
 
-        CurveMulEndoResult { mul_result: result, actual_scalar: mul_result.actual_scalar }
+        CurveMulEndoResult {
+            mul_result: result,
+            actual_scalar: mul_result.actual_scalar,
+        }
     }
 
     /// Note: This assumes the most significant bit of each scalar is unset. This occurs with high
