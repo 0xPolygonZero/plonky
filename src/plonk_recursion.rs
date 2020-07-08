@@ -34,23 +34,6 @@ pub struct RecursionPublicInputs {
     old_proofs: Vec<PublicInput>,
 }
 
-impl RecursionPublicInputs {
-    fn to_vec(&self) -> Vec<PublicInput> {
-        [
-            &[self.beta, self.gamma, self.alpha, self.zeta],
-            self.o_constants.as_slice(),
-            self.o_plonk_sigmas.as_slice(),
-            self.o_local_wires.as_slice(),
-            self.o_right_wires.as_slice(),
-            self.o_below_wires.as_slice(),
-            &[self.o_plonk_z_local, self.o_plonk_z_right],
-            self.o_plonk_t.as_slice(),
-            self.old_proofs.as_slice(),
-        ]
-        .concat()
-    }
-}
-
 /// The number of `PublicInputGate`s needed to route the given number of public inputs.
 fn num_public_input_gates(num_public_inputs: usize) -> usize {
     ceil_div_usize(num_public_inputs, NUM_WIRES)
