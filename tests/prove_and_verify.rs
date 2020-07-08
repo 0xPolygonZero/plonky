@@ -239,7 +239,6 @@ fn test_curve_add() -> Result<()> {
     let mut partial_witness = PartialWitness::new();
     partial_witness.set_point_target(ta, a);
     partial_witness.set_point_target(tb, b);
-    partial_witness.set_point_target(tsum_purported, sum);
 
     let circuit = builder.build();
     let witness = circuit.generate_witness(partial_witness);
@@ -258,7 +257,7 @@ fn test_curve_add() -> Result<()> {
 fn test_curve_msm() -> Result<()> {
     type SF = <Tweedledee as Curve>::ScalarField;
     type BF = <Tweedledee as Curve>::BaseField;
-    let n = 100;
+    let n = 10;
     let xs = (0..n).map(|_| SF::rand()).collect::<Vec<_>>();
     let ps = (0..n)
         .map(|_| blake_hash_base_field_to_curve::<Tweedledee>(BF::rand()))
