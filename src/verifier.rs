@@ -7,7 +7,7 @@ use crate::gates::evaluate_all_constraints;
 use crate::plonk_proof::OldProof;
 use crate::plonk_util::{halo_g, halo_n, halo_n_mul, halo_s, pedersen_hash, powers, reduce_with_powers};
 use crate::util::{ceil_div_usize, log2_strict};
-use crate::{blake_hash_usize_to_curve, hash_usize_to_curve, msm_execute_parallel, msm_precompute, AffinePoint, Circuit, Curve, Field, HaloCurve, ProjectivePoint, Proof, SchnorrProof, GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES};
+use crate::{blake_hash_usize_to_curve, hash_usize_to_curve, msm_execute_parallel, msm_precompute, AffinePoint, Circuit, Field, HaloCurve, ProjectivePoint, Proof, SchnorrProof, GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES};
 
 pub const SECURITY_BITS: usize = 128;
 

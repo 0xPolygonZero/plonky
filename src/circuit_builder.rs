@@ -1177,7 +1177,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             // Normally, we will take the double gate's outputs as the new accumulator. If we just
             // completed the last iteration of the MSM though, then we don't want to perform a final
             // doubling, so we will take its inputs as the result instead.
-            if i == scalar_bits - 1 {
+            if i == 0 {
                 acc = AffinePointTarget {
                     x: Target::Wire(Wire {
                         gate,
@@ -1199,10 +1199,10 @@ impl<C: HaloCurve> CircuitBuilder<C> {
                         input: CurveDblGate::<C, InnerC>::WIRE_Y_NEW,
                     }),
                 };
-            }
 
-            // Also double the filler, so we can subtract out a rescaled version later.
-            filler = filler.double();
+                // Also double the filler, so we can subtract out a rescaled version later.
+                filler = filler.double();
+            }
         }
 
         // Subtract (a rescaled version of) the arbitrary nonzero value that we started with.
