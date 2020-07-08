@@ -7,12 +7,12 @@ use crate::gates::evaluate_all_constraints;
 use crate::plonk_proof::OldProof;
 use crate::plonk_util::{halo_g, halo_n, halo_n_mul, halo_s, pedersen_hash, powers, reduce_with_powers};
 use crate::util::{ceil_div_usize, log2_strict};
-use crate::{blake_hash_usize_to_curve, hash_usize_to_curve, msm_execute_parallel, msm_precompute, AffinePoint, Circuit, Curve, Field, HaloCurve, ProjectivePoint, Proof, SchnorrProof, GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES};
+use crate::{blake_hash_usize_to_curve, hash_usize_to_curve, msm_execute_parallel, msm_precompute, AffinePoint, Circuit, Field, HaloCurve, ProjectivePoint, Proof, SchnorrProof, GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES};
 
 pub const SECURITY_BITS: usize = 128;
 
 #[derive(Debug, Clone)]
-pub struct VerificationKey<C: Curve> {
+pub struct VerificationKey<C: HaloCurve> {
     pub c_constants: Vec<AffinePoint<C>>,
     pub c_s_sigmas: Vec<AffinePoint<C>>,
     pub degree: usize,
@@ -123,7 +123,7 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
         challs.v,
         challs.u_scaling,
         challs.zeta,
-        &challs.ipa_challenges,
+        &challs.halo_us,
         challs.schnorr_challenge,
         vk.security_bits,
     ) {
@@ -141,7 +141,7 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
         /// Verify that `self.halo_g = <s, G>`.
         if proof.halo_g
             == pedersen_hash(
-                &halo_s(&challs.ipa_challenges),
+                &halo_s(&challs.halo_us),
                 &pedersen_g_msm_precomputation,
             )
             .to_affine()
@@ -153,7 +153,7 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
     } else {
         Ok(Some(OldProof {
             halo_g: proof.halo_g,
-            ipa_challenges: challs.ipa_challenges,
+            halo_us: challs.halo_us,
         }))
     }
 }
@@ -172,7 +172,7 @@ fn verify_all_ipas<C: HaloCurve>(
     v: C::ScalarField,
     u_scaling: C::ScalarField,
     zeta: C::ScalarField,
-    ipa_challenges: &[C::ScalarField],
+    halo_us: &[C::ScalarField],
     schnorr_challenge: C::ScalarField,
     security_bits: usize,
 ) -> bool {
@@ -222,7 +222,7 @@ fn verify_all_ipas<C: HaloCurve>(
     .concat();
     let halo_bs = points
         .iter()
-        .map(|&p| halo_g(p, &ipa_challenges))
+        .map(|&p| halo_g(p, &halo_us))
         .collect::<Vec<_>>();
     let halo_b = reduce_with_powers(&halo_bs, v);
     verify_ipa::<C>(
@@ -230,7 +230,7 @@ fn verify_all_ipas<C: HaloCurve>(
         c_reduction,
         reduced_opening,
         halo_b,
-        ipa_challenges,
+        halo_us,
         u_prime,
         pedersen_h,
         proof.halo_g,
@@ -245,7 +245,7 @@ fn verify_ipa<C: HaloCurve>(
     commitment: ProjectivePoint<C>,
     value: C::ScalarField,
     halo_b: C::ScalarField,
-    ipa_challenges: &[C::ScalarField],
+    halo_us: &[C::ScalarField],
     u_prime: ProjectivePoint<C>,
     pedersen_h: AffinePoint<C>,
     halo_g_curve: AffinePoint<C>,
@@ -263,12 +263,12 @@ fn verify_ipa<C: HaloCurve>(
     // Compute Q as defined in the Halo paper.
     let mut points = proof.halo_l.clone();
     points.extend(proof.halo_r.iter());
-    let mut scalars = ipa_challenges
+    let mut scalars = halo_us
         .iter()
         .map(|u| u.square())
         .collect::<Vec<_>>();
     scalars.extend(
-        ipa_challenges
+        halo_us
             .iter()
             .map(|chal| chal.multiplicative_inverse_assuming_nonzero().square()),
     );
@@ -283,7 +283,7 @@ fn verify_ipa<C: HaloCurve>(
 }
 
 /// Verifies that the purported public inputs in a proof match a given set of scalars.
-fn verify_public_inputs<C: Curve>(
+fn verify_public_inputs<C: HaloCurve>(
     public_inputs: &[C::ScalarField],
     proof: &Proof<C>,
     num_public_inputs: usize,
@@ -301,7 +301,7 @@ fn verify_public_inputs<C: Curve>(
 }
 
 /// Verifies that the purported openings at `zeta` for the old proofs in `old_proofs` is valid.
-fn verify_old_proof_evaluation<C: Curve>(
+fn verify_old_proof_evaluation<C: HaloCurve>(
     old_proofs: &[OldProof<C>],
     proof: &Proof<C>,
     zeta: C::ScalarField,
@@ -311,7 +311,7 @@ fn verify_old_proof_evaluation<C: Curve>(
     }
     for (i, p) in old_proofs.iter().enumerate() {
         // If the value `v` doesn't match the corresponding wire in the `PublicInputGate`, return false.
-        if halo_g(zeta, &p.ipa_challenges) != proof.o_local.o_old_proofs[i] {
+        if halo_g(zeta, &p.halo_us) != proof.o_local.o_old_proofs[i] {
             bail!("{}-th old proof opening is incorrect", i);
         }
     }
@@ -321,7 +321,7 @@ fn verify_old_proof_evaluation<C: Curve>(
 /// Check that the parameters in a proof are well-formed, i.e,
 /// that curve points are on the curve, and field elements are in range.
 /// Panics otherwise.
-fn check_proof_parameters<C: Curve>(proof: &Proof<C>) -> Result<()> {
+fn check_proof_parameters<C: HaloCurve>(proof: &Proof<C>) -> Result<()> {
     let Proof {
         c_wires,
         c_plonk_z,

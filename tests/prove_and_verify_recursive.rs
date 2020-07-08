@@ -1,6 +1,5 @@
 use anyhow::Result;
 use plonky::{recursive_verification_circuit, verify_proof, CircuitBuilder, Curve, Field, PartialWitness, Tweedledee, Tweedledum};
-use std::time::Instant;
 
 #[test]
 fn test_proof_trivial_recursive() -> Result<()> {
