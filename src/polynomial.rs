@@ -315,18 +315,20 @@ mod test {
         assert_eq!(p, p_test);
     }
 
+    // Test to see which polynomial division method is faster for divisions of the type
+    // `(X^n - 1)/(X - a)
     #[test]
     fn test_division_linear() {
         type F = TweedledeeBase;
-        let l = 19;
+        let l = 14;
         let n = 1 << l;
         let g = F::primitive_root_of_unity(l);
         let mut xn_minus_one = vec![F::ZERO; n + 1];
         xn_minus_one[n] = F::ONE;
         xn_minus_one[0] = F::NEG_ONE;
 
-        let w = g.exp_u32(1 << (l - 1));
-        let denom = vec![-w, F::ONE];
+        let a = g.exp_u32(1 << (l - 1));
+        let denom = vec![-a, F::ONE];
         let now = Instant::now();
         let d = polynomial_division(&xn_minus_one, &denom);
         println!("Division time: {:?}", now.elapsed());

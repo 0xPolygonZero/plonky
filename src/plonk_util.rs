@@ -349,6 +349,9 @@ pub fn precompute_lagrange_commitments<C: Curve>(
 /// Returns a vector of length `NUM_WIRES` where the `i-th` value is the commitment of
 /// the polynomial interpolating the `i-th` wire of the `PublicInputGate`s and then having
 /// zero values on the remaining gates.
+/// If `step_by_two` is true, we assume that the public input gates are at indices
+/// `0, 2, ..., 2*num_public_gates-2`. Otherwise, we assume they are at indices
+/// `0,1,...,num_public_gates-1`.
 pub fn pis_commitments<C: Curve>(
     wires: &[Vec<C::ScalarField>],
     precomputed_lagrange_commitments: &[ProjectivePoint<C>],
