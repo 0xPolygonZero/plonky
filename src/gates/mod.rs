@@ -41,6 +41,7 @@ mod rescue_a;
 mod rescue_b;
 
 pub const RESCUE_SPONGE_WIDTH: usize = 4;
+pub const RESCUE_SPONGE_RATE: usize = RESCUE_SPONGE_WIDTH - 1;
 
 pub fn evaluate_all_constraints<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     local_constant_values: &[C::ScalarField],

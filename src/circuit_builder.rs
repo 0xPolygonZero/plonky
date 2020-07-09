@@ -103,6 +103,10 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
     }
 
+    pub fn constant_wires(&mut self, constants: &[C::ScalarField]) -> Vec<Target> {
+        constants.iter().map(|&c| self.constant_wire(c)).collect()
+    }
+
     pub fn constant_wire_u32(&mut self, c: u32) -> Target {
         self.constant_wire(C::ScalarField::from_canonical_u32(c))
     }

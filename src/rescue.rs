@@ -51,7 +51,7 @@ pub fn rescue_sponge<F: Field>(inputs: Vec<F>, num_outputs: usize, security_bits
         for i in 0..input_chunk.len() {
             state[i] = state[i] + input_chunk[i];
         }
-        state = rescue_permutation(state, security_bits);
+        state = rescue_permutation(&state, security_bits);
     }
 
     // Squeeze until we have the desired number of outputs.
@@ -63,11 +63,12 @@ pub fn rescue_sponge<F: Field>(inputs: Vec<F>, num_outputs: usize, security_bits
                 return outputs;
             }
         }
-        state = rescue_permutation(state, security_bits);
+        state = rescue_permutation(&state, security_bits);
     }
 }
 
-pub fn rescue_permutation<F: Field>(mut state: Vec<F>, security_bits: usize) -> Vec<F> {
+pub fn rescue_permutation<F: Field>(state: &[F], security_bits: usize) -> Vec<F> {
+    let mut state = state.to_vec();
     let width = state.len();
     let constants = generate_rescue_constants(width, security_bits);
 
