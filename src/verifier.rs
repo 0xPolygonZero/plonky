@@ -140,11 +140,7 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
 
         /// Verify that `self.halo_g = <s, G>`.
         if proof.halo_g
-            == pedersen_hash(
-                &halo_s(&challs.halo_us),
-                &pedersen_g_msm_precomputation,
-            )
-            .to_affine()
+            == pedersen_hash(&halo_s(&challs.halo_us), &pedersen_g_msm_precomputation).to_affine()
         {
             Ok(None)
         } else {
@@ -263,10 +259,7 @@ fn verify_ipa<C: HaloCurve>(
     // Compute Q as defined in the Halo paper.
     let mut points = proof.halo_l.clone();
     points.extend(proof.halo_r.iter());
-    let mut scalars = halo_us
-        .iter()
-        .map(|u| u.square())
-        .collect::<Vec<_>>();
+    let mut scalars = halo_us.iter().map(|u| u.square()).collect::<Vec<_>>();
     scalars.extend(
         halo_us
             .iter()
@@ -291,10 +284,12 @@ fn verify_public_inputs<C: HaloCurve>(
     if public_inputs.len() != num_public_inputs {
         bail!("Incorrect number of public inputs.")
     }
-    for i in 0..num_public_inputs {
-        // If the value `v` doesn't match the corresponding wire in the `PublicInputGate`, return false.
-        if public_inputs[i] != proof.o_public_inputs[i / NUM_WIRES].o_wires[i % NUM_WIRES] {
-            bail!("{}-th public input is incorrect", i);
+    if let Some(proof_pis) = &proof.o_public_inputs {
+        for i in 0..num_public_inputs {
+            // If the value `v` doesn't match the corresponding wire in the `PublicInputGate`, return false.
+            if public_inputs[i] != proof_pis[i / NUM_WIRES].o_wires[i % NUM_WIRES] {
+                bail!("{}-th public input is incorrect", i);
+            }
         }
     }
     Ok(())

@@ -10,7 +10,7 @@ fn test_proof_trivial_recursive() -> Result<()> {
     let inner_circuit = builder.build();
     let witness = inner_circuit.generate_witness(partial_witness);
     let inner_proof = inner_circuit
-        .generate_proof::<Tweedledum>(witness, &[], true)
+        .generate_proof::<Tweedledum>(witness, &[], true, true)
         .unwrap();
     let inner_vk = inner_circuit.to_vk();
     verify_proof::<Tweedledee, Tweedledum>(&[], &inner_proof, &[], &inner_vk, true)?;
@@ -31,7 +31,7 @@ fn test_proof_trivial_recursive() -> Result<()> {
     let recursion_witness = recursion_circuit.circuit.generate_witness(recursion_inputs);
     let proof = recursion_circuit
         .circuit
-        .generate_proof::<Tweedledee>(recursion_witness, &[], true)
+        .generate_proof::<Tweedledee>(recursion_witness, &[], true, true)
         .unwrap();
     let vk = recursion_circuit.circuit.to_vk();
     verify_proof::<Tweedledum, Tweedledee>(&[], &proof, &[], &vk, true)?;

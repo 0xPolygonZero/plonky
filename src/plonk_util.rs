@@ -1,6 +1,6 @@
 use crate::partition::get_subgroup_shift;
 use crate::witness::Witness;
-use crate::{fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_execute_parallel, AffinePoint, CircuitBuilder, Curve, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, ProjectivePoint, Target, NUM_ROUTED_WIRES};
+use crate::{fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_execute_parallel, msm_parallel, polynomial_division, AffinePoint, CircuitBuilder, Curve, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, ProjectivePoint, Target, NUM_ROUTED_WIRES};
 use rayon::prelude::*;
 
 /// Evaluate the polynomial which vanishes on any multiplicative subgroup of a given order `n`.
@@ -312,10 +312,58 @@ pub fn halo_g<F: Field>(x: F, us: &[F]) -> F {
     product
 }
 
+/// Computes the commitments (without randomness) `Comm(L_i)` for `i=0..num`, where `L_i` is the `i-th`
+/// Lagrange basis polynomial on the subgroup of order `order` of `C`'s scalar field,
+/// i.e., `L_i(g^j) = delta_ij`, with `g` a `order`-th primitive root of unity.
+pub fn precompute_lagrange_commitments<C: Curve>(
+    order_log: usize,
+    num: usize,
+    msm_precomputation: &MsmPrecomputation<C>,
+) -> Vec<ProjectivePoint<C>> {
+    let order = 1 << order_log;
+    let g = C::ScalarField::primitive_root_of_unity(order_log);
+    let mut xn_minus_one = vec![C::ScalarField::ZERO; order + 1];
+    xn_minus_one[order] = C::ScalarField::ONE;
+    xn_minus_one[0] = C::ScalarField::NEG_ONE;
+
+    (0..num)
+        .into_par_iter()
+        .map(|i| {
+            let a = g.exp_u32(i as _);
+            // We divide by X - a.
+            let denom = vec![-a, C::ScalarField::ONE];
+            let mut d = polynomial_division(&xn_minus_one, &denom);
+            debug_assert_eq!(d.1, vec![C::ScalarField::ZERO]);
+            let factor = C::ScalarField::from_canonical_usize(order)
+                .multiplicative_inverse_assuming_nonzero()
+                * a;
+            d.0.iter_mut().for_each(|x| {
+                *x = *x * factor;
+            });
+            msm_execute_parallel(msm_precomputation, &d.0)
+        })
+        .collect()
+}
+
+/// Compute the commitment of the wire polynomials on the `PublicInputGate`s.
+/// Returns a vector of length `NUM_WIRES` where the `i-th` value is the commitment of
+/// the polynomial interpolating the `i-th` wire of the `PublicInputGate`s and then having
+/// zero values on the remaining gates.
+pub fn pis_commitments<C: Curve>(
+    pis_wires: &[Vec<C::ScalarField>],
+    precomputed_lagrange_commitments: &[ProjectivePoint<C>],
+) -> Vec<ProjectivePoint<C>> {
+    pis_wires
+        .par_iter()
+        .map(|wire_vec| msm_parallel(wire_vec, precomputed_lagrange_commitments, 8))
+        .collect()
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{Circuit, CircuitBuilder, Curve, Field, PartialWitness, Tweedledee};
+    use crate::{blake_hash_usize_to_curve, fft_precompute, msm_precompute, Circuit, CircuitBuilder, Curve, Field, PartialWitness, Tweedledee, NUM_WIRES};
+    use std::time::Instant;
 
     #[test]
     fn test_halo_n() {
@@ -393,5 +441,72 @@ mod test {
             F::inner_product(&halo_s(&us), &powers(x, 1 << 10)),
             halo_g(x, &us)
         );
+    }
+
+    fn manually_compute_pis_commitments<C: Curve>(
+        wires: &[C::ScalarField],
+        msm_precomputation: &MsmPrecomputation<C>,
+        fft_precomputation: &FftPrecomputation<C::ScalarField>,
+        order: usize,
+    ) -> ProjectivePoint<C> {
+        let mut padded_wires = wires.to_vec();
+        for _ in wires.len()..order {
+            padded_wires.push(C::ScalarField::ZERO);
+        }
+        let coeffs = ifft_with_precomputation_power_of_2(&padded_wires, fft_precomputation);
+        msm_execute_parallel(msm_precomputation, &coeffs)
+    }
+
+    #[test]
+    fn test_public_input_commitments() {
+        let noww = Instant::now();
+        type C = Tweedledee;
+        type F = <C as Curve>::ScalarField;
+        let order_log = 14;
+        let order = 1 << order_log;
+        let num = 10;
+        let now = Instant::now();
+        let pedersen_g: Vec<_> = (0..order)
+            .map(|i| blake_hash_usize_to_curve::<C>(i))
+            .collect();
+        let w = 11;
+        let msm_precomputation = msm_precompute(&AffinePoint::batch_to_projective(&pedersen_g), w);
+        let fft_precomputation = fft_precompute(order);
+        dbg!(now.elapsed());
+
+        let now = Instant::now();
+        let precomputed_lagrange_commitments =
+            precompute_lagrange_commitments(order_log, num, &msm_precomputation);
+        dbg!(now.elapsed());
+
+        let wires = (0..NUM_WIRES)
+            .map(|_| (0..num).map(|_| F::rand()).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+
+        let now = Instant::now();
+        let pis_commitments = pis_commitments(&wires, &precomputed_lagrange_commitments);
+        dbg!(now.elapsed());
+
+        let now = Instant::now();
+        let manual_pis_commitments = wires
+            .into_iter()
+            .map(|w| {
+                manually_compute_pis_commitments(
+                    &w,
+                    &msm_precomputation,
+                    &fft_precomputation,
+                    order,
+                )
+            })
+            .collect::<Vec<_>>();
+        dbg!(now.elapsed());
+
+        pis_commitments
+            .into_iter()
+            .zip(manual_pis_commitments)
+            .for_each(|(a, b)| {
+                assert_eq!(a, b);
+            });
+        dbg!(noww.elapsed());
     }
 }

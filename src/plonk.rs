@@ -83,6 +83,7 @@ impl<C: HaloCurve> Circuit<C> {
         witness: Witness<C::ScalarField>,
         old_proofs: &[OldProof<C>],
         blinding_commitments: bool,
+        output_pis: bool,
     ) -> Result<Proof<C>> {
         let mut challenger = Challenger::new(self.security_bits);
 
@@ -191,19 +192,25 @@ impl<C: HaloCurve> Circuit<C> {
 
         // Open all polynomials at each PublicInputGate index.
         let num_public_input_gates = ceil_div_usize(self.num_public_inputs, NUM_WIRES);
-        let o_public_inputs: Vec<OpeningSet<C::ScalarField>> = (0..num_public_input_gates)
-            // We place PublicInputGates at indices 0, 2, 4, ...
-            .map(|i| i * 2)
-            .map(|i| {
-                self.open_all_polynomials(
-                    &wires_coeffs,
-                    &plonk_z_coeffs,
-                    &plonk_t_coeff_chunks,
-                    old_proofs,
-                    self.subgroup_generator_n.exp_usize(i),
-                )
-            })
-            .collect();
+        let o_public_inputs: Option<Vec<OpeningSet<_>>> = if output_pis {
+            Some(
+                (0..num_public_input_gates)
+                    // We place PublicInputGates at indices 0, 2, 4, ...
+                    .map(|i| i * 2)
+                    .map(|i| {
+                        self.open_all_polynomials(
+                            &wires_coeffs,
+                            &plonk_z_coeffs,
+                            &plonk_t_coeff_chunks,
+                            old_proofs,
+                            self.subgroup_generator_n.exp_usize(i),
+                        )
+                    })
+                    .collect(),
+            )
+        } else {
+            None
+        };
 
         // Open all polynomials at zeta, zeta * g, and zeta * g^65.
         let o_local = self.open_all_polynomials(
@@ -230,7 +237,12 @@ impl<C: HaloCurve> Circuit<C> {
 
         // Get a list of all opened values, to append to the transcript.
         let all_opening_sets: Vec<OpeningSet<C::ScalarField>> = [
-            o_public_inputs.clone(),
+            // o_public_inputs.clone(),
+            if let Some(pis) = &o_public_inputs {
+                pis.clone()
+            } else {
+                vec![]
+            },
             vec![o_local.clone(), o_right.clone(), o_below.clone()],
         ]
         .concat();
@@ -399,20 +411,12 @@ impl<C: HaloCurve> Circuit<C> {
             };
             let u_j_inv = u_j.multiplicative_inverse().expect("Improbable");
 
-            halo_a = C::ScalarField::add_slices(
-                &u_j_inv.scale_slice(a_hi),
-                &u_j.scale_slice(a_lo),
-            );
-            halo_b = C::ScalarField::add_slices(
-                &u_j_inv.scale_slice(b_lo),
-                &u_j.scale_slice(b_hi),
-            );
+            halo_a = C::ScalarField::add_slices(&u_j_inv.scale_slice(a_hi), &u_j.scale_slice(a_lo));
+            halo_b = C::ScalarField::add_slices(&u_j_inv.scale_slice(b_lo), &u_j.scale_slice(b_hi));
             halo_g = g_lo
                 .into_par_iter()
                 .zip(g_hi)
-                .map(|(&g_lo_i, &g_hi_i)| {
-                    msm_parallel(&[u_j_inv, u_j], &[g_lo_i, g_hi_i], 4)
-                })
+                .map(|(&g_lo_i, &g_hi_i)| msm_parallel(&[u_j_inv, u_j], &[g_lo_i, g_hi_i], 4))
                 .collect();
         }
 
