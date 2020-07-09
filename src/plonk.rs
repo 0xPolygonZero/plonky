@@ -9,12 +9,12 @@ use rayon::prelude::*;
 use crate::partition::{get_subgroup_shift, TargetPartitions};
 use crate::plonk_challenger::Challenger;
 use crate::plonk_proof::{OldProof, Proof, SchnorrProof};
-use crate::plonk_util::{coeffs_to_values_padded, eval_coeffs, eval_l_1, eval_poly, eval_zero_poly, halo_n, halo_n_mul, pad_to_8n, permutation_polynomial, powers, reduce_with_powers, values_to_coeffs};
+use crate::plonk_util::{coeffs_to_values_padded, eval_coeffs, eval_l_1, eval_poly, eval_zero_poly, halo_n, halo_n_mul, pad_to_8n, permutation_polynomial, pis_commitments, powers, precompute_lagrange_commitments, reduce_with_powers, values_to_coeffs};
 use crate::poly_commit::PolynomialCommitment;
 use crate::target::Target;
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::witness::{PartialWitness, Witness, WitnessGenerator};
-use crate::{divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_parallel, AffinePoint, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, OpeningSet, ProjectivePoint, VerificationKey};
+use crate::{affine_multisummation_batch_inversion, divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_parallel, AffinePoint, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, OpeningSet, ProjectivePoint, VerificationKey};
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
@@ -93,7 +93,7 @@ impl<C: HaloCurve> Circuit<C> {
         let wire_values_8n = coeffs_to_values_padded(&wires_coeffs, &self.fft_precomputation_8n);
 
         // Commit to the wire polynomials.
-        let c_wires = PolynomialCommitment::coeffs_vec_to_commitments(
+        let mut c_wires = PolynomialCommitment::coeffs_vec_to_commitments(
             &wires_coeffs,
             &self.pedersen_g_msm_precomputation,
             self.pedersen_h,
@@ -323,10 +323,14 @@ impl<C: HaloCurve> Circuit<C> {
         // The Halo b vector is a random combination of the powers of all opening points.
         let mut halo_b = self.build_halo_b(
             &[
-                (0..2 * num_public_input_gates)
-                    .step_by(2)
-                    .map(|i| self.subgroup_n[i])
-                    .collect::<Vec<_>>(),
+                if output_pis {
+                    (0..2 * num_public_input_gates)
+                        .step_by(2)
+                        .map(|i| self.subgroup_n[i])
+                        .collect::<Vec<_>>()
+                } else {
+                    vec![]
+                },
                 vec![
                     zeta_sf,
                     zeta_sf * self.subgroup_generator_n,
@@ -433,6 +437,27 @@ impl<C: HaloCurve> Circuit<C> {
             u_prime,
             &mut challenger,
         );
+
+        if !output_pis && num_public_input_gates > 0 {
+            let precomputed_lagrange_commitments = precompute_lagrange_commitments(
+                self.degree_pow(),
+                num_public_input_gates,
+                &self.pedersen_g_msm_precomputation,
+            );
+            let pis_commitment = pis_commitments(
+                wire_values_by_wire_index,
+                &precomputed_lagrange_commitments,
+                num_public_input_gates,
+                true,
+            );
+            c_wires
+                .iter_mut()
+                .zip(pis_commitment)
+                .for_each(|(comm, pi_comm)| {
+                    comm.substract_commitment(pi_comm);
+                });
+            PolynomialCommitment::batch_to_affine(&mut c_wires);
+        }
 
         Ok(Proof {
             c_wires: c_wires.iter().map(|c| c.to_affine()).collect(),
@@ -727,6 +752,7 @@ impl<C: HaloCurve> Circuit<C> {
             degree: self.degree(),
             num_public_inputs: self.num_public_inputs,
             security_bits: self.security_bits,
+            pedersen_g_msm_precomputation: Some(self.pedersen_g_msm_precomputation.clone()),
         }
     }
 }

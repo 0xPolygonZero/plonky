@@ -5,9 +5,9 @@ use crate::plonk_challenger::Challenger;
 
 use crate::gates::evaluate_all_constraints;
 use crate::plonk_proof::OldProof;
-use crate::plonk_util::{halo_g, halo_n, halo_n_mul, halo_s, pedersen_hash, powers, reduce_with_powers};
+use crate::plonk_util::{halo_g, halo_n, halo_n_mul, halo_s, pedersen_hash, pis_commitments, powers, precompute_lagrange_commitments, reduce_with_powers};
 use crate::util::{ceil_div_usize, log2_strict};
-use crate::{blake_hash_usize_to_curve, hash_usize_to_curve, msm_execute_parallel, msm_precompute, AffinePoint, Circuit, Field, HaloCurve, ProjectivePoint, Proof, SchnorrProof, GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES};
+use crate::{blake_hash_usize_to_curve, hash_usize_to_curve, msm_execute_parallel, msm_precompute, AffinePoint, Circuit, Field, HaloCurve, MsmPrecomputation, ProjectivePoint, Proof, SchnorrProof, GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES};
 
 pub const SECURITY_BITS: usize = 128;
 
@@ -18,6 +18,7 @@ pub struct VerificationKey<C: HaloCurve> {
     pub degree: usize,
     pub num_public_inputs: usize,
     pub security_bits: usize,
+    pub pedersen_g_msm_precomputation: Option<MsmPrecomputation<C>>,
 }
 
 impl<C: HaloCurve> From<Circuit<C>> for VerificationKey<C> {
@@ -40,14 +41,19 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
     // Verify that the proof parameters are valid.
     check_proof_parameters(proof)?;
 
-    // Check public inputs.
-    verify_public_inputs(public_inputs, proof, vk.num_public_inputs)?;
+    let mut proof = proof.clone();
+    if proof.o_public_inputs.is_some() {
+        // Check public inputs.
+        verify_public_inputs(public_inputs, &proof, vk.num_public_inputs)?;
+    } else {
+        proof.c_wires = recover_c_wires(public_inputs, &proof, vk);
+    };
 
     // Observe the transcript and generate the associated challenge points using Fiat-Shamir.
     let challs = proof.get_challenges()?;
 
     // Check the old proofs' openings.
-    verify_old_proof_evaluation(old_proofs, proof, challs.zeta)?;
+    verify_old_proof_evaluation(old_proofs, &proof, challs.zeta)?;
 
     let degree = vk.degree;
 
@@ -117,7 +123,7 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
         subgroup_generator_n,
         u_curve,
         pedersen_h,
-        proof,
+        &proof,
         old_proofs,
         challs.u,
         challs.v,
@@ -205,10 +211,14 @@ fn verify_all_ipas<C: HaloCurve>(
 
     let num_public_input_gates = ceil_div_usize(num_public_inputs, NUM_WIRES);
     let points = [
-        (0..2 * num_public_input_gates)
-            .step_by(2)
-            .map(|i| subgroup_generator_n.exp_usize(i))
-            .collect::<Vec<_>>(),
+        if proof.o_public_inputs.is_some() {
+            (0..2 * num_public_input_gates)
+                .step_by(2)
+                .map(|i| subgroup_generator_n.exp_usize(i))
+                .collect::<Vec<_>>()
+        } else {
+            vec![]
+        },
         vec![
             zeta,
             zeta * subgroup_generator_n,
@@ -380,4 +390,54 @@ fn check_proof_parameters<C: HaloCurve>(proof: &Proof<C>) -> Result<()> {
     );
 
     Ok(())
+}
+
+fn public_inputs_to_wires_vec<F: Field>(public_inputs: &[F]) -> Vec<Vec<F>> {
+    let n = public_inputs.len();
+    let mut wires = (0..NUM_WIRES)
+        .map(|i| {
+            (i..n)
+                .step_by(NUM_WIRES)
+                .map(|j| public_inputs[j])
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    if n % NUM_WIRES > 0 {
+        for i in n % NUM_WIRES..NUM_WIRES {
+            wires[i].push(F::ZERO);
+        }
+    }
+    wires
+}
+
+fn recover_c_wires<C: HaloCurve>(
+    public_inputs: &[C::ScalarField],
+    proof: &Proof<C>,
+    vk: &VerificationKey<C>,
+) -> Vec<AffinePoint<C>> {
+    let precomputed_lagrange_commitments = precompute_lagrange_commitments(
+        log2_strict(vk.degree),
+        ceil_div_usize(vk.num_public_inputs, NUM_WIRES),
+        &(if let Some(msm_precomp) = &vk.pedersen_g_msm_precomputation {
+            msm_precomp.clone()
+        } else {
+            let pedersen_g: Vec<_> = (0..vk.degree)
+                .map(|i| blake_hash_usize_to_curve::<C>(i))
+                .collect();
+            msm_precompute(&AffinePoint::batch_to_projective(&pedersen_g), 11)
+        }),
+    );
+    let pis_commitment = pis_commitments(
+        &public_inputs_to_wires_vec(public_inputs),
+        &precomputed_lagrange_commitments,
+        ceil_div_usize(public_inputs.len(), NUM_WIRES),
+        false,
+    );
+    let new_c_wire = proof
+        .c_wires
+        .iter()
+        .zip(pis_commitment)
+        .map(|(comm, pi_comm)| comm.to_projective() + pi_comm)
+        .collect::<Vec<_>>();
+    ProjectivePoint::batch_to_affine(&new_c_wire)
 }

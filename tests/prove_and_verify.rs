@@ -130,6 +130,33 @@ fn test_proof_quadratic() -> Result<()> {
 }
 
 #[test]
+fn test_proof_quadratic_public_input() -> Result<()> {
+    type F = <Tweedledee as Curve>::ScalarField;
+    let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+    let seven_pi = builder.stage_public_input();
+    builder.route_public_inputs();
+    let one = builder.one_wire();
+    let t = builder.add_virtual_target();
+    let t_sq = builder.square(t);
+    let quad = builder.add_many(&[one, t, t_sq]);
+    let seven = seven_pi.routable_target();
+    let res = builder.sub(quad, seven);
+    builder.assert_zero(res);
+    let mut partial_witness = PartialWitness::new();
+    partial_witness.set_target(seven, F::from_canonical_usize(7));
+    partial_witness.set_target(t, F::TWO);
+    let circuit = builder.build();
+    let witness = circuit.generate_witness(partial_witness);
+    let proof = circuit
+        .generate_proof::<Tweedledum>(witness, &[], true, false)
+        .unwrap();
+    let vk = circuit.to_vk();
+    verify_proof::<Tweedledee, Tweedledum>(&[F::from_canonical_usize(7)], &proof, &[], &vk, true)?;
+
+    Ok(())
+}
+
+#[test]
 fn test_proof_public_input1() -> Result<()> {
     // Set public inputs pi1 = 2 and check that pi1 - 2 == 0.
     let mut builder = CircuitBuilder::<Tweedledee>::new(128);
