@@ -108,12 +108,6 @@ impl<F: Field> Challenger<F> {
     /// Absorb any buffered inputs. After calling this, the input buffer will be empty.
     fn absorb_buffered_inputs(&mut self) {
         for input_chunk in self.input_buffer.chunks(RESCUE_SPONGE_RATE) {
-            // If this is a partial chunk, zero-pad it.
-            let mut input_chunk = input_chunk.to_vec();
-            while input_chunk.len() < RESCUE_SPONGE_RATE {
-                input_chunk.push(F::ZERO);
-            }
-
             // Add the inputs to our sponge state.
             for (i, &input) in input_chunk.iter().enumerate() {
                 self.sponge_state[i] = self.sponge_state[i] + input;
@@ -204,12 +198,6 @@ impl<C: HaloCurve> RecursiveChallenger<C> {
     /// Absorb any buffered inputs. After calling this, the input buffer will be empty.
     fn absorb_buffered_inputs(&mut self, builder: &mut CircuitBuilder<C>) {
         for input_chunk in self.input_buffer.chunks(RESCUE_SPONGE_RATE) {
-            // If this is a partial chunk, zero-pad it.
-            let mut input_chunk = input_chunk.to_vec();
-            while input_chunk.len() < RESCUE_SPONGE_RATE {
-                input_chunk.push(builder.zero_wire());
-            }
-
             // Add the inputs to our sponge state.
             for (i, &input) in input_chunk.iter().enumerate() {
                 self.sponge_state[i] = builder.add(self.sponge_state[i], input);
