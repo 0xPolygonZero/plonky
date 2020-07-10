@@ -117,6 +117,8 @@ impl<F: Field> Challenger<F> {
             self.sponge_state = rescue_permutation(&self.sponge_state, self.security_bits);
         }
 
+        self.output_buffer = self.sponge_state[0..RESCUE_SPONGE_RATE].to_vec();
+
         self.input_buffer.clear();
     }
 }
@@ -206,6 +208,8 @@ impl<C: HaloCurve> RecursiveChallenger<C> {
             // Apply the permutation.
             self.sponge_state = builder.rescue_permutation(&self.sponge_state);
         }
+
+        self.output_buffer = self.sponge_state[0..RESCUE_SPONGE_RATE].to_vec();
 
         self.input_buffer.clear();
     }
