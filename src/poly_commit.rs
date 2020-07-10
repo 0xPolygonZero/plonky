@@ -1,4 +1,4 @@
-use crate::curve_msm::MsmPrecomputation;
+use crate::MsmPrecomputation;
 use crate::plonk_util::pedersen_hash;
 use crate::{AffinePoint, Curve, Field, ProjectivePoint};
 

@@ -8,7 +8,7 @@ use rand::Rng;
 use unroll::unroll_for_loops;
 
 use crate::{add_6_6_no_overflow, cmp_6_6, Field, mul2_6, rand_range_6, rand_range_6_from_rng, sub_6_6, field_to_biguint};
-use crate::bigint_inverse::nonzero_multiplicative_inverse_6;
+use crate::nonzero_multiplicative_inverse_6;
 use std::cmp::Ordering;
 use std::fmt::{Formatter, Display};
 use std::fmt;
