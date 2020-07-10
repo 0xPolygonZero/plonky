@@ -461,6 +461,7 @@ mod test {
         );
     }
 
+    // Compute the public input commitments using the standard iFFT method.
     fn manually_compute_pis_commitments<C: Curve>(
         wires: &[C::ScalarField],
         msm_precomputation: &MsmPrecomputation<C>,
@@ -475,6 +476,8 @@ mod test {
         msm_execute_parallel(msm_precomputation, &coeffs)
     }
 
+    // Tests that computing the public input commitments using precomputed Lagrange basis commitments
+    // or the usual iFFT method give th same results, and analyze the performances of the two methods.
     #[test]
     fn test_public_input_commitments() {
         let noww = Instant::now();

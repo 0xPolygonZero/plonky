@@ -46,6 +46,7 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
         // Check public inputs.
         verify_public_inputs(public_inputs, &proof, vk.num_public_inputs)?;
     } else {
+        // Recover the complete wire commitments using the public inputs.
         proof.c_wires = recover_c_wires(public_inputs, &proof, vk);
     };
 
@@ -392,6 +393,7 @@ fn check_proof_parameters<C: HaloCurve>(proof: &Proof<C>) -> Result<()> {
     Ok(())
 }
 
+/// Reshapes a vector of field elements to a zero-padded matrix of height `NUM_WIRES`.
 fn public_inputs_to_wires_vec<F: Field>(public_inputs: &[F]) -> Vec<Vec<F>> {
     let n = public_inputs.len();
     let mut wires = (0..NUM_WIRES)
@@ -410,6 +412,8 @@ fn public_inputs_to_wires_vec<F: Field>(public_inputs: &[F]) -> Vec<Vec<F>> {
     wires
 }
 
+/// Recovers the complete wires commitments by adding back the public input commitments to the proof's wire commitments.
+/// To be used only when the public input openings are not included in the proof.
 fn recover_c_wires<C: HaloCurve>(
     public_inputs: &[C::ScalarField],
     proof: &Proof<C>,

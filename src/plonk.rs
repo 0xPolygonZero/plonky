@@ -237,7 +237,6 @@ impl<C: HaloCurve> Circuit<C> {
 
         // Get a list of all opened values, to append to the transcript.
         let all_opening_sets: Vec<OpeningSet<C::ScalarField>> = [
-            // o_public_inputs.clone(),
             if let Some(pis) = &o_public_inputs {
                 pis.clone()
             } else {
@@ -438,6 +437,9 @@ impl<C: HaloCurve> Circuit<C> {
             &mut challenger,
         );
 
+        // If the `output_pis` is false and there are some public inputs, the prover subtract the commitments
+        // of the public input gates to the wire commitments. The verifier will then add them back, which binds
+        // the proof to the public inputs.
         if !output_pis && num_public_input_gates > 0 {
             let precomputed_lagrange_commitments = precompute_lagrange_commitments(
                 self.degree_pow(),
@@ -454,7 +456,7 @@ impl<C: HaloCurve> Circuit<C> {
                 .iter_mut()
                 .zip(pis_commitment)
                 .for_each(|(comm, pi_comm)| {
-                    comm.substract_commitment(pi_comm);
+                    comm.subtract_commitment(pi_comm);
                 });
             PolynomialCommitment::batch_to_affine(&mut c_wires);
         }
