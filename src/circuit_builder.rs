@@ -144,7 +144,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             fn generate(
                 &self,
                 _constants: &Vec<Vec<F>>,
-                witness: &PartialWitness<F>,
+                _witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
                 let mut result = PartialWitness::new();
                 result.set_target(self.target, self.c);
@@ -658,7 +658,6 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             }
             state = self.rescue_permutation(&state);
         }
-        outputs
     }
 
     pub fn rescue_permutation(&mut self, inputs: &[Target]) -> Vec<Target> {
@@ -1380,7 +1379,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             C::ScalarField::cyclic_subgroup_known_order(subgroup_generator_8n, 8 * degree);
 
         let pedersen_g: Vec<_> = (0..degree)
-            .map(|i| blake_hash_usize_to_curve::<C>(i))
+            .map(blake_hash_usize_to_curve::<C>)
             .collect();
         let pedersen_h = blake_hash_usize_to_curve::<C>(degree);
         let u = blake_hash_usize_to_curve::<C>(degree + 1);

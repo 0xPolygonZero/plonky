@@ -384,6 +384,7 @@ pub trait Field:
         panic!("Number theory is a lie!")
     }
 
+    /// The number of bits in the binary encoding of this field element.
     fn num_bits(&self) -> usize {
         let mut n = 0;
         for (i, limb) in self.to_canonical_u64_vec().iter().enumerate() {

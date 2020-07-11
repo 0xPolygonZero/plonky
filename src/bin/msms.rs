@@ -16,7 +16,7 @@ fn main() {
     let terms_log = 14;
     let terms = 1 << terms_log;
 
-    let mut generators: Vec<_> = (0..terms)
+    let generators: Vec<_> = (0..terms)
         .map(|_| C::convert(SF::rand()) * C::GENERATOR_PROJECTIVE)
         .collect();
 
