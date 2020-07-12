@@ -100,7 +100,7 @@ pub fn recursive_verification_circuit<
     // Can call curve_assert_valid.
 
     // Compute random challenges.
-    let mut challenger = RecursiveChallenger::<C>::new();
+    let mut challenger = RecursiveChallenger::<C>::new(&mut builder);
     challenger.observe_affine_points(&proof.c_wires);
     let (beta, gamma) = challenger.get_2_challenges(&mut builder);
     challenger.observe_affine_point(proof.c_plonk_z);
