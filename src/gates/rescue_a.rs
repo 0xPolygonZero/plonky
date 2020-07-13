@@ -19,12 +19,12 @@ impl<C: HaloCurve> RescueStepAGate<C> {
 
     /// Returns the index of the `i`th accumulator wire.
     pub fn wire_acc(i: usize) -> usize {
-        return i;
+        i
     }
 
     /// Returns the index of the `i`th root wire.
     pub fn wire_root(i: usize) -> usize {
-        return RESCUE_SPONGE_WIDTH + i;
+        RESCUE_SPONGE_WIDTH + i
     }
 }
 

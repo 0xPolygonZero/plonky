@@ -19,7 +19,7 @@ impl<C: HaloCurve> RescueStepBGate<C> {
 
     /// Returns the index of the `i`th accumulator wire.
     pub fn wire_acc(i: usize) -> usize {
-        return i;
+        i
     }
 }
 

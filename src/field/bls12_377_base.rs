@@ -55,19 +55,6 @@ impl Bls12377Base {
         Self::montgomery_multiply(self.limbs, [1, 0, 0, 0, 0, 0])
     }
 
-    // TODO: Move to Field.
-    pub fn num_bits(&self) -> usize {
-        let mut n = 0;
-        for (i, limb) in self.to_canonical().iter().enumerate() {
-            for j in 0..64 {
-                if (limb >> j & 1) != 0 {
-                    n = i * 64 + j + 1;
-                }
-            }
-        }
-        n
-    }
-
     #[unroll_for_loops]
     fn montgomery_multiply(a: [u64; 6], b: [u64; 6]) -> [u64; 6] {
         // Interleaved Montgomery multiplication, as described in Algorithm 2 of
