@@ -37,6 +37,10 @@ impl<F: Field> PartialWitness<F> {
         self.wire_values[&target]
     }
 
+    pub fn get_targets(&self, targets: &[Target]) -> Vec<F> {
+        targets.iter().map(|&t| self.get_target(t)).collect()
+    }
+
     pub fn get_point_target<InnerC: Curve<BaseField = F>>(
         &self,
         target: AffinePointTarget,

@@ -8,7 +8,7 @@ use rand::Rng;
 use unroll::unroll_for_loops;
 
 use crate::{add_6_6_no_overflow, cmp_6_6, Field, mul2_6, rand_range_6, rand_range_6_from_rng, sub_6_6, field_to_biguint};
-use crate::bigint_inverse::nonzero_multiplicative_inverse_6;
+use crate::nonzero_multiplicative_inverse_6;
 use std::cmp::Ordering;
 use std::fmt::{Formatter, Display};
 use std::fmt;
@@ -53,19 +53,6 @@ impl Bls12377Base {
     pub fn to_canonical(&self) -> [u64; 6] {
         // Let x * R = self. We compute M(x * R, 1) = x * R * R^-1 = x.
         Self::montgomery_multiply(self.limbs, [1, 0, 0, 0, 0, 0])
-    }
-
-    // TODO: Move to Field.
-    pub fn num_bits(&self) -> usize {
-        let mut n = 0;
-        for (i, limb) in self.to_canonical().iter().enumerate() {
-            for j in 0..64 {
-                if (limb >> j & 1) != 0 {
-                    n = i * 64 + j + 1;
-                }
-            }
-        }
-        n
     }
 
     #[unroll_for_loops]

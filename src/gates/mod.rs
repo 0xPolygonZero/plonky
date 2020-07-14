@@ -41,6 +41,7 @@ mod rescue_a;
 mod rescue_b;
 
 pub const RESCUE_SPONGE_WIDTH: usize = 4;
+pub const RESCUE_SPONGE_RATE: usize = RESCUE_SPONGE_WIDTH - 1;
 
 pub fn evaluate_all_constraints<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     local_constant_values: &[C::ScalarField],
@@ -341,14 +342,13 @@ macro_rules! test_gate_low_degree {
 
             let n = 256;
             let fft_precomputation_n = $crate::fft::fft_precompute::<SF>(n);
-            let fft_precomputation_8n = $crate::fft::fft_precompute::<SF>(8 * n);
             let fft_precomputation_16n = $crate::fft::fft_precompute::<SF>(16 * n);
 
             // Generate random constant and wire polynomials.
             let mut constant_values_n: Vec<Vec<SF>> =
                 vec![Vec::new(); $crate::plonk::NUM_CONSTANTS];
             let mut wire_values_n: Vec<Vec<SF>> = vec![Vec::new(); $crate::plonk::NUM_WIRES];
-            for i in 0..n {
+            for _ in 0..n {
                 for points in constant_values_n.iter_mut() {
                     points.push(<SF as $crate::field::Field>::rand())
                 }

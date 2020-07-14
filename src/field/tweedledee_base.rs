@@ -1,66 +1,69 @@
+use rand::Rng;
 use std::cmp::Ordering::Less;
 use std::convert::TryInto;
 use std::ops::{Add, Div, Mul, Neg, Sub};
-use rand::Rng;
 
 use unroll::unroll_for_loops;
 
-use crate::bigint_inverse::nonzero_multiplicative_inverse_4;
-use crate::{add_4_4_no_overflow, cmp_4_4, field_to_biguint, rand_range_4, rand_range_4_from_rng, sub_4_4, Field};
+use crate::nonzero_multiplicative_inverse_4;
+use crate::{
+    add_4_4_no_overflow, cmp_4_4, field_to_biguint, rand_range_4, rand_range_4_from_rng, sub_4_4,
+    Field,
+};
 use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::{Display, Formatter, Debug};
 
-/// An element of the Tweedledum group's base field.
+/// An element of the Tweedledee group's base field.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Default)]
-pub struct TweedledumBase {
+pub struct TweedledeeBase {
     /// Montgomery representation, encoded with little-endian u64 limbs.
     pub limbs: [u64; 4],
 }
 
-impl TweedledumBase {
-    /// The order of the field: 28948022309329048855892746252171976963322203655955319056773317069363642105857
+impl TweedledeeBase {
+    /// The order of the field: 28948022309329048855892746252171976963322203655954433126947083963168578338817
     const ORDER: [u64; 4] = [
-        11619397960441266177,
-        255193519591741881,
+        9524180637049683969,
+        255193519543715529,
         0,
         4611686018427387904,
     ];
 
-    /// Twice the order of the field: 57896044618658097711785492504343953926644407311910638113546634138727284211714
+    /// Twice the order of the field: 57896044618658097711785492504343953926644407311908866253894167926337156677634
     const ORDER_X2: [u64; 4] = [
-        4792051847172980738,
-        510387039183483763,
+        601617200389816322,
+        510387039087431059,
         0,
         9223372036854775808,
     ];
 
     /// R in the context of the Montgomery reduction, i.e. 2^256 % |F|.
     const R: [u64; 4] = [
-        2035294266095304701,
-        17681163514934325971,
+        8320946236270051325,
+        17681163515078405027,
         18446744073709551615,
         4611686018427387903,
     ];
 
     /// R^2 in the context of the Montgomery reduction, i.e. 2^(256*2) % |F|.
     const R2: [u64; 4] = [
-        2885853259929485328,
-        10494584067553537908,
-        15959394653775906393,
-        56485833754855950,
+        9625875206237061136,
+        9085631154807722544,
+        17636350113745641634,
+        56485833733595155,
     ];
 
     /// R^3 in the context of the Montgomery reduction, i.e. 2^(256*3) % |F|.
     const R3: [u64; 4] = [
-        11023471670160566071,
-        18013763770685241468,
-        7203328081223416457,
-        2412999303287602290,
+        11971961131424865118,
+        6311318431551332850,
+        14638507591886519234,
+        739379759776372087,
     ];
 
     /// In the context of Montgomery multiplication, µ = -|F|^-1 mod 2^64.
-    const MU: u64 = 11619397960441266175;
+    const MU: u64 = 9524180637049683967;
 
     pub fn from_canonical(c: [u64; 4]) -> Self {
         // We compute M(c, R^2) = c * R^2 * R^-1 = c * R.
@@ -118,10 +121,10 @@ impl TweedledumBase {
     }
 }
 
-impl Add<TweedledumBase> for TweedledumBase {
+impl Add<TweedledeeBase> for TweedledeeBase {
     type Output = Self;
 
-    fn add(self, rhs: TweedledumBase) -> Self::Output {
+    fn add(self, rhs: TweedledeeBase) -> Self::Output {
         // First we do a widening addition, then we reduce if necessary.
         let sum = add_4_4_no_overflow(self.limbs, rhs.limbs);
         let limbs = if cmp_4_4(sum, Self::ORDER) == Less {
@@ -133,7 +136,7 @@ impl Add<TweedledumBase> for TweedledumBase {
     }
 }
 
-impl Sub<TweedledumBase> for TweedledumBase {
+impl Sub<TweedledeeBase> for TweedledeeBase {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self {
@@ -148,7 +151,7 @@ impl Sub<TweedledumBase> for TweedledumBase {
     }
 }
 
-impl Mul<TweedledumBase> for TweedledumBase {
+impl Mul<TweedledeeBase> for TweedledeeBase {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self {
@@ -158,7 +161,7 @@ impl Mul<TweedledumBase> for TweedledumBase {
     }
 }
 
-impl Div<TweedledumBase> for TweedledumBase {
+impl Div<TweedledeeBase> for TweedledeeBase {
     type Output = Self;
 
     fn div(self, rhs: Self) -> Self {
@@ -166,7 +169,7 @@ impl Div<TweedledumBase> for TweedledumBase {
     }
 }
 
-impl Neg for TweedledumBase {
+impl Neg for TweedledeeBase {
     type Output = Self;
 
     fn neg(self) -> Self {
@@ -180,67 +183,67 @@ impl Neg for TweedledumBase {
     }
 }
 
-impl Field for TweedledumBase {
+impl Field for TweedledeeBase {
     const BITS: usize = 255;
     const BYTES: usize = 32;
     const ZERO: Self = Self { limbs: [0; 4] };
     const ONE: Self = Self {
         limbs: [
-            2035294266095304701,
-            17681163514934325971,
+            8320946236270051325,
+            17681163515078405027,
             18446744073709551615,
             4611686018427387903,
         ],
     };
     const TWO: Self = Self {
         limbs: [
-            10897934645458894841,
-            16660389436567358444,
+            7117711835490418681,
+            16660389436903542909,
             18446744073709551615,
             4611686018427387903,
         ],
     };
     const THREE: Self = Self {
         limbs: [
-            1313830951112933365,
-            15639615358200390918,
+            5914477434710786037,
+            15639615358728680791,
             18446744073709551615,
             4611686018427387903,
         ],
     };
     const FOUR: Self = Self {
         limbs: [
-            10176471330476523505,
-            14618841279833423391,
+            4711243033931153393,
+            14618841280553818673,
             18446744073709551615,
             4611686018427387903,
         ],
     };
     const FIVE: Self = Self {
         limbs: [
-            592367636130562029,
-            13598067201466455865,
+            3508008633151520749,
+            13598067202378956555,
             18446744073709551615,
             4611686018427387903,
         ],
     };
     const NEG_ONE: Self = Self {
-        limbs: [9584103694345961476, 1020774078366967526, 0, 0],
+        limbs: [1203234400779632644, 1020774078174862118, 0, 0],
     };
 
     const MULTIPLICATIVE_SUBGROUP_GENERATOR: Self = Self::FIVE;
 
     const ALPHA: Self = Self::FIVE;
 
-    const TWO_ADICITY: usize = 33;
+    const TWO_ADICITY: usize = 34;
 
-    /// 3369993333393829974333376885877453834205191076727970393464588218993
+    /// 1684996666696914987166688442938726917102595538363933628829375605749
     const T: Self = Self {
         limbs: [
-            11619397960441266177,
-            255193519591741881,
+            9524180637049683969,
+            255193519543715529,
             0,
-            4611686016279904256,
+            4611686017353646080,
         ],
     };
 
@@ -259,7 +262,6 @@ impl Field for TweedledumBase {
     fn is_valid_canonical_u64(v: &Vec<u64>) -> bool {
         v.len() == 4 && cmp_4_4(v[..].try_into().unwrap(), Self::ORDER) == Less
     }
-
 
     fn multiplicative_inverse_assuming_nonzero(&self) -> Self {
         // Let x R = self. We compute M((x R)^-1, R^3) = x^-1 R^-1 R^3 R^-1 = x^-1 R.
@@ -282,45 +284,55 @@ impl Field for TweedledumBase {
     }
 }
 
-impl Ord for TweedledumBase {
+impl Ord for TweedledeeBase {
     fn cmp(&self, other: &Self) -> Ordering {
         self.cmp_helper(other)
     }
 }
 
-impl PartialOrd for TweedledumBase {
+impl PartialOrd for TweedledeeBase {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-
-impl Display for TweedledumBase {
+impl Display for TweedledeeBase {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", field_to_biguint(*self))
     }
 }
 
-impl Debug for TweedledumBase {
+impl Debug for TweedledeeBase {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "TweedledumBase({})", field_to_biguint(*self))
+        write!(f, "TweedledeeBase {}", field_to_biguint(*self))
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use crate::{Field, TweedledumBase};
     use crate::test_square_root;
+    use crate::{Field, TweedledeeBase};
 
     #[test]
     fn primitive_root_order() {
         for n_power in 0..10 {
-            let root = TweedledumBase::primitive_root_of_unity(n_power);
-            let order = TweedledumBase::generator_order(root);
+            let root = TweedledeeBase::primitive_root_of_unity(n_power);
+            let order = TweedledeeBase::generator_order(root);
             assert_eq!(order, 1 << n_power, "2^{}'th primitive root", n_power);
         }
     }
 
-    test_square_root!(TweedledumBase);
+    #[test]
+    fn valid_canonical_vec() {
+        let small = TweedledeeBase::ONE.to_canonical_u64_vec();
+        assert!(TweedledeeBase::is_valid_canonical_u64(&small));
+
+        let big = TweedledeeBase::ORDER_X2.to_vec();
+        assert_eq!(TweedledeeBase::is_valid_canonical_u64(&big), false);
+
+        let limbs = vec![1, 2, 3, 4, 5];
+        assert_eq!(TweedledeeBase::is_valid_canonical_u64(&limbs), false);
+    }
+
+    test_square_root!(TweedledeeBase);
 }

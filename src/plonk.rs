@@ -614,9 +614,9 @@ impl<C: HaloCurve> Circuit<C> {
     /// Open each polynomial at the given point, `zeta`.
     fn open_all_polynomials(
         &self,
-        wire_coeffs: &Vec<Vec<C::ScalarField>>,
-        plonk_z_coeffs: &Vec<C::ScalarField>,
-        plonk_t_coeffs: &Vec<Vec<C::ScalarField>>,
+        wire_coeffs: &[Vec<C::ScalarField>],
+        plonk_z_coeffs: &[C::ScalarField],
+        plonk_t_coeffs: &[Vec<C::ScalarField>],
         old_proofs: &[OldProof<C>],
         pi_quotient_coeffs: &Option<Vec<C::ScalarField>>,
         zeta: C::ScalarField,
@@ -639,10 +639,13 @@ impl<C: HaloCurve> Circuit<C> {
         }
     }
 
-    pub fn generate_witness(
+    /// Generates a `PartialWitness`, which maps `Target`s to their values. Although
+    /// `PartialWitness` is designed as a sparse representation, the result here should have an
+    /// entry for every target in the circuit.
+    pub fn generate_partial_witness(
         &self,
         inputs: PartialWitness<C::ScalarField>,
-    ) -> Witness<C::ScalarField> {
+    ) -> PartialWitness<C::ScalarField> {
         let start = Instant::now();
 
         // Index generator indices by their dependencies.
@@ -651,7 +654,7 @@ impl<C: HaloCurve> Circuit<C> {
             for dep in generator.dependencies() {
                 generator_indices_by_deps
                     .entry(dep)
-                    .or_insert_with(|| Vec::new())
+                    .or_insert_with(Vec::new)
                     .push(i);
             }
         }
@@ -726,7 +729,15 @@ impl<C: HaloCurve> Circuit<C> {
         // );
 
         println!("Witness generation took {}s", start.elapsed().as_secs_f32());
-        Witness::from_partial(&witness, self.degree())
+        witness
+    }
+
+    pub fn generate_witness(
+        &self,
+        inputs: PartialWitness<C::ScalarField>,
+    ) -> Witness<C::ScalarField> {
+        let partial_witness = self.generate_partial_witness(inputs);
+        Witness::from_partial(&partial_witness, self.degree())
     }
 
     /// For the given set of targets, find any copy constraints involving those targets and populate

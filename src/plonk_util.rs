@@ -234,7 +234,7 @@ pub fn permutation_polynomial<F: Field>(
 ) -> Vec<F> {
     let mut plonk_z_points = vec![F::ONE];
     let k_is = (0..NUM_ROUTED_WIRES)
-        .map(|j| get_subgroup_shift::<F>(j))
+        .map(get_subgroup_shift::<F>)
         .collect::<Vec<_>>();
     for i in 1..degree {
         let x = subgroup[i - 1];
@@ -360,7 +360,7 @@ mod test {
         );
         // Verify that the permutation polynomial is well-formed.
         let k_is = (0..NUM_ROUTED_WIRES)
-            .map(|j| get_subgroup_shift::<<Tweedledee as Curve>::ScalarField>(j))
+            .map(get_subgroup_shift::<<Tweedledee as Curve>::ScalarField>)
             .collect::<Vec<_>>();
         let wire_values = &witness.transpose();
         for (i, &x) in circuit.subgroup_n.iter().enumerate() {
