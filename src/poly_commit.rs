@@ -89,11 +89,4 @@ impl<C: Curve> PolynomialCommitment<C> {
             CurvePoint::Projective(p) => p.to_affine(),
         }
     }
-
-    pub fn subtract_commitment(&mut self, point: ProjectivePoint<C>) {
-        self.commitment = CurvePoint::Projective(match self.commitment {
-            CurvePoint::Affine(p) => p.to_projective() + (-point),
-            CurvePoint::Projective(p) => p + (-point),
-        });
-    }
 }
