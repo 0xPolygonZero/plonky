@@ -2,7 +2,7 @@ use anyhow::{anyhow, bail, ensure, Result};
 
 use crate::plonk_challenger::Challenger;
 use crate::plonk_util::{halo_g, halo_n, halo_s, pedersen_hash};
-use crate::{AffinePoint, AffinePointTarget, Curve, Field, HaloCurve, MsmPrecomputation, PartialWitness, Target, NUM_WIRES, SECURITY_BITS};
+use crate::{blake_hash_usize_to_curve, AffinePoint, AffinePointTarget, Curve, Field, HaloCurve, MsmPrecomputation, PartialWitness, Target, NUM_WIRES, SECURITY_BITS};
 
 #[derive(Debug, Clone, Copy)]
 pub struct SchnorrProof<C: HaloCurve> {
@@ -25,8 +25,12 @@ pub struct Proof<C: HaloCurve> {
     pub c_plonk_z: AffinePoint<C>,
     /// A commitment to the quotient polynomial.
     pub c_plonk_t: Vec<AffinePoint<C>>,
+    /// A commitment to the public input quotient polynomial.
+    /// Is `None` iff `o_public_inputs` is `Some`.
+    pub c_pis_quotient: Option<AffinePoint<C>>,
 
     /// The opening of each polynomial at each `PublicInputGate` index.
+    /// Is `None` iff `c_pis_quotient` is `Some`.
     pub o_public_inputs: Option<Vec<OpeningSet<C::ScalarField>>>,
     /// The opening of each polynomial at `zeta`.
     pub o_local: OpeningSet<C::ScalarField>,
@@ -56,19 +60,11 @@ impl<C: HaloCurve> Proof<C> {
                 })
                 .collect()
         })
-        // if let Some(pis) = &self.o_public_inputs {
-        // } else {
-        //     None
-        // }
     }
 
     pub fn all_opening_sets(&self) -> Vec<OpeningSet<C::ScalarField>> {
         [
-            if let Some(pis) = &self.o_public_inputs {
-                pis.as_slice()
-            } else {
-                &[]
-            },
+            self.o_public_inputs.as_deref().unwrap_or_default(),
             &[
                 self.o_local.clone(),
                 self.o_right.clone(),
@@ -90,6 +86,9 @@ impl<C: HaloCurve> Proof<C> {
         let alpha_bf = challenger.get_challenge();
         let alpha = C::try_convert_b2s(alpha_bf).map_err(|_| anyhow!(error_msg))?;
         challenger.observe_affine_points(&self.c_plonk_t);
+        if let Some(comm) = self.c_pis_quotient {
+            challenger.observe_affine_point(comm);
+        }
         let zeta_bf = challenger.get_challenge();
         let zeta = C::try_convert_b2s(zeta_bf).map_err(|_| anyhow!(error_msg))?;
         for os in self.all_opening_sets().iter() {
@@ -320,6 +319,9 @@ pub struct OpeningSet<F: Field> {
     pub o_plonk_t: Vec<F>,
     /// The purported opening of some old proofs `halo_g` polynomials.
     pub o_old_proofs: Vec<F>,
+    /// The purported opening of the public input quotient polynomial.
+    /// Is `None` when the prover opens at the public input gates.
+    pub o_pi_quotient: Option<F>,
 }
 
 impl<F: Field> OpeningSet<F> {
@@ -331,6 +333,10 @@ impl<F: Field> OpeningSet<F> {
             &[self.o_plonk_z],
             self.o_plonk_t.as_slice(),
             self.o_old_proofs.as_slice(),
+            self.o_pi_quotient
+                .map(|o| vec![o])
+                .as_deref()
+                .unwrap_or_default(),
         ]
         .concat()
     }

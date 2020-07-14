@@ -38,7 +38,7 @@ fn neg<F: Field>(a: &Polynomial<F>) -> Polynomial<F> {
     a.iter().map(|&x| -x).collect()
 }
 
-fn trim<F: Field>(a: &mut Polynomial<F>) {
+pub fn trim<F: Field>(a: &mut Polynomial<F>) {
     let d = degree(a);
     a.drain(d + 1..);
 }
@@ -115,7 +115,11 @@ fn inv_mod_xn<F: Field>(h: &Polynomial<F>, n: usize) -> Polynomial<F> {
         let h0 = hh[..l].to_vec();
         let mut h1 = hh[l..].to_vec();
         let mut c = polynomial_multiplication(&a, &h0);
-        c.drain(0..l);
+        if l == c.len() {
+            c = vec![F::ZERO];
+        } else {
+            c.drain(0..l);
+        }
         trim(&mut h1);
         let mut tmp = polynomial_multiplication(&h1, &a);
         tmp = polynomial_addition(&tmp, &c);

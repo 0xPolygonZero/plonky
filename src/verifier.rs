@@ -5,9 +5,9 @@ use crate::plonk_challenger::Challenger;
 
 use crate::gates::evaluate_all_constraints;
 use crate::plonk_proof::OldProof;
-use crate::plonk_util::{halo_g, halo_n, halo_n_mul, halo_s, pedersen_hash, pis_commitments, powers, precompute_lagrange_commitments, reduce_with_powers};
+use crate::plonk_util::{eval_poly, halo_g, halo_n, halo_n_mul, halo_s, pedersen_hash, pis_commitments, powers, precompute_lagrange_commitments, reduce_with_powers};
 use crate::util::{ceil_div_usize, log2_strict};
-use crate::{blake_hash_usize_to_curve, hash_usize_to_curve, msm_execute_parallel, msm_precompute, AffinePoint, Circuit, Field, HaloCurve, MsmPrecomputation, ProjectivePoint, Proof, SchnorrProof, GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES};
+use crate::{blake_hash_usize_to_curve, fft_precompute, hash_usize_to_curve, ifft_with_precomputation_power_of_2, msm_execute_parallel, msm_precompute, AffinePoint, Circuit, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, ProjectivePoint, Proof, SchnorrProof, GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES};
 
 pub const SECURITY_BITS: usize = 128;
 
@@ -19,6 +19,7 @@ pub struct VerificationKey<C: HaloCurve> {
     pub num_public_inputs: usize,
     pub security_bits: usize,
     pub pedersen_g_msm_precomputation: Option<MsmPrecomputation<C>>,
+    pub fft_precomputation: Option<FftPrecomputation<C::ScalarField>>,
 }
 
 impl<C: HaloCurve> From<Circuit<C>> for VerificationKey<C> {
@@ -46,9 +47,11 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
         // Check public inputs.
         verify_public_inputs(public_inputs, &proof, vk.num_public_inputs)?;
     } else {
-        // Recover the complete wire commitments using the public inputs.
-        proof.c_wires = recover_c_wires(public_inputs, &proof, vk);
-    };
+        ensure!(
+            proof.c_pis_quotient.is_some(),
+            "Public input information missing from the proof."
+        );
+    }
 
     // Observe the transcript and generate the associated challenge points using Fiat-Shamir.
     let challs = proof.get_challenges()?;
@@ -113,8 +116,36 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
         bail!("Incorrect opening of the t polynomial.");
     }
 
-    // Verify polynomial commitment openings.
     let subgroup_generator_n = C::ScalarField::primitive_root_of_unity(log2_strict(vk.degree));
+
+    // Verify that the purported opening of the public input quotient polynomial is valid.
+    if let Some(purported_pis_quotient_opening) = proof.o_local.o_pi_quotient {
+        let num_public_input_gates = ceil_div_usize(vk.num_public_inputs, NUM_WIRES);
+        // Compute the denominator `prod_{pi \in PI} (X - pi)`.
+        let pis_quotient_denominator = (0..num_public_input_gates)
+            .fold(C::ScalarField::ONE, |acc, i| {
+                acc * (challs.zeta - subgroup_generator_n.exp_usize(2 * i))
+            });
+        // Compute the numerator `WirePoly - PIPoly`.
+        let pis_quotient_numerator = (0..NUM_WIRES).fold(C::ScalarField::ZERO, |acc, i| {
+            acc + proof.o_local.o_wires[i] * challs.alpha.exp_usize(i)
+        }) - eval_poly(
+            &public_inputs_to_polynomial(
+                public_inputs,
+                challs.alpha,
+                vk.degree,
+                vk.fft_precomputation.as_ref(),
+            ),
+            challs.zeta,
+        );
+        let computed_pis_quotient_opening = pis_quotient_numerator / pis_quotient_denominator;
+
+        if computed_pis_quotient_opening != purported_pis_quotient_opening {
+            bail!("Incorrect opening of the public inputs quotient polynomial.");
+        }
+    }
+
+    // Verify polynomial commitment openings.
     let pedersen_h = blake_hash_usize_to_curve(vk.degree);
     let u_curve = blake_hash_usize_to_curve(vk.degree + 1);
     if !verify_all_ipas::<C>(
@@ -187,6 +218,7 @@ fn verify_all_ipas<C: HaloCurve>(
         &[proof.c_plonk_z],
         &proof.c_plonk_t,
         &old_proofs.iter().map(|p| p.halo_g).collect::<Vec<_>>(),
+        &proof.c_pis_quotient.map(|c| vec![c]).unwrap_or_default(),
     ]
     .concat();
     let powers_of_u = powers(u, c_all.len());
@@ -400,16 +432,41 @@ fn public_inputs_to_wires_vec<F: Field>(public_inputs: &[F]) -> Vec<Vec<F>> {
         .map(|i| {
             (i..n)
                 .step_by(NUM_WIRES)
-                .map(|j| public_inputs[j])
+                .flat_map(|j| vec![public_inputs[j], F::ZERO])
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
     if n % NUM_WIRES > 0 {
         for i in n % NUM_WIRES..NUM_WIRES {
-            wires[i].push(F::ZERO);
+            wires[i].extend(&[F::ZERO; 2]);
         }
     }
     wires
+}
+
+fn public_inputs_to_polynomial<F: Field>(
+    public_inputs: &[F],
+    alpha: F,
+    degree: usize,
+    fft_precomputation: Option<&FftPrecomputation<F>>,
+) -> Vec<F> {
+    let pis_wires_vec = public_inputs_to_wires_vec(public_inputs);
+    dbg!(&pis_wires_vec);
+    let mut scaled_wires_vec = (0..pis_wires_vec[0].len())
+        .map(|i| {
+            (0..pis_wires_vec.len())
+                .map(|j| pis_wires_vec[j][i] * alpha.exp_usize(j))
+                .fold(F::ZERO, |acc, x| acc + x)
+        })
+        .collect::<Vec<_>>();
+    for i in scaled_wires_vec.len()..degree {
+        scaled_wires_vec.push(F::ZERO);
+    }
+
+    fft_precomputation.map_or_else(
+        || ifft_with_precomputation_power_of_2(&scaled_wires_vec, &fft_precompute(degree)),
+        |precomp| ifft_with_precomputation_power_of_2(&scaled_wires_vec, precomp),
+    )
 }
 
 /// Recovers the complete wires commitments by adding back the public input commitments to the proof's wire commitments.

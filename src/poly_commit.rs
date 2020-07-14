@@ -2,14 +2,14 @@ use crate::curve_msm::MsmPrecomputation;
 use crate::plonk_util::pedersen_hash;
 use crate::{AffinePoint, Curve, Field, ProjectivePoint};
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 /// Represents a curve point either in affine or projective coordinates.
 enum CurvePoint<C: Curve> {
     Affine(AffinePoint<C>),
     Projective(ProjectivePoint<C>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 /// A Bulletproof polynomial commitment.
 /// `commitment` is the actual commitment, while randomness is the scalar factor used for blinding.
 pub struct PolynomialCommitment<C: Curve> {

@@ -11,10 +11,11 @@ use crate::plonk_challenger::Challenger;
 use crate::plonk_proof::{OldProof, Proof, SchnorrProof};
 use crate::plonk_util::{coeffs_to_values_padded, eval_coeffs, eval_l_1, eval_poly, eval_zero_poly, halo_n, halo_n_mul, pad_to_8n, permutation_polynomial, pis_commitments, powers, precompute_lagrange_commitments, reduce_with_powers, values_to_coeffs};
 use crate::poly_commit::PolynomialCommitment;
+use crate::polynomial::{polynomial_division, polynomial_multiplication, trim as trim_polynomial};
 use crate::target::Target;
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::witness::{PartialWitness, Witness, WitnessGenerator};
-use crate::{affine_multisummation_batch_inversion, divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_parallel, AffinePoint, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, OpeningSet, ProjectivePoint, VerificationKey};
+use crate::{affine_multisummation_batch_inversion, blake_hash_usize_to_curve, divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_parallel, AffinePoint, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, OpeningSet, ProjectivePoint, VerificationKey};
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
@@ -100,6 +101,24 @@ impl<C: HaloCurve> Circuit<C> {
             blinding_commitments,
         );
 
+        let num_public_input_gates = ceil_div_usize(self.num_public_inputs, NUM_WIRES);
+        // Compute the wire coefficients when the public input gates are set to zero.
+        // Used only when `output_pis` is false, so they are set to `None` if `output_pis` is true.
+        let wires_coeffs_no_pis = if output_pis {
+            None
+        } else {
+            let mut wire_values_by_wire_no_pis = wire_values_by_wire_index.clone();
+            wire_values_by_wire_no_pis.iter_mut().for_each(|w| {
+                for i in 0..num_public_input_gates {
+                    // Set the wire value at the public input gate to zero.
+                    w[2 * i] = C::ScalarField::ZERO;
+                }
+            });
+            let wires_coeffs_no_pis =
+                values_to_coeffs(&wire_values_by_wire_no_pis, &self.fft_precomputation_n);
+            Some(wires_coeffs_no_pis)
+        };
+
         // Generate a random beta and gamma from the transcript.
         challenger
             .observe_affine_points(&c_wires.iter().map(|c| c.to_affine()).collect::<Vec<_>>());
@@ -181,17 +200,64 @@ impl<C: HaloCurve> Circuit<C> {
             blinding_commitments,
         );
 
-        let old_proofs_coeffs = old_proofs.iter().map(|p| p.coeffs()).collect::<Vec<_>>();
+        // Combine the coefficients in `wires_coeffs_no_pis` using a linear combination weighted by `alpha`.
+        let vanishing_pis_coeffs = wires_coeffs_no_pis.map(|w| {
+            (0..self.degree())
+                .map(|i| {
+                    (0..w.len())
+                        .map(|j| w[j][i] * alpha_sf.exp_usize(j))
+                        .fold(C::ScalarField::ZERO, |acc, x| acc + x)
+                })
+                .collect::<Vec<_>>()
+        });
+        // `vanishing_pis_coeffs` vanishes at the public input gates. It is thus divisible by the vanishing
+        // polynomial at the public input gates. The quotient is computed here.
+        let pis_quotient_coeffs = vanishing_pis_coeffs.map(|coeffs| {
+            // The vanishing polynomial of a set `S` is `prod_{s \in S} (X-s)`.
+            // TODO: Faster implementation.
+            let mut pis_quotient_denominator =
+                (0..num_public_input_gates).fold(vec![C::ScalarField::ONE], |acc, i| {
+                    polynomial_multiplication(
+                        &acc,
+                        &vec![-self.subgroup_n[2 * i], C::ScalarField::ONE],
+                    )
+                });
+            trim_polynomial(&mut pis_quotient_denominator);
+            let mut ans = polynomial_division(&coeffs, &pis_quotient_denominator).0;
+            if cfg!(debug_assertions) {
+                // Check that division was performed correctly by evaluating at a random point.
+                let xxx = C::ScalarField::rand();
+                assert_eq!(
+                    eval_poly(&ans, xxx),
+                    eval_poly(&coeffs, xxx) / eval_poly(&pis_quotient_denominator, xxx)
+                );
+            }
+            for i in ans.len()..self.degree() {
+                ans.push(C::ScalarField::ZERO);
+            }
+            ans
+        });
+        // Commit to the public inputs quotient polynomial.
+        let c_pis_quotient = pis_quotient_coeffs.as_ref().map(|coeffs| {
+            PolynomialCommitment::coeffs_to_commitment(
+                coeffs,
+                &self.pedersen_g_msm_precomputation,
+                self.pedersen_h,
+                blinding_commitments,
+            )
+        });
 
         // Generate a random zeta from the transcript.
         challenger
             .observe_affine_points(&c_plonk_t.iter().map(|c| c.to_affine()).collect::<Vec<_>>());
+        if let Some(comm) = c_pis_quotient {
+            challenger.observe_affine_point(comm.to_affine());
+        }
         let zeta_bf = challenger.get_challenge();
         let zeta_sf =
             C::try_convert_b2s(zeta_bf).expect("should fit in both fields with high probability");
 
         // Open all polynomials at each PublicInputGate index.
-        let num_public_input_gates = ceil_div_usize(self.num_public_inputs, NUM_WIRES);
         let o_public_inputs: Option<Vec<OpeningSet<_>>> = if output_pis {
             Some(
                 (0..num_public_input_gates)
@@ -203,6 +269,7 @@ impl<C: HaloCurve> Circuit<C> {
                             &plonk_z_coeffs,
                             &plonk_t_coeff_chunks,
                             old_proofs,
+                            &pis_quotient_coeffs,
                             self.subgroup_generator_n.exp_usize(i),
                         )
                     })
@@ -218,6 +285,7 @@ impl<C: HaloCurve> Circuit<C> {
             &plonk_z_coeffs,
             &plonk_t_coeff_chunks,
             old_proofs,
+            &pis_quotient_coeffs,
             zeta_sf,
         );
         let o_right = self.open_all_polynomials(
@@ -225,6 +293,7 @@ impl<C: HaloCurve> Circuit<C> {
             &plonk_z_coeffs,
             &plonk_t_coeff_chunks,
             old_proofs,
+            &pis_quotient_coeffs,
             zeta_sf * self.subgroup_generator_n,
         );
         let o_below = self.open_all_polynomials(
@@ -232,6 +301,7 @@ impl<C: HaloCurve> Circuit<C> {
             &plonk_z_coeffs,
             &plonk_t_coeff_chunks,
             old_proofs,
+            &pis_quotient_coeffs,
             zeta_sf * self.subgroup_generator_n.exp_usize(GRID_WIDTH),
         );
 
@@ -284,8 +354,12 @@ impl<C: HaloCurve> Circuit<C> {
                 .iter()
                 .map(|_| C::ScalarField::ZERO)
                 .collect::<Vec<_>>(),
+            c_pis_quotient
+                .map(|c| vec![c.randomness])
+                .unwrap_or_default(),
         ]
         .concat();
+        let old_proofs_coeffs = old_proofs.iter().map(|p| p.coeffs()).collect::<Vec<_>>();
         let all_coeffs = [
             self.constants_coeffs.clone(),
             self.s_sigma_coeffs.clone(),
@@ -293,6 +367,7 @@ impl<C: HaloCurve> Circuit<C> {
             vec![plonk_z_coeffs],
             plonk_t_coeff_chunks,
             old_proofs_coeffs,
+            pis_quotient_coeffs.map(|c| vec![c]).unwrap_or_default(),
         ]
         .concat();
 
@@ -437,34 +512,11 @@ impl<C: HaloCurve> Circuit<C> {
             &mut challenger,
         );
 
-        // If the `output_pis` is false and there are some public inputs, the prover subtract the commitments
-        // of the public input gates to the wire commitments. The verifier will then add them back, which binds
-        // the proof to the public inputs.
-        if !output_pis && num_public_input_gates > 0 {
-            let precomputed_lagrange_commitments = precompute_lagrange_commitments(
-                self.degree_pow(),
-                num_public_input_gates,
-                &self.pedersen_g_msm_precomputation,
-            );
-            let pis_commitment = pis_commitments(
-                wire_values_by_wire_index,
-                &precomputed_lagrange_commitments,
-                num_public_input_gates,
-                true,
-            );
-            c_wires
-                .iter_mut()
-                .zip(pis_commitment)
-                .for_each(|(comm, pi_comm)| {
-                    comm.subtract_commitment(pi_comm);
-                });
-            PolynomialCommitment::batch_to_affine(&mut c_wires);
-        }
-
         Ok(Proof {
             c_wires: c_wires.iter().map(|c| c.to_affine()).collect(),
             c_plonk_z: c_plonk_z.to_affine(),
             c_plonk_t: c_plonk_t.iter().map(|c| c.to_affine()).collect(),
+            c_pis_quotient: c_pis_quotient.map(|c| c.to_affine()),
             o_public_inputs,
             o_local,
             o_right,
@@ -566,6 +618,7 @@ impl<C: HaloCurve> Circuit<C> {
         plonk_z_coeffs: &Vec<C::ScalarField>,
         plonk_t_coeffs: &Vec<Vec<C::ScalarField>>,
         old_proofs: &[OldProof<C>],
+        pi_quotient_coeffs: &Option<Vec<C::ScalarField>>,
         zeta: C::ScalarField,
     ) -> OpeningSet<C::ScalarField> {
         let powers_of_zeta = powers(zeta, self.degree());
@@ -576,6 +629,9 @@ impl<C: HaloCurve> Circuit<C> {
             o_wires: eval_coeffs(&wire_coeffs, &powers_of_zeta),
             o_plonk_z: C::ScalarField::inner_product(&plonk_z_coeffs, &powers_of_zeta),
             o_plonk_t: eval_coeffs(&plonk_t_coeffs, &powers_of_zeta),
+            o_pi_quotient: pi_quotient_coeffs
+                .as_ref()
+                .map(|coeffs| C::ScalarField::inner_product(&coeffs, &powers_of_zeta)),
             o_old_proofs: old_proofs
                 .iter()
                 .map(|p| p.evaluate_g(zeta))
@@ -755,6 +811,7 @@ impl<C: HaloCurve> Circuit<C> {
             num_public_inputs: self.num_public_inputs,
             security_bits: self.security_bits,
             pedersen_g_msm_precomputation: Some(self.pedersen_g_msm_precomputation.clone()),
+            fft_precomputation: Some(self.fft_precomputation_n.clone()),
         }
     }
 }
