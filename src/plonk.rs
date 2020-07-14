@@ -215,14 +215,15 @@ impl<C: HaloCurve> Circuit<C> {
         let pis_quotient_coeffs = vanishing_pis_coeffs.map(|coeffs| {
             // The vanishing polynomial of a set `S` is `prod_{s \in S} (X-s)`.
             // TODO: Faster implementation.
-            let mut pis_quotient_denominator =
+            let pis_quotient_denominator =
                 (0..num_public_input_gates).fold(vec![C::ScalarField::ONE], |acc, i| {
-                    polynomial_multiplication(
+                    let mut ans = polynomial_multiplication(
                         &acc,
                         &vec![-self.subgroup_n[2 * i], C::ScalarField::ONE],
-                    )
+                    );
+                    trim_polynomial(&mut ans);
+                    ans
                 });
-            trim_polynomial(&mut pis_quotient_denominator);
             let mut ans = polynomial_division(&coeffs, &pis_quotient_denominator).0;
             if cfg!(debug_assertions) {
                 // Check that division was performed correctly by evaluating at a random point.

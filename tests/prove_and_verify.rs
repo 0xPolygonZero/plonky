@@ -157,6 +157,44 @@ fn test_proof_quadratic_public_input() -> Result<()> {
 }
 
 #[test]
+fn test_proof_sum_public_input() -> Result<()> {
+    type F = <Tweedledee as Curve>::ScalarField;
+    let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+    let n = 5000;
+    let factorial_usize = (1..=n).sum();
+    let factors_pis = builder.stage_public_inputs(n);
+    builder.route_public_inputs();
+    let res = builder.constant_wire(F::from_canonical_usize(factorial_usize));
+    let mut factorial = builder.zero_wire();
+    factors_pis.iter().for_each(|pi| {
+        factorial = builder.add(factorial, pi.routable_target());
+    });
+    builder.copy(factorial, res);
+    let mut partial_witness = PartialWitness::new();
+    (0..n).for_each(|i| {
+        partial_witness.set_public_input(factors_pis[i], F::from_canonical_usize(i + 1));
+    });
+    let circuit = builder.build();
+    let witness = circuit.generate_witness(partial_witness);
+    let now = Instant::now();
+    let proof = circuit
+        .generate_proof::<Tweedledum>(witness, &[], true, false)
+        .unwrap();
+    dbg!(now.elapsed());
+    let vk = circuit.to_vk();
+    verify_proof::<Tweedledee, Tweedledum>(
+        &(1..=n).map(F::from_canonical_usize).collect::<Vec<_>>(),
+        &proof,
+        &[],
+        &vk,
+        false,
+    )?;
+    dbg!(now.elapsed());
+
+    Ok(())
+}
+
+#[test]
 fn test_proof_factorial_public_input() -> Result<()> {
     type F = <Tweedledee as Curve>::ScalarField;
     let mut builder = CircuitBuilder::<Tweedledee>::new(128);

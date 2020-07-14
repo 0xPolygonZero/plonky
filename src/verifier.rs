@@ -451,7 +451,6 @@ fn public_inputs_to_polynomial<F: Field>(
     fft_precomputation: Option<&FftPrecomputation<F>>,
 ) -> Vec<F> {
     let pis_wires_vec = public_inputs_to_wires_vec(public_inputs);
-    dbg!(&pis_wires_vec);
     let mut scaled_wires_vec = (0..pis_wires_vec[0].len())
         .map(|i| {
             (0..pis_wires_vec.len())
