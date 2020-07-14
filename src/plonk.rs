@@ -9,7 +9,7 @@ use rayon::prelude::*;
 use crate::partition::{get_subgroup_shift, TargetPartitions};
 use crate::plonk_challenger::Challenger;
 use crate::plonk_proof::{OldProof, Proof, SchnorrProof};
-use crate::plonk_util::{coeffs_to_values_padded, eval_coeffs, eval_l_1, eval_poly, eval_zero_poly, halo_n, halo_n_mul, pad_to_8n, permutation_polynomial, pis_commitments, powers, precompute_lagrange_commitments, reduce_with_powers, values_to_coeffs};
+use crate::plonk_util::{coeffs_to_values_padded, eval_coeffs, eval_l_1, eval_poly, eval_zero_poly, halo_n, halo_n_mul, pad_to_8n, permutation_polynomial, powers, reduce_with_powers, values_to_coeffs};
 use crate::poly_commit::PolynomialCommitment;
 use crate::polynomial::{polynomial_division, polynomial_multiplication, trim as trim_polynomial};
 use crate::target::Target;

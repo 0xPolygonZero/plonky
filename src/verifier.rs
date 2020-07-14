@@ -5,7 +5,7 @@ use crate::plonk_challenger::Challenger;
 
 use crate::gates::evaluate_all_constraints;
 use crate::plonk_proof::OldProof;
-use crate::plonk_util::{eval_poly, halo_g, halo_n, halo_n_mul, halo_s, pedersen_hash, pis_commitments, powers, precompute_lagrange_commitments, reduce_with_powers};
+use crate::plonk_util::{eval_poly, halo_g, halo_n, halo_n_mul, halo_s, pedersen_hash, powers, reduce_with_powers};
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::{blake_hash_usize_to_curve, fft_precompute, hash_usize_to_curve, ifft_with_precomputation_power_of_2, msm_execute_parallel, msm_precompute, AffinePoint, Circuit, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, ProjectivePoint, Proof, SchnorrProof, GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES};
 
@@ -467,38 +467,4 @@ fn public_inputs_to_polynomial<F: Field>(
         || ifft_with_precomputation_power_of_2(&scaled_wires_vec, &fft_precompute(degree)),
         |precomp| ifft_with_precomputation_power_of_2(&scaled_wires_vec, precomp),
     )
-}
-
-/// Recovers the complete wires commitments by adding back the public input commitments to the proof's wire commitments.
-/// To be used only when the public input openings are not included in the proof.
-fn recover_c_wires<C: HaloCurve>(
-    public_inputs: &[C::ScalarField],
-    proof: &Proof<C>,
-    vk: &VerificationKey<C>,
-) -> Vec<AffinePoint<C>> {
-    let precomputed_lagrange_commitments = precompute_lagrange_commitments(
-        log2_strict(vk.degree),
-        ceil_div_usize(vk.num_public_inputs, NUM_WIRES),
-        &(if let Some(msm_precomp) = &vk.pedersen_g_msm_precomputation {
-            msm_precomp.clone()
-        } else {
-            let pedersen_g: Vec<_> = (0..vk.degree)
-                .map(|i| blake_hash_usize_to_curve::<C>(i))
-                .collect();
-            msm_precompute(&AffinePoint::batch_to_projective(&pedersen_g), 11)
-        }),
-    );
-    let pis_commitment = pis_commitments(
-        &public_inputs_to_wires_vec(public_inputs),
-        &precomputed_lagrange_commitments,
-        ceil_div_usize(public_inputs.len(), NUM_WIRES),
-        false,
-    );
-    let new_c_wire = proof
-        .c_wires
-        .iter()
-        .zip(pis_commitment)
-        .map(|(comm, pi_comm)| comm.to_projective() + pi_comm)
-        .collect::<Vec<_>>();
-    ProjectivePoint::batch_to_affine(&new_c_wire)
 }
