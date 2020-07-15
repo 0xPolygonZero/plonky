@@ -98,7 +98,13 @@ pub fn recursive_verification_circuit<
             .collect()
     });
 
-    // verify_assumptions::<C, InnerC>(&mut builder, degree_pow, &public_inputs, &o_public_inputs);
+    verify_assumptions::<C, InnerC>(
+        &mut builder,
+        degree_pow,
+        &public_inputs,
+        // TODO: Fix this.
+        &o_public_inputs.unwrap(),
+    );
 
     // TODO: Verify that each prover polynomial commitment is on the curve.
     // Can call curve_assert_valid.

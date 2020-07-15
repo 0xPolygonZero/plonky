@@ -42,7 +42,6 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
     // Verify that the proof parameters are valid.
     check_proof_parameters(proof)?;
 
-    let mut proof = proof.clone();
     if proof.o_public_inputs.is_some() {
         // Check public inputs.
         verify_public_inputs(public_inputs, &proof, vk.num_public_inputs)?;
@@ -54,7 +53,7 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
     }
 
     // Observe the transcript and generate the associated challenge points using Fiat-Shamir.
-    let challs = proof.get_challenges()?;
+    let challs = proof.get_challenges(public_inputs)?;
 
     // Check the old proofs' openings.
     verify_old_proof_evaluation(old_proofs, &proof, challs.zeta)?;
@@ -169,9 +168,7 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
     }
 
     if verify_g {
-        let pedersen_g: Vec<_> = (0..vk.degree)
-            .map(blake_hash_usize_to_curve::<C>)
-            .collect();
+        let pedersen_g: Vec<_> = (0..vk.degree).map(blake_hash_usize_to_curve::<C>).collect();
         let w = 8; // TODO: Should really be set dynamically based on MSM size.
         let pedersen_g_msm_precomputation =
             msm_precompute(&AffinePoint::batch_to_projective(&pedersen_g), w);

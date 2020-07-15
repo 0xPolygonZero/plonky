@@ -160,7 +160,7 @@ fn test_proof_quadratic_public_input() -> Result<()> {
 fn test_proof_sum_public_input() -> Result<()> {
     type F = <Tweedledee as Curve>::ScalarField;
     let mut builder = CircuitBuilder::<Tweedledee>::new(128);
-    let n = 5000;
+    let n = 100;
     let factorial_usize = (1..=n).sum();
     let factors_pis = builder.stage_public_inputs(n);
     builder.route_public_inputs();

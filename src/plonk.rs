@@ -248,11 +248,20 @@ impl<C: HaloCurve> Circuit<C> {
             )
         });
 
+        let public_inputs = (0..self.num_public_inputs)
+            .map(|i| wire_values_by_wire_index[i % NUM_WIRES][2 * (i / NUM_WIRES)])
+            .collect::<Vec<_>>();
+
         // Generate a random zeta from the transcript.
         challenger
             .observe_affine_points(&c_plonk_t.iter().map(|c| c.to_affine()).collect::<Vec<_>>());
         if let Some(comm) = c_pis_quotient {
             challenger.observe_affine_point(comm.to_affine());
+            // Observe the public inputs
+            challenger.observe_elements(
+                &C::ScalarField::try_convert_all(&public_inputs)
+                    .expect("Public inputs should fit in both fields"),
+            )
         }
         let zeta_bf = challenger.get_challenge();
         let zeta_sf =

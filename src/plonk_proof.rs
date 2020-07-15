@@ -75,7 +75,7 @@ impl<C: HaloCurve> Proof<C> {
     }
 
     // Computes all challenges used in the proof verification.
-    pub fn get_challenges(&self) -> Result<ProofChallenge<C>> {
+    pub fn get_challenges(&self, public_inputs: &[C::ScalarField]) -> Result<ProofChallenge<C>> {
         let mut challenger = Challenger::new(SECURITY_BITS);
         let error_msg = "Conversion from base to scalar field failed.";
         challenger.observe_affine_points(&self.c_wires);
@@ -88,6 +88,10 @@ impl<C: HaloCurve> Proof<C> {
         challenger.observe_affine_points(&self.c_plonk_t);
         if let Some(comm) = self.c_pis_quotient {
             challenger.observe_affine_point(comm);
+            challenger.observe_elements(
+                &C::ScalarField::try_convert_all(public_inputs)
+                    .expect("Public inputs should fit in both fields"),
+            )
         }
         let zeta_bf = challenger.get_challenge();
         let zeta = C::try_convert_b2s(zeta_bf).map_err(|_| anyhow!(error_msg))?;
@@ -154,16 +158,6 @@ pub struct ProofChallenge<C: Curve> {
 pub struct OldProof<C: HaloCurve> {
     pub halo_g: AffinePoint<C>,
     pub halo_us: Vec<C::ScalarField>,
-}
-
-impl<C: HaloCurve> From<Proof<C>> for OldProof<C> {
-    fn from(proof: Proof<C>) -> Self {
-        let ProofChallenge { halo_us, .. } = proof.get_challenges().unwrap();
-        Self {
-            halo_g: proof.halo_g,
-            halo_us,
-        }
-    }
 }
 
 impl<C: HaloCurve> OldProof<C> {
