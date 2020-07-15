@@ -184,14 +184,7 @@ impl Field for TweedledumBase {
     const BITS: usize = 255;
     const BYTES: usize = 32;
     const ZERO: Self = Self { limbs: [0; 4] };
-    const ONE: Self = Self {
-        limbs: [
-            2035294266095304701,
-            17681163514934325971,
-            18446744073709551615,
-            4611686018427387903,
-        ],
-    };
+    const ONE: Self = Self { limbs: Self::R };
     const TWO: Self = Self {
         limbs: [
             10897934645458894841,

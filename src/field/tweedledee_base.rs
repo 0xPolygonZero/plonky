@@ -187,14 +187,7 @@ impl Field for TweedledeeBase {
     const BITS: usize = 255;
     const BYTES: usize = 32;
     const ZERO: Self = Self { limbs: [0; 4] };
-    const ONE: Self = Self {
-        limbs: [
-            8320946236270051325,
-            17681163515078405027,
-            18446744073709551615,
-            4611686018427387903,
-        ],
-    };
+    const ONE: Self = Self { limbs: Self::R };
     const TWO: Self = Self {
         limbs: [
             7117711835490418681,
