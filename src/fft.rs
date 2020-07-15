@@ -1,7 +1,7 @@
 use rayon::prelude::*;
 
-use crate::Field;
 use crate::util::{log2_ceil, log2_strict};
+use crate::Field;
 
 /// Permutes `arr` such that each index is mapped to its reverse in binary.
 fn reverse_index_bits<T: Copy>(arr: Vec<T>) -> Vec<T> {
@@ -24,7 +24,7 @@ fn reverse_bits(n: usize, num_bits: usize) -> usize {
     result
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct FftPrecomputation<F: Field> {
     /// For each layer index i, stores the cyclic subgroup corresponding to the evaluation domain of
     /// layer i. The indices within these subgroup vectors are bit-reversed.
@@ -96,8 +96,11 @@ pub fn fft_with_precomputation_power_of_2<F: Field>(
     coefficients: &[F],
     precomputation: &FftPrecomputation<F>,
 ) -> Vec<F> {
-    debug_assert_eq!(coefficients.len(), precomputation.subgroups_rev.last().unwrap().len(),
-                     "Number of coefficients does not match size of subgroup in precomputation");
+    debug_assert_eq!(
+        coefficients.len(),
+        precomputation.subgroups_rev.last().unwrap().len(),
+        "Number of coefficients does not match size of subgroup in precomputation"
+    );
 
     let degree = coefficients.len();
     let half_degree = coefficients.len() >> 1;
@@ -115,25 +118,28 @@ pub fn fft_with_precomputation_power_of_2<F: Field>(
         let pairs_per_poly = 1 << (i - 1);
 
         let pair_indices: Vec<usize> = (0..half_degree).collect();
-        let new_evaluations = pair_indices.par_chunks(2000).flat_map(|chunk| {
-            let mut new_evaluations_chunk = Vec::new();
-            for pair_index in chunk {
-                let poly_index = pair_index / pairs_per_poly;
-                let pair_index_within_poly = pair_index % pairs_per_poly;
+        let new_evaluations = pair_indices
+            .par_chunks(2000)
+            .flat_map(|chunk| {
+                let mut new_evaluations_chunk = Vec::new();
+                for pair_index in chunk {
+                    let poly_index = pair_index / pairs_per_poly;
+                    let pair_index_within_poly = pair_index % pairs_per_poly;
 
-                let child_index_0 = poly_index * points_per_poly + pair_index_within_poly;
-                let child_index_1 = child_index_0 + pairs_per_poly;
+                    let child_index_0 = poly_index * points_per_poly + pair_index_within_poly;
+                    let child_index_1 = child_index_0 + pairs_per_poly;
 
-                let even = evaluations[child_index_0];
-                let odd = evaluations[child_index_1];
+                    let even = evaluations[child_index_0];
+                    let odd = evaluations[child_index_1];
 
-                let point_0 = precomputation.subgroups_rev[i][pair_index_within_poly * 2];
-                let product = point_0 * odd;
-                new_evaluations_chunk.push(even + product);
-                new_evaluations_chunk.push(even - product);
-            }
-            new_evaluations_chunk
-        }).collect();
+                    let point_0 = precomputation.subgroups_rev[i][pair_index_within_poly * 2];
+                    let product = point_0 * odd;
+                    new_evaluations_chunk.push(even + product);
+                    new_evaluations_chunk.push(even - product);
+                }
+                new_evaluations_chunk
+            })
+            .collect();
         evaluations = new_evaluations;
     }
 
@@ -143,9 +149,9 @@ pub fn fft_with_precomputation_power_of_2<F: Field>(
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12377Scalar, fft_precompute, fft_with_precomputation, Field, ifft_with_precomputation_power_of_2};
     use crate::fft::{log2_strict, reverse_bits, reverse_index_bits};
     use crate::util::log2_ceil;
+    use crate::{fft_precompute, fft_with_precomputation, ifft_with_precomputation_power_of_2, Bls12377Scalar, Field};
 
     #[test]
     fn fft_and_ifft() {
@@ -160,7 +166,8 @@ mod tests {
         let points = fft_with_precomputation(&coefficients, &precomputation);
         assert_eq!(points, evaluate_naive(&coefficients));
 
-        let interpolated_coefficients = ifft_with_precomputation_power_of_2(&points, &precomputation);
+        let interpolated_coefficients =
+            ifft_with_precomputation_power_of_2(&points, &precomputation);
         for i in 0..degree {
             assert_eq!(interpolated_coefficients[i], coefficients[i]);
         }
@@ -173,7 +180,10 @@ mod tests {
     fn test_reverse_bits() {
         assert_eq!(reverse_bits(0b00110101, 8), 0b10101100);
         assert_eq!(reverse_index_bits(vec!["a", "b"]), vec!["a", "b"]);
-        assert_eq!(reverse_index_bits(vec!["a", "b", "c", "d"]), vec!["a", "c", "b", "d"]);
+        assert_eq!(
+            reverse_index_bits(vec!["a", "b", "c", "d"]),
+            vec!["a", "c", "b", "d"]
+        );
     }
 
     fn evaluate_naive<F: Field>(coefficients: &[F]) -> Vec<F> {
@@ -197,7 +207,10 @@ mod tests {
         let g = F::primitive_root_of_unity(degree_pow);
         let powers_of_g = F::cyclic_subgroup_known_order(g, degree);
 
-        powers_of_g.into_iter().map(|x| evaluate_at_naive(&coefficients, x)).collect()
+        powers_of_g
+            .into_iter()
+            .map(|x| evaluate_at_naive(&coefficients, x))
+            .collect()
     }
 
     fn evaluate_at_naive<F: Field>(coefficients: &[F], point: F) -> F {

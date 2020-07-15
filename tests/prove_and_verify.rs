@@ -20,7 +20,7 @@ fn get_trivial_circuit<C: HaloCurve>(x: C::ScalarField) -> (Circuit<C>, Witness<
 fn test_proof_trivial() -> Result<()> {
     let (circuit, witness) = get_trivial_circuit(<Tweedledee as Curve>::ScalarField::ZERO);
     let proof = circuit
-        .generate_proof::<Tweedledum>(witness, &[], true)
+        .generate_proof::<Tweedledum>(witness, &[], true, true)
         .unwrap();
     verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit.into(), true)?;
 
@@ -33,7 +33,7 @@ fn test_proof_trivial_circuit_many_proofs() -> Result<()> {
     for _ in 0..10 {
         let (circuit, witness) = get_trivial_circuit(<Tweedledee as Curve>::ScalarField::ZERO);
         let proof = circuit
-            .generate_proof::<Tweedledum>(witness.clone(), &[], true)
+            .generate_proof::<Tweedledum>(witness.clone(), &[], true, true)
             .unwrap();
         let vk = circuit.to_vk();
         let old_proof = verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, false)
@@ -43,7 +43,7 @@ fn test_proof_trivial_circuit_many_proofs() -> Result<()> {
     }
     let (circuit, witness) = get_trivial_circuit(<Tweedledee as Curve>::ScalarField::ZERO);
     let proof = circuit
-        .generate_proof::<Tweedledum>(witness.clone(), &old_proofs, true)
+        .generate_proof::<Tweedledum>(witness.clone(), &old_proofs, true, true)
         .unwrap();
     let vk = circuit.to_vk();
     verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &old_proofs, &vk, true)?;
@@ -64,7 +64,7 @@ fn test_proof_sum() -> Result<()> {
     let circuit = builder.build();
     let witness = circuit.generate_witness(partial_witness);
     let proof = circuit
-        .generate_proof::<Tweedledum>(witness, &[], true)
+        .generate_proof::<Tweedledum>(witness, &[], true, true)
         .unwrap();
     let vk = circuit.to_vk();
     verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
@@ -95,7 +95,7 @@ fn test_proof_sum_big() -> Result<()> {
     let witness = circuit.generate_witness(partial_witness);
     dbg!(now.elapsed());
     let proof = circuit
-        .generate_proof::<Tweedledum>(witness, &[], true)
+        .generate_proof::<Tweedledum>(witness, &[], true, true)
         .unwrap();
     dbg!(now.elapsed());
     let vk = circuit.to_vk();
@@ -121,10 +121,110 @@ fn test_proof_quadratic() -> Result<()> {
     let circuit = builder.build();
     let witness = circuit.generate_witness(partial_witness);
     let proof = circuit
-        .generate_proof::<Tweedledum>(witness, &[], true)
+        .generate_proof::<Tweedledum>(witness, &[], true, true)
         .unwrap();
     let vk = circuit.to_vk();
     verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
+
+    Ok(())
+}
+
+#[test]
+fn test_proof_quadratic_public_input() -> Result<()> {
+    type F = <Tweedledee as Curve>::ScalarField;
+    let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+    let seven_pi = builder.stage_public_input();
+    builder.route_public_inputs();
+    let one = builder.one_wire();
+    let t = builder.add_virtual_target();
+    let t_sq = builder.square(t);
+    let quad = builder.add_many(&[one, t, t_sq]);
+    let seven = seven_pi.routable_target();
+    let res = builder.sub(quad, seven);
+    builder.assert_zero(res);
+    let mut partial_witness = PartialWitness::new();
+    partial_witness.set_target(seven, F::from_canonical_usize(7));
+    partial_witness.set_target(t, F::TWO);
+    let circuit = builder.build();
+    let witness = circuit.generate_witness(partial_witness);
+    let proof = circuit
+        .generate_proof::<Tweedledum>(witness, &[], true, false)
+        .unwrap();
+    let vk = circuit.to_vk();
+    verify_proof::<Tweedledee, Tweedledum>(&[F::from_canonical_usize(7)], &proof, &[], &vk, true)?;
+
+    Ok(())
+}
+
+#[test]
+fn test_proof_sum_public_input() -> Result<()> {
+    type F = <Tweedledee as Curve>::ScalarField;
+    let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+    let n = 100;
+    let factorial_usize = (1..=n).sum();
+    let factors_pis = builder.stage_public_inputs(n);
+    builder.route_public_inputs();
+    let res = builder.constant_wire(F::from_canonical_usize(factorial_usize));
+    let mut factorial = builder.zero_wire();
+    factors_pis.iter().for_each(|pi| {
+        factorial = builder.add(factorial, pi.routable_target());
+    });
+    builder.copy(factorial, res);
+    let mut partial_witness = PartialWitness::new();
+    (0..n).for_each(|i| {
+        partial_witness.set_public_input(factors_pis[i], F::from_canonical_usize(i + 1));
+    });
+    let circuit = builder.build();
+    let witness = circuit.generate_witness(partial_witness);
+    let now = Instant::now();
+    let proof = circuit
+        .generate_proof::<Tweedledum>(witness, &[], true, false)
+        .unwrap();
+    dbg!(now.elapsed());
+    let vk = circuit.to_vk();
+    verify_proof::<Tweedledee, Tweedledum>(
+        &(1..=n).map(F::from_canonical_usize).collect::<Vec<_>>(),
+        &proof,
+        &[],
+        &vk,
+        false,
+    )?;
+    dbg!(now.elapsed());
+
+    Ok(())
+}
+
+#[test]
+fn test_proof_factorial_public_input() -> Result<()> {
+    type F = <Tweedledee as Curve>::ScalarField;
+    let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+    let n = 20;
+    let factorial_usize = (1..=n).fold(1, |acc, i| acc * i);
+    let factors_pis = builder.stage_public_inputs(n);
+    builder.route_public_inputs();
+    let res = builder.constant_wire(F::from_canonical_usize(factorial_usize));
+    let mut factorial = builder.one_wire();
+    factors_pis.iter().for_each(|pi| {
+        factorial = builder.mul(factorial, pi.routable_target());
+    });
+    builder.copy(factorial, res);
+    let mut partial_witness = PartialWitness::new();
+    (0..n).for_each(|i| {
+        partial_witness.set_public_input(factors_pis[i], F::from_canonical_usize(i + 1));
+    });
+    let circuit = builder.build();
+    let witness = circuit.generate_witness(partial_witness);
+    let proof = circuit
+        .generate_proof::<Tweedledum>(witness, &[], true, false)
+        .unwrap();
+    let vk = circuit.to_vk();
+    verify_proof::<Tweedledee, Tweedledum>(
+        &(1..=n).map(F::from_canonical_usize).collect::<Vec<_>>(),
+        &proof,
+        &[],
+        &vk,
+        true,
+    )?;
 
     Ok(())
 }
@@ -144,11 +244,11 @@ fn test_proof_public_input1() -> Result<()> {
     let circuit = builder.build();
     let witness = circuit.generate_witness(partial_witness);
     let proof = circuit
-        .generate_proof::<Tweedledum>(witness, &[], true)
+        .generate_proof::<Tweedledum>(witness, &[], true, true)
         .unwrap();
     // Check that the public input is set correctly in the proof.
     assert_eq!(
-        proof.o_public_inputs[0].o_wires[0],
+        proof.o_public_inputs.as_ref().unwrap()[0].o_wires[0],
         <Tweedledee as Curve>::ScalarField::TWO
     );
     let vk = circuit.to_vk();
@@ -180,13 +280,13 @@ fn test_proof_public_input2() -> Result<()> {
     let circuit = builder.build();
     let witness = circuit.generate_witness(partial_witness);
     let proof = circuit
-        .generate_proof::<Tweedledum>(witness, &[], true)
+        .generate_proof::<Tweedledum>(witness, &[], true, true)
         .unwrap();
     // Check that the public inputs are set correctly in the proof.
     values.iter().enumerate().for_each(|(i, &v)| {
         assert_eq!(
             v,
-            proof.o_public_inputs[i / NUM_WIRES].o_wires[i % NUM_WIRES],
+            proof.o_public_inputs.as_ref().unwrap()[i / NUM_WIRES].o_wires[i % NUM_WIRES],
         )
     });
     let vk = circuit.to_vk();
@@ -211,7 +311,7 @@ fn test_rescue_hash() -> Result<()> {
     let circuit = builder.build();
     let witness = circuit.generate_witness(partial_witness);
     let proof = circuit
-        .generate_proof::<Tweedledum>(witness, &[], true)
+        .generate_proof::<Tweedledum>(witness, &[], true, true)
         .unwrap();
     let vk = circuit.to_vk();
     verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
@@ -244,7 +344,7 @@ fn test_curve_add() -> Result<()> {
     let witness = circuit.generate_witness(partial_witness);
 
     let proof = circuit
-        .generate_proof::<Tweedledum>(witness, &[], true)
+        .generate_proof::<Tweedledum>(witness, &[], true, true)
         .unwrap();
 
     let vk = circuit.to_vk();
@@ -288,7 +388,7 @@ fn test_curve_msm() -> Result<()> {
     let circuit = builder.build();
     let witness = circuit.generate_witness(partial_witness);
     let proof = circuit
-        .generate_proof::<Tweedledee>(witness, &[], true)
+        .generate_proof::<Tweedledee>(witness, &[], true, true)
         .unwrap();
 
     let vk = circuit.to_vk();

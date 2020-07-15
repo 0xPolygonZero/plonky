@@ -1,7 +1,4 @@
-use crate::{
-    fft_precompute, fft_with_precomputation, ifft_with_precomputation_power_of_2, util::log2_ceil,
-    Field,
-};
+use crate::{fft_precompute, fft_with_precomputation, ifft_with_precomputation_power_of_2, util::log2_ceil, Field};
 
 // Store polynomial as a list of coefficient starting with the constant coefficient.
 type Polynomial<F> = Vec<F>;
@@ -41,7 +38,7 @@ fn neg<F: Field>(a: &Polynomial<F>) -> Polynomial<F> {
     a.iter().map(|&x| -x).collect()
 }
 
-fn trim<F: Field>(a: &mut Polynomial<F>) {
+pub fn trim<F: Field>(a: &mut Polynomial<F>) {
     let d = degree(a);
     a.drain(d + 1..);
 }
@@ -118,7 +115,11 @@ fn inv_mod_xn<F: Field>(h: &Polynomial<F>, n: usize) -> Polynomial<F> {
         let h0 = hh[..l].to_vec();
         let mut h1 = hh[l..].to_vec();
         let mut c = polynomial_multiplication(&a, &h0);
-        c.drain(0..l);
+        if l == c.len() {
+            c = vec![F::ZERO];
+        } else {
+            c.drain(0..l);
+        }
         trim(&mut h1);
         let mut tmp = polynomial_multiplication(&h1, &a);
         tmp = polynomial_addition(&tmp, &c);
@@ -131,7 +132,8 @@ fn inv_mod_xn<F: Field>(h: &Polynomial<F>, n: usize) -> Polynomial<F> {
     a
 }
 
-// Algorithm from http://people.csail.mit.edu/madhu/ST12/scribe/lect06.pdf
+/// Returns `(q,r)` the quotient and remainder of the polynomial division of `a` by `b`.
+/// Algorithm from http://people.csail.mit.edu/madhu/ST12/scribe/lect06.pdf
 pub fn polynomial_division<F: Field>(
     a: &Polynomial<F>,
     b: &Polynomial<F>,
@@ -143,9 +145,11 @@ pub fn polynomial_division<F: Field>(
     let rev_q = polynomial_multiplication(&rev_b_inv, &rev(a)[..=deg_a - deg_b].to_vec())
         [..=deg_a - deg_b]
         .to_vec();
-    let q = rev(&rev_q);
+    let mut q = rev(&rev_q);
     let qb = polynomial_multiplication(&q, &b);
-    let r = polynomial_addition(&a, &neg(&qb));
+    let mut r = polynomial_addition(&a, &neg(&qb));
+    trim(&mut q);
+    trim(&mut r);
     (q, r)
 }
 
@@ -205,7 +209,6 @@ mod test {
     use super::*;
     use crate::{Field, TweedledeeBase};
     use std::time::Instant;
-
 
     fn evaluate_at_naive<F: Field>(coefficients: &[F], point: F) -> F {
         let mut sum = F::ZERO;
@@ -314,5 +317,27 @@ mod test {
         trim(&mut p_test);
         println!("Division time: {:?}", now.elapsed());
         assert_eq!(p, p_test);
+    }
+
+    // Test to see which polynomial division method is faster for divisions of the type
+    // `(X^n - 1)/(X - a)
+    #[test]
+    fn test_division_linear() {
+        type F = TweedledeeBase;
+        let l = 14;
+        let n = 1 << l;
+        let g = F::primitive_root_of_unity(l);
+        let mut xn_minus_one = vec![F::ZERO; n + 1];
+        xn_minus_one[n] = F::ONE;
+        xn_minus_one[0] = F::NEG_ONE;
+
+        let a = g.exp_u32(1 << (l - 1));
+        let denom = vec![-a, F::ONE];
+        let now = Instant::now();
+        let d = polynomial_division(&xn_minus_one, &denom);
+        println!("Division time: {:?}", now.elapsed());
+        let now = Instant::now();
+        let d = polynomial_long_division(&xn_minus_one, &denom);
+        println!("Division time: {:?}", now.elapsed());
     }
 }

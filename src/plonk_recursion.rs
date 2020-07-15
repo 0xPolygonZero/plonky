@@ -5,7 +5,7 @@ use crate::plonk_challenger::RecursiveChallenger;
 use crate::plonk_proof::OldProofTarget;
 use crate::plonk_util::{powers_recursive, reduce_with_powers_recursive};
 use crate::util::ceil_div_usize;
-use crate::{get_subgroup_shift, hash_usize_to_curve, AffinePointTarget, Circuit, CircuitBuilder, Curve, CurveMulOp, Field, HaloCurve, OldProof, OpeningSetTarget, PartialWitness, Proof, ProofChallenge, ProofTarget, PublicInput, SchnorrProofTarget, Target, GRID_WIDTH, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, CurveMulEndoResult};
+use crate::{get_subgroup_shift, hash_usize_to_curve, AffinePointTarget, Circuit, CircuitBuilder, Curve, CurveMulEndoResult, CurveMulOp, Field, HaloCurve, OldProof, OpeningSetTarget, PartialWitness, Proof, ProofChallenge, ProofTarget, PublicInput, SchnorrProofTarget, Target, GRID_WIDTH, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER};
 
 /// Wraps a `Circuit` for recursive verification with inputs for the proof data.
 pub struct RecursiveCircuit<C: HaloCurve> {
@@ -74,7 +74,11 @@ pub fn recursive_verification_circuit<
         c_wires: builder.add_virtual_point_targets(NUM_WIRES),
         c_plonk_z: builder.add_virtual_point_target(),
         c_plonk_t: builder.add_virtual_point_targets(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
-        o_public_inputs: make_opening_sets(&mut builder, num_public_input_gates, num_old_proofs),
+        o_public_inputs: Some(make_opening_sets(
+            &mut builder,
+            num_public_input_gates,
+            num_old_proofs,
+        )),
         o_local: make_opening_set(&mut builder, num_old_proofs),
         o_right: make_opening_set(&mut builder, num_old_proofs),
         o_below: make_opening_set(&mut builder, num_old_proofs),
@@ -87,14 +91,20 @@ pub fn recursive_verification_circuit<
     let old_proofs = make_old_proofs(&mut builder, num_old_proofs, degree_pow);
 
     // Flatten the list of public input openings.
-    let o_public_inputs: Vec<Target> = proof
-        .o_public_inputs
-        .iter()
-        .cloned()
-        .flat_map(|opening_set| opening_set.o_wires)
-        .collect();
+    let o_public_inputs: Option<Vec<Target>> = proof.o_public_inputs.as_ref().map(|pis| {
+        pis.iter()
+            .cloned()
+            .flat_map(|opening_set| opening_set.o_wires)
+            .collect()
+    });
 
-    verify_assumptions::<C, InnerC>(&mut builder, degree_pow, &public_inputs, &o_public_inputs);
+    verify_assumptions::<C, InnerC>(
+        &mut builder,
+        degree_pow,
+        &public_inputs,
+        // TODO: Fix this.
+        &o_public_inputs.unwrap(),
+    );
 
     // TODO: Verify that each prover polynomial commitment is on the curve.
     // Can call curve_assert_valid.
@@ -281,8 +291,8 @@ fn verify_all_ipas<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     });
     let p_prime = builder.curve_add::<InnerC>(c_reduction, v_u_prime);
 
-    let (halo_q, halo_us) = compute_halo_q::<C, InnerC>(
-        builder, proof, &raw_ipa_challenges, p_prime);
+    let (halo_q, halo_us) =
+        compute_halo_q::<C, InnerC>(builder, proof, &raw_ipa_challenges, p_prime);
 
     let generator_n_value = C::ScalarField::primitive_root_of_unity(raw_ipa_challenges.len());
     let generator_n = builder.constant_wire(generator_n_value);
@@ -340,17 +350,21 @@ fn compute_halo_q<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
 
     // For the R_i terms, there is no MSM structure because of the inverses. Add them one by one.
     for (i, &raw_ipa_challenge) in raw_ipa_challenges.iter().enumerate() {
-        let CurveMulEndoResult { mul_result, actual_scalar } =
-            builder.curve_mul_inv_endo::<InnerC>(CurveMulOp {
-                scalar: raw_ipa_challenge,
-                point: proof.halo_r_i[i],
-            });
+        let CurveMulEndoResult {
+            mul_result,
+            actual_scalar,
+        } = builder.curve_mul_inv_endo::<InnerC>(CurveMulOp {
+            scalar: raw_ipa_challenge,
+            point: proof.halo_r_i[i],
+        });
         sum = builder.curve_add::<InnerC>(sum, mul_result);
         // Make sure the scalars used to scale L_i and R_i match.
         builder.copy(actual_scalar, l_msm_result.actual_scalars[i]);
     }
 
-    let halo_us = l_msm_result.actual_scalars.iter()
+    let halo_us = l_msm_result
+        .actual_scalars
+        .iter()
         .map(|&n_r| builder.deterministic_square_root(n_r))
         .collect();
 

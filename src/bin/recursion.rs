@@ -24,7 +24,7 @@ fn main() -> Result<()> {
     let start = Instant::now();
     let old_proofs = vec![];
     let inner_proof = inner_circuit
-        .generate_proof::<Tweedledee>(inner_witness, &old_proofs, true)
+        .generate_proof::<Tweedledee>(inner_witness, &old_proofs, true, true)
         .unwrap();
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!();
@@ -77,7 +77,7 @@ fn main() -> Result<()> {
     let proof = recursion_circuit
         .circuit
         // .generate_proof::<Tweedledum>(recursion_witness, &[inner_proof.into()], true)
-        .generate_proof::<Tweedledum>(recursion_witness, &[], true)
+        .generate_proof::<Tweedledum>(recursion_witness, &[], true, true)
         .unwrap();
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!();
@@ -90,7 +90,7 @@ fn main() -> Result<()> {
         recursion_circuit.circuit.num_public_inputs
     );
     let vk = recursion_circuit.circuit.to_vk();
-    verify_proof::<Tweedledee, Tweedledum>(&pis, &proof, &[], &vk, true)?;
+    verify_proof::<Tweedledee, Tweedledum>(&pis.unwrap(), &proof, &[], &vk, true)?;
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     Ok(())
 }

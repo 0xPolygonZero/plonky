@@ -1,10 +1,10 @@
 use std::collections::{BTreeMap, HashMap};
 
-use crate::{AffinePoint, AffinePointTarget, blake_hash_base_field_to_curve, blake_hash_usize_to_curve, Circuit, Curve, CurveMsmEndoResult, CurveMulEndoResult, CurveMulOp, fft_precompute, Field, generate_rescue_constants, HaloCurve, msm_precompute, NUM_CONSTANTS, NUM_WIRES, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator};
 use crate::gates::*;
-use crate::plonk_util::{coeffs_to_values_padded, sigma_polynomials, values_to_coeffs, halo_n};
+use crate::plonk_util::{coeffs_to_values_padded, halo_n, sigma_polynomials, values_to_coeffs};
 use crate::poly_commit::PolynomialCommitment;
 use crate::util::{ceil_div_usize, log2_strict, transpose};
+use crate::{blake_hash_base_field_to_curve, blake_hash_usize_to_curve, fft_precompute, generate_rescue_constants, msm_precompute, AffinePoint, AffinePointTarget, Circuit, Curve, CurveMsmEndoResult, CurveMulEndoResult, CurveMulOp, Field, HaloCurve, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, NUM_CONSTANTS, NUM_WIRES};
 use std::marker::PhantomData;
 
 pub struct CircuitBuilder<C: HaloCurve> {
@@ -879,11 +879,15 @@ impl<C: HaloCurve> CircuitBuilder<C> {
                 _constants: &Vec<Vec<InnerC::BaseField>>,
                 witness: &PartialWitness<InnerC::BaseField>,
             ) -> PartialWitness<InnerC::BaseField> {
-                let scalar = witness.get_target(self.mul.scalar)
-                    .try_convert::<InnerC::ScalarField>().expect("Improbable");
+                let scalar = witness
+                    .get_target(self.mul.scalar)
+                    .try_convert::<InnerC::ScalarField>()
+                    .expect("Improbable");
                 let scalar_bits = &scalar.to_canonical_bool_vec()[..self.security_bits];
                 let n_scalar = halo_n::<InnerC>(scalar_bits);
-                let n_scalar_inv = n_scalar.multiplicative_inverse().expect("Can't invert zero");
+                let n_scalar_inv = n_scalar
+                    .multiplicative_inverse()
+                    .expect("Can't invert zero");
 
                 let point = witness.get_point_target(self.mul.point);
                 let result = (InnerC::convert(n_scalar_inv) * point.to_projective()).to_affine();
@@ -903,8 +907,10 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         });
 
         // Compute [n(s)] r, and verify that it matches p.
-        let mul_result = self.curve_mul_endo::<InnerC>(
-            CurveMulOp { scalar, point: result });
+        let mul_result = self.curve_mul_endo::<InnerC>(CurveMulOp {
+            scalar,
+            point: result,
+        });
         self.copy_curve(mul_result.mul_result, point);
 
         CurveMulEndoResult {
@@ -1468,7 +1474,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 mod tests {
     use anyhow::Result;
 
-    use crate::{AffinePoint, blake_hash_base_field_to_curve, CircuitBuilder, Curve, CurveMulOp, Field, PartialWitness, Tweedledee, Tweedledum, verify_proof};
+    use crate::{blake_hash_base_field_to_curve, verify_proof, AffinePoint, CircuitBuilder, Curve, CurveMulOp, Field, PartialWitness, Tweedledee, Tweedledum};
 
     #[test]
     // TODO: This fails because curve_mul_endo has a flaw.
@@ -1498,7 +1504,7 @@ mod tests {
 
         let circuit = builder.build();
         let witness = circuit.generate_witness(PartialWitness::new());
-        let proof = circuit.generate_proof::<InnerC>(witness, &[], false)?;
+        let proof = circuit.generate_proof::<InnerC>(witness, &[], false, true)?;
         let vk = circuit.to_vk();
         verify_proof::<C, InnerC>(&[], &proof, &[], &vk, true)?;
 

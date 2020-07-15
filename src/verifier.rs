@@ -5,9 +5,9 @@ use crate::plonk_challenger::Challenger;
 
 use crate::gates::evaluate_all_constraints;
 use crate::plonk_proof::OldProof;
-use crate::plonk_util::{halo_g, halo_n, halo_n_mul, halo_s, pedersen_hash, powers, reduce_with_powers};
+use crate::plonk_util::{eval_poly, halo_g, halo_n, halo_n_mul, halo_s, pedersen_hash, powers, reduce_with_powers};
 use crate::util::{ceil_div_usize, log2_strict};
-use crate::{blake_hash_usize_to_curve, hash_usize_to_curve, msm_execute_parallel, msm_precompute, AffinePoint, Circuit, Field, HaloCurve, ProjectivePoint, Proof, SchnorrProof, GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES};
+use crate::{blake_hash_usize_to_curve, fft_precompute, hash_usize_to_curve, ifft_with_precomputation_power_of_2, msm_execute_parallel, msm_precompute, AffinePoint, Circuit, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, ProjectivePoint, Proof, SchnorrProof, GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES};
 
 pub const SECURITY_BITS: usize = 128;
 
@@ -18,6 +18,8 @@ pub struct VerificationKey<C: HaloCurve> {
     pub degree: usize,
     pub num_public_inputs: usize,
     pub security_bits: usize,
+    pub pedersen_g_msm_precomputation: Option<MsmPrecomputation<C>>,
+    pub fft_precomputation: Option<FftPrecomputation<C::ScalarField>>,
 }
 
 impl<C: HaloCurve> From<Circuit<C>> for VerificationKey<C> {
@@ -40,14 +42,21 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
     // Verify that the proof parameters are valid.
     check_proof_parameters(proof)?;
 
-    // Check public inputs.
-    verify_public_inputs(public_inputs, proof, vk.num_public_inputs)?;
+    if proof.o_public_inputs.is_some() {
+        // Check public inputs.
+        verify_public_inputs(public_inputs, &proof, vk.num_public_inputs)?;
+    } else {
+        ensure!(
+            proof.c_pis_quotient.is_some(),
+            "Public input information missing from the proof."
+        );
+    }
 
     // Observe the transcript and generate the associated challenge points using Fiat-Shamir.
-    let challs = proof.get_challenges()?;
+    let challs = proof.get_challenges(public_inputs)?;
 
     // Check the old proofs' openings.
-    verify_old_proof_evaluation(old_proofs, proof, challs.zeta)?;
+    verify_old_proof_evaluation(old_proofs, &proof, challs.zeta)?;
 
     let degree = vk.degree;
 
@@ -106,8 +115,36 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
         bail!("Incorrect opening of the t polynomial.");
     }
 
-    // Verify polynomial commitment openings.
     let subgroup_generator_n = C::ScalarField::primitive_root_of_unity(log2_strict(vk.degree));
+
+    // Verify that the purported opening of the public input quotient polynomial is valid.
+    if let Some(purported_pis_quotient_opening) = proof.o_local.o_pi_quotient {
+        let num_public_input_gates = ceil_div_usize(vk.num_public_inputs, NUM_WIRES);
+        // Compute the denominator `prod_{pi \in PI} (X - pi)`.
+        let pis_quotient_denominator = (0..num_public_input_gates)
+            .fold(C::ScalarField::ONE, |acc, i| {
+                acc * (challs.zeta - subgroup_generator_n.exp_usize(2 * i))
+            });
+        // Compute the numerator `WirePoly - PIPoly`.
+        let pis_quotient_numerator = (0..NUM_WIRES).fold(C::ScalarField::ZERO, |acc, i| {
+            acc + proof.o_local.o_wires[i] * challs.alpha.exp_usize(i)
+        }) - eval_poly(
+            &public_inputs_to_polynomial(
+                public_inputs,
+                challs.alpha,
+                vk.degree,
+                vk.fft_precomputation.as_ref(),
+            ),
+            challs.zeta,
+        );
+        let computed_pis_quotient_opening = pis_quotient_numerator / pis_quotient_denominator;
+
+        if computed_pis_quotient_opening != purported_pis_quotient_opening {
+            bail!("Incorrect opening of the public inputs quotient polynomial.");
+        }
+    }
+
+    // Verify polynomial commitment openings.
     let pedersen_h = blake_hash_usize_to_curve(vk.degree);
     let u_curve = blake_hash_usize_to_curve(vk.degree + 1);
     if !verify_all_ipas::<C>(
@@ -117,7 +154,7 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
         subgroup_generator_n,
         u_curve,
         pedersen_h,
-        proof,
+        &proof,
         old_proofs,
         challs.u,
         challs.v,
@@ -140,11 +177,7 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
 
         // Verify that `self.halo_g = <s, G>`.
         if proof.halo_g
-            == pedersen_hash(
-                &halo_s(&challs.halo_us),
-                &pedersen_g_msm_precomputation,
-            )
-            .to_affine()
+            == pedersen_hash(&halo_s(&challs.halo_us), &pedersen_g_msm_precomputation).to_affine()
         {
             Ok(None)
         } else {
@@ -184,6 +217,7 @@ fn verify_all_ipas<C: HaloCurve>(
         &[proof.c_plonk_z],
         &proof.c_plonk_t,
         &old_proofs.iter().map(|p| p.halo_g).collect::<Vec<_>>(),
+        &proof.c_pis_quotient.map(|c| vec![c]).unwrap_or_default(),
     ]
     .concat();
     let powers_of_u = powers(u, c_all.len());
@@ -209,10 +243,14 @@ fn verify_all_ipas<C: HaloCurve>(
 
     let num_public_input_gates = ceil_div_usize(num_public_inputs, NUM_WIRES);
     let points = [
-        (0..2 * num_public_input_gates)
-            .step_by(2)
-            .map(|i| subgroup_generator_n.exp_usize(i))
-            .collect::<Vec<_>>(),
+        if proof.o_public_inputs.is_some() {
+            (0..2 * num_public_input_gates)
+                .step_by(2)
+                .map(|i| subgroup_generator_n.exp_usize(i))
+                .collect::<Vec<_>>()
+        } else {
+            vec![]
+        },
         vec![
             zeta,
             zeta * subgroup_generator_n,
@@ -263,10 +301,7 @@ fn verify_ipa<C: HaloCurve>(
     // Compute Q as defined in the Halo paper.
     let mut points = proof.halo_l.clone();
     points.extend(proof.halo_r.iter());
-    let mut scalars = halo_us
-        .iter()
-        .map(|u| u.square())
-        .collect::<Vec<_>>();
+    let mut scalars = halo_us.iter().map(|u| u.square()).collect::<Vec<_>>();
     scalars.extend(
         halo_us
             .iter()
@@ -291,10 +326,12 @@ fn verify_public_inputs<C: HaloCurve>(
     if public_inputs.len() != num_public_inputs {
         bail!("Incorrect number of public inputs.")
     }
-    for i in 0..num_public_inputs {
-        // If the value `v` doesn't match the corresponding wire in the `PublicInputGate`, return false.
-        if public_inputs[i] != proof.o_public_inputs[i / NUM_WIRES].o_wires[i % NUM_WIRES] {
-            bail!("{}-th public input is incorrect", i);
+    if let Some(proof_pis) = &proof.o_public_inputs {
+        for i in 0..num_public_inputs {
+            // If the value `v` doesn't match the corresponding wire in the `PublicInputGate`, return false.
+            if public_inputs[i] != proof_pis[i / NUM_WIRES].o_wires[i % NUM_WIRES] {
+                bail!("{}-th public input is incorrect", i);
+            }
         }
     }
     Ok(())
@@ -385,4 +422,47 @@ fn check_proof_parameters<C: HaloCurve>(proof: &Proof<C>) -> Result<()> {
     );
 
     Ok(())
+}
+
+/// Reshapes a vector of field elements to a zero-padded matrix of height `NUM_WIRES`.
+fn public_inputs_to_wires_vec<F: Field>(public_inputs: &[F]) -> Vec<Vec<F>> {
+    let n = public_inputs.len();
+    let mut wires = (0..NUM_WIRES)
+        .map(|i| {
+            (i..n)
+                .step_by(NUM_WIRES)
+                .flat_map(|j| vec![public_inputs[j], F::ZERO])
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    if n % NUM_WIRES > 0 {
+        for i in n % NUM_WIRES..NUM_WIRES {
+            wires[i].extend(&[F::ZERO; 2]);
+        }
+    }
+    wires
+}
+
+fn public_inputs_to_polynomial<F: Field>(
+    public_inputs: &[F],
+    alpha: F,
+    degree: usize,
+    fft_precomputation: Option<&FftPrecomputation<F>>,
+) -> Vec<F> {
+    let pis_wires_vec = public_inputs_to_wires_vec(public_inputs);
+    let mut scaled_wires_vec = (0..pis_wires_vec[0].len())
+        .map(|i| {
+            (0..pis_wires_vec.len())
+                .map(|j| pis_wires_vec[j][i] * alpha.exp_usize(j))
+                .fold(F::ZERO, |acc, x| acc + x)
+        })
+        .collect::<Vec<_>>();
+    for i in scaled_wires_vec.len()..degree {
+        scaled_wires_vec.push(F::ZERO);
+    }
+
+    fft_precomputation.map_or_else(
+        || ifft_with_precomputation_power_of_2(&scaled_wires_vec, &fft_precompute(degree)),
+        |precomp| ifft_with_precomputation_power_of_2(&scaled_wires_vec, precomp),
+    )
 }
