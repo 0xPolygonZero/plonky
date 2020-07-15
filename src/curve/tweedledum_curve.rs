@@ -53,7 +53,7 @@ impl HaloCurve for Tweedledum {
 
 #[cfg(test)]
 mod tests {
-    use crate::curve::{AffinePoint, Curve, HaloCurve, ProjectivePoint};
+    use crate::curve::{Curve, HaloCurve, ProjectivePoint};
     use crate::{Tweedledum, Field};
 
     /// A simple, somewhat inefficient implementation of multiplication which is used as a reference

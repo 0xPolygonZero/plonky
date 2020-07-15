@@ -15,7 +15,7 @@ use crate::polynomial::{polynomial_division, polynomial_multiplication, trim as 
 use crate::target::Target;
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::witness::{PartialWitness, Witness, WitnessGenerator};
-use crate::{affine_multisummation_batch_inversion, blake_hash_usize_to_curve, divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_parallel, AffinePoint, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, OpeningSet, ProjectivePoint, VerificationKey};
+use crate::{divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_parallel, AffinePoint, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, OpeningSet, ProjectivePoint, VerificationKey};
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
@@ -94,7 +94,7 @@ impl<C: HaloCurve> Circuit<C> {
         let wire_values_8n = coeffs_to_values_padded(&wires_coeffs, &self.fft_precomputation_8n);
 
         // Commit to the wire polynomials.
-        let mut c_wires = PolynomialCommitment::coeffs_vec_to_commitments(
+        let c_wires = PolynomialCommitment::coeffs_vec_to_commitments(
             &wires_coeffs,
             &self.pedersen_g_msm_precomputation,
             self.pedersen_h,
@@ -233,7 +233,7 @@ impl<C: HaloCurve> Circuit<C> {
                     eval_poly(&coeffs, xxx) / eval_poly(&pis_quotient_denominator, xxx)
                 );
             }
-            for i in ans.len()..self.degree() {
+            for _ in ans.len()..self.degree() {
                 ans.push(C::ScalarField::ZERO);
             }
             ans

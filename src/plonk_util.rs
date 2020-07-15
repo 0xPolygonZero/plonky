@@ -1,6 +1,6 @@
 use crate::partition::get_subgroup_shift;
 use crate::witness::Witness;
-use crate::{divide_by_z_h, fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_execute_parallel, msm_parallel, polynomial_division, AffinePoint, CircuitBuilder, Curve, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, ProjectivePoint, Target, NUM_ROUTED_WIRES};
+use crate::{fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_execute_parallel, AffinePoint, CircuitBuilder, Curve, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, ProjectivePoint, Target, NUM_ROUTED_WIRES};
 use rayon::prelude::*;
 
 /// Evaluate the polynomial which vanishes on any multiplicative subgroup of a given order `n`.
@@ -315,9 +315,7 @@ pub fn halo_g<F: Field>(x: F, us: &[F]) -> F {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::util::log2_ceil;
-    use crate::{blake_hash_usize_to_curve, fft_precompute, msm_precompute, Circuit, CircuitBuilder, Curve, Field, PartialWitness, Tweedledee, NUM_WIRES};
-    use std::time::Instant;
+    use crate::{CircuitBuilder, Curve, Field, PartialWitness, Tweedledee};
 
     #[test]
     fn test_halo_n() {

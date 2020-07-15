@@ -1474,7 +1474,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 mod tests {
     use anyhow::Result;
 
-    use crate::{blake_hash_base_field_to_curve, verify_proof, AffinePoint, CircuitBuilder, Curve, CurveMulOp, Field, PartialWitness, Tweedledee, Tweedledum};
+    use crate::{verify_proof, CircuitBuilder, Curve, CurveMulOp, Field, PartialWitness, Tweedledee, Tweedledum};
 
     #[test]
     // TODO: This fails because curve_mul_endo has a flaw.

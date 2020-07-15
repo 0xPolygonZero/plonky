@@ -334,10 +334,10 @@ mod test {
         let a = g.exp_u32(1 << (l - 1));
         let denom = vec![-a, F::ONE];
         let now = Instant::now();
-        let d = polynomial_division(&xn_minus_one, &denom);
+        polynomial_division(&xn_minus_one, &denom);
         println!("Division time: {:?}", now.elapsed());
         let now = Instant::now();
-        let d = polynomial_long_division(&xn_minus_one, &denom);
+        polynomial_long_division(&xn_minus_one, &denom);
         println!("Division time: {:?}", now.elapsed());
     }
 }
