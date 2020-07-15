@@ -77,14 +77,19 @@ pub fn ifft_with_precomputation_power_of_2<F: Field>(
 ) -> Vec<F> {
     let n = points.len();
     let n_inv = F::from_canonical_usize(n).multiplicative_inverse().unwrap();
-    let result = fft_with_precomputation_power_of_2(points, precomputation);
-    // TODO: Could do this in-place with swaps.
-    let mut coefficients = Vec::with_capacity(n);
-    coefficients.push(result[0] * n_inv);
-    for x in result.into_iter().skip(1).rev() {
-        coefficients.push(x * n_inv);
+    let mut result = fft_with_precomputation_power_of_2(points, precomputation);
+
+    // We reverse all values except the first, and divide each by n.
+    result[0] = result[0] * n_inv;
+    result[n / 2] = result[n / 2] * n_inv;
+    for i in 1..(n / 2) {
+        let j = n - i;
+        let result_i = result[j] * n_inv;
+        let result_j = result[i] * n_inv;
+        result[i] = result_i;
+        result[j] = result_j;
     }
-    coefficients
+    result
 }
 
 pub fn fft_with_precomputation_power_of_2<F: Field>(

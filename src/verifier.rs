@@ -168,7 +168,9 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
     }
 
     if verify_g {
-        let pedersen_g: Vec<_> = (0..vk.degree).map(blake_hash_usize_to_curve::<C>).collect();
+        let pedersen_g: Vec<_> = (0..vk.degree)
+            .map(blake_hash_usize_to_curve::<C>)
+            .collect();
         let w = 8; // TODO: Should really be set dynamically based on MSM size.
         let pedersen_g_msm_precomputation =
             msm_precompute(&AffinePoint::batch_to_projective(&pedersen_g), w);

@@ -235,6 +235,7 @@ mod tests {
         let result_naive = Bls12377::convert(scalar_1) * generator_1
             + Bls12377::convert(scalar_2) * generator_2
             + Bls12377::convert(scalar_3) * generator_3;
+
         assert_eq!(result_msm, result_naive);
     }
 }
