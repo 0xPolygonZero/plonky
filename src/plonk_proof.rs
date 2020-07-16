@@ -1,8 +1,8 @@
-use anyhow::{anyhow, bail, ensure, Result};
+use anyhow::{anyhow, Result};
 
 use crate::plonk_challenger::Challenger;
-use crate::plonk_util::{halo_g, halo_n, halo_s, pedersen_hash};
-use crate::{blake_hash_usize_to_curve, AffinePoint, AffinePointTarget, Curve, Field, HaloCurve, MsmPrecomputation, PartialWitness, Target, NUM_WIRES, SECURITY_BITS};
+use crate::plonk_util::{halo_g, halo_n, halo_s};
+use crate::{AffinePoint, AffinePointTarget, Curve, Field, HaloCurve, PartialWitness, Target, NUM_WIRES, SECURITY_BITS};
 
 #[derive(Debug, Clone, Copy)]
 pub struct SchnorrProof<C: HaloCurve> {

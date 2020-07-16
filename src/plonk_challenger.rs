@@ -71,16 +71,6 @@ impl<F: Field> Challenger<F> {
         self.observe_affine_points(&ProjectivePoint::batch_to_affine(points));
     }
 
-    pub(crate) fn observe_proj_point_other_curve<C: Curve<ScalarField = F>>(
-        &mut self,
-        point: ProjectivePoint<C>,
-    ) {
-        let p = point.to_affine();
-        let x = p.x.try_convert::<F>().expect("Element is too large");
-        let y = p.x.try_convert::<F>().expect("Element is too large");
-        self.observe_elements(&[x, y]);
-    }
-
     pub(crate) fn get_challenge(&mut self) -> F {
         self.absorb_buffered_inputs();
 

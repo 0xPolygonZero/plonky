@@ -1,6 +1,6 @@
 use criterion::{black_box, Criterion};
 use criterion::criterion_group;
-use criterion::{BenchmarkId, criterion_main, SamplingMode};
+use criterion::{BenchmarkId, criterion_main};
 
 use plonky::{Field, TweedledeeBase, fft_precompute, ifft_with_precomputation_power_of_2, fft_with_precomputation_power_of_2};
 use std::time::Duration;
