@@ -157,11 +157,11 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for RescueStepAGate<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{test_gate_low_degree, ArithmeticGate, Tweedledum};
+    use crate::{test_gate_low_degree, RescueStepAGate, Tweedledum};
 
     test_gate_low_degree!(
-        low_degree_ArithmeticGate,
+        low_degree_RescueStepAGate,
         Tweedledum,
-        ArithmeticGate<Tweedledum>
+        RescueStepAGate<Tweedledum>
     );
 }
