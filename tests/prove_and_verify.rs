@@ -1,5 +1,6 @@
 use anyhow::Result;
-use plonky::{blake_hash_base_field_to_curve, msm_parallel, rescue_hash_1_to_1, verify_proof, AffinePoint, Circuit, CircuitBuilder, Curve, CurveMulOp, Field, HaloCurve, PartialWitness, Tweedledee, Tweedledum, Witness};
+use plonky::{blake_hash_base_field_to_curve, msm_parallel, rescue_hash_1_to_1, verify_proof, AffinePoint, Base4SumGate, Circuit, CircuitBuilder, Curve, CurveMulOp, Field, HaloCurve, PartialWitness, Target, Tweedledee, Tweedledum, Wire, Witness};
+use rand::{thread_rng, Rng, RngCore};
 use std::time::Instant;
 
 // Make sure it's the same as in `plonk.rs`.
@@ -393,6 +394,87 @@ fn test_curve_msm() -> Result<()> {
 
     let vk = circuit.to_vk();
     verify_proof::<Tweedledum, Tweedledee>(&[], &proof, &[], &vk, true)?;
+
+    Ok(())
+}
+
+#[test]
+fn test_base_4_sum() -> Result<()> {
+    type C = Tweedledee;
+    type InnerC = Tweedledum;
+    type SF = <C as Curve>::ScalarField;
+    type B4 = Base4SumGate<C>;
+
+    let mut builder = CircuitBuilder::<C>::new(128);
+
+    let mut rng = thread_rng();
+    let limbs = (0..B4::NUM_LIMBS) //(0..B4::NUM_LIMBS)
+        .map(|_| SF::from_canonical_usize(rng.gen_range(0, 4)))
+        .collect::<Vec<_>>();
+    let x = limbs.iter().fold(SF::ZERO, |acc, &l| acc.quadruple() + l);
+    let y = SF::rand();
+
+    let t_y = builder.constant_wire(y);
+    let t_x_y = builder.constant_wire(
+        x + {
+            let mut tmp_y = y;
+            (0..B4::NUM_LIMBS).for_each(|_| tmp_y = tmp_y.quadruple());
+            tmp_y
+        },
+    );
+
+    let index = builder.num_gates();
+    builder.add_gate_no_constants(B4::new(index));
+
+    builder.copy(
+        t_y,
+        Target::Wire(Wire {
+            gate: index,
+            input: B4::WIRE_ACC_OLD,
+        }),
+    );
+    builder.copy(
+        t_x_y,
+        Target::Wire(Wire {
+            gate: index,
+            input: B4::WIRE_ACC_NEW,
+        }),
+    );
+
+    let t_limbs = (B4::WIRE_LIMB_0..B4::WIRE_LIMB_0 + B4::NUM_LIMBS) //(B4::WIRE_LIMB_0..B4::WIRE_LIMB_0 + B4::NUM_LIMBS)
+        .map(|input| Target::Wire(Wire { gate: index, input }))
+        .collect::<Vec<_>>();
+
+    let circuit = builder.build();
+    let mut partial_witness = PartialWitness::new();
+    partial_witness.set_targets(&t_limbs, &limbs);
+    let witness = circuit.generate_witness(partial_witness);
+    let proof = circuit.generate_proof::<InnerC>(witness, &[], false, true)?;
+    verify_proof::<C, InnerC>(&[], &proof, &[], &circuit.into(), true)?;
+
+    Ok(())
+}
+
+#[test]
+fn test_curve_double_gate() -> Result<()> {
+    type C = Tweedledee;
+    type InnerC = Tweedledum;
+    type SF = <C as Curve>::ScalarField;
+
+    let mut builder = CircuitBuilder::<C>::new(128);
+
+    let p = blake_hash_base_field_to_curve::<InnerC>(SF::rand());
+    let t_p = builder.constant_affine_point(p);
+    let t_double_p_true = builder.constant_affine_point(p.double());
+
+    let t_double_p_purported = builder.curve_double::<InnerC>(t_p);
+
+    builder.copy_curve(t_double_p_purported, t_double_p_true);
+
+    let circuit = builder.build();
+    let witness = circuit.generate_witness(PartialWitness::new());
+    let proof = circuit.generate_proof::<InnerC>(witness, &[], false, true)?;
+    verify_proof::<C, InnerC>(&[], &proof, &[], &circuit.into(), true)?;
 
     Ok(())
 }
