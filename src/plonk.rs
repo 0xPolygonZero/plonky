@@ -160,8 +160,12 @@ impl<C: HaloCurve> Circuit<C> {
 
         if cfg!(debug_assertions) {
             // Check that the vanishing polynomial indeed vanishes.
-            self.subgroup_n.iter().for_each(|&x| {
-                assert!(eval_poly(&vanishing_coeffs, x).is_zero());
+            self.subgroup_n.iter().enumerate().for_each(|(i, &x)| {
+                assert!(
+                    eval_poly(&vanishing_coeffs, x).is_zero(),
+                    "{}-th gate constraints are not satisfied",
+                    i
+                );
             });
         }
 
