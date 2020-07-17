@@ -75,11 +75,11 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for ConstantGate<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{test_gate_low_degree, ArithmeticGate, Tweedledum};
+    use crate::{test_gate_low_degree, ConstantGate, Tweedledum};
 
     test_gate_low_degree!(
-        low_degree_ArithmeticGate,
+        low_degree_ConstantGate,
         Tweedledum,
-        ArithmeticGate<Tweedledum>
+        ConstantGate<Tweedledum>
     );
 }

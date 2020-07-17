@@ -100,11 +100,11 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for PublicInputGate<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{test_gate_low_degree, ArithmeticGate, Tweedledum};
+    use crate::{test_gate_low_degree, PublicInputGate, Tweedledum};
 
     test_gate_low_degree!(
-        low_degree_ArithmeticGate,
+        low_degree_PublicInputGate,
         Tweedledum,
-        ArithmeticGate<Tweedledum>
+        PublicInputGate<Tweedledum>
     );
 }
