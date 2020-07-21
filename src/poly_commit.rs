@@ -17,6 +17,15 @@ pub struct PolynomialCommitment<C: Curve> {
     pub randomness: C::ScalarField,
 }
 
+impl<C: Curve> From<AffinePoint<C>> for PolynomialCommitment<C> {
+    fn from(p: AffinePoint<C>) -> Self {
+        Self {
+            commitment: CurvePoint::Affine(p),
+            randomness: C::ScalarField::ZERO,
+        }
+    }
+}
+
 impl<C: Curve> PolynomialCommitment<C> {
     /// Creates a polynomial commitment from a vector of coefficients.
     /// If `blinding` is true, a random blinding factor is used. Otherwise, it is set to zero.
