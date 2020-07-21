@@ -47,7 +47,7 @@ pub(crate) fn reduce_with_powers_recursive<C: HaloCurve>(
 
 /// Compute `n(x)` for a given `x`, where `n` is the injective function related to the Halo
 /// endomorphism.
-pub(crate) fn halo_n<C: HaloCurve>(s_bits: &[bool]) -> C::ScalarField {
+pub fn halo_n<C: HaloCurve>(s_bits: &[bool]) -> C::ScalarField {
     // This is based on Algorithm 2 of the Halo paper, except that we start with (a, b) = (0, 0).
 
     debug_assert_eq!(s_bits.len() % 2, 0, "Number of scalar bits must be even");
@@ -111,7 +111,7 @@ pub(crate) fn halo_n_mul<C: HaloCurve>(s_bits: &[bool], p: AffinePoint<C>) -> Af
     acc.to_affine()
 }
 
-pub(crate) fn eval_poly<F: Field>(coeffs: &[F], x: F) -> F {
+pub fn eval_poly<F: Field>(coeffs: &[F], x: F) -> F {
     let mut ans = F::ZERO;
     let mut x_pow = F::ONE;
     for &c in coeffs {
