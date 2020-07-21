@@ -24,7 +24,7 @@ pub(crate) fn eval_l_1<F: Field>(n: usize, x: F) -> F {
 }
 
 /// Computes a sum of terms weighted by powers of alpha.
-pub(crate) fn reduce_with_powers<F: Field>(terms: &[F], alpha: F) -> F {
+pub fn reduce_with_powers<F: Field>(terms: &[F], alpha: F) -> F {
     let mut sum = F::ZERO;
     for &term in terms.iter().rev() {
         sum = sum * alpha + term;
@@ -171,7 +171,7 @@ pub(crate) fn pad_to_8n<F: Field>(coeffs: &[F]) -> Vec<F> {
     result
 }
 
-pub(crate) fn values_to_coeffs<F: Field>(
+pub fn values_to_coeffs<F: Field>(
     values_vec: &[Vec<F>],
     fft_precomputation: &FftPrecomputation<F>,
 ) -> Vec<Vec<F>> {

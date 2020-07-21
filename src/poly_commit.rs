@@ -1,5 +1,5 @@
-use crate::MsmPrecomputation;
 use crate::plonk_util::pedersen_hash;
+use crate::MsmPrecomputation;
 use crate::{AffinePoint, Curve, Field, ProjectivePoint};
 
 #[derive(Debug, Copy, Clone)]
@@ -20,7 +20,7 @@ pub struct PolynomialCommitment<C: Curve> {
 impl<C: Curve> PolynomialCommitment<C> {
     /// Creates a polynomial commitment from a vector of coefficients.
     /// If `blinding` is true, a random blinding factor is used. Otherwise, it is set to zero.
-    pub(crate) fn coeffs_to_commitment(
+    pub fn coeffs_to_commitment(
         coeffs: &[C::ScalarField],
         msm_precomputation: &MsmPrecomputation<C>,
         blinding_point: AffinePoint<C>,
@@ -40,7 +40,7 @@ impl<C: Curve> PolynomialCommitment<C> {
     }
 
     /// Creates a list of polynomial commitments from a list of polynomials in coefficients vector form.
-    pub(crate) fn coeffs_vec_to_commitments(
+    pub fn coeffs_vec_to_commitments(
         coefficients_vec: &[Vec<C::ScalarField>],
         msm_precomputation: &MsmPrecomputation<C>,
         blinding_point: AffinePoint<C>,
