@@ -6,10 +6,13 @@
 
 pub use bigint::*;
 pub use circuit_builder::*;
+pub use circuit_builder_bigint::*;
+pub use circuit_builder_ordering::*;
 pub use conversions::*;
 pub use curve::*;
 pub use fft::*;
 pub use field::*;
+pub use foreign_field::*;
 pub use gates::*;
 pub use hash_to_curve::*;
 pub use mds::*;
@@ -28,10 +31,13 @@ pub use witness::*;
 
 mod bigint;
 mod circuit_builder;
+mod circuit_builder_bigint;
+mod circuit_builder_ordering;
 mod conversions;
 mod curve;
 mod fft;
 mod field;
+mod foreign_field;
 mod gates;
 pub mod halo;
 mod hash_to_curve;

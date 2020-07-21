@@ -440,8 +440,8 @@ fn test_base_4_sum() -> Result<()> {
         }),
     );
 
-    let t_limbs = (B4::WIRE_LIMB_0..B4::WIRE_LIMB_0 + B4::NUM_LIMBS) //(B4::WIRE_LIMB_0..B4::WIRE_LIMB_0 + B4::NUM_LIMBS)
-        .map(|input| Target::Wire(Wire { gate: index, input }))
+    let t_limbs = (0..B4::NUM_LIMBS)
+        .map(|i| Target::Wire(Wire { gate: index, input: B4::wire_limb(i) }))
         .collect::<Vec<_>>();
 
     let circuit = builder.build();

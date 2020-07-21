@@ -1,6 +1,7 @@
 use crate::util::transpose;
-use crate::{AffinePoint, AffinePointTarget, Curve, Field, PublicInput, Target, Wire, NUM_WIRES};
-use std::collections::HashMap;
+use crate::{AffinePoint, AffinePointTarget, Curve, Field, PublicInput, Target, Wire, NUM_WIRES, OrderingTarget, field_to_biguint, LIMB_BITS, BigIntTarget, biguint_to_limbs, ForeignFieldTarget, biguint_to_field};
+use std::{cmp::Ordering, collections::HashMap};
+use num::{Zero, BigUint};
 
 pub struct PartialWitness<F: Field> {
     wire_values: HashMap<Target, F>,
@@ -48,6 +49,64 @@ impl<F: Field> PartialWitness<F> {
         let x = self.get_target(target.x);
         let y = self.get_target(target.y);
         AffinePoint::nonzero(x, y)
+    }
+
+    pub fn get_ordering_target(&self, target: OrderingTarget) -> Ordering {
+        let OrderingTarget { lt, eq, gt } = target;
+        let lt_eq_gt = &self.get_targets(&[lt, eq, gt]);
+
+        if lt_eq_gt == &[F::ONE, F::ZERO, F::ZERO] {
+            return Ordering::Less;
+        }
+        if lt_eq_gt == &[F::ZERO, F::ONE, F::ZERO] {
+            return Ordering::Equal;
+        }
+        if lt_eq_gt == &[F::ZERO, F::ZERO, F::ONE] {
+            return Ordering::Greater;
+        }
+        
+        panic!("Invalid ordering values")
+    }
+
+    pub fn set_ordering_target(&mut self, target: OrderingTarget, value: Ordering) {
+        let OrderingTarget { lt, eq, gt } = target;
+        let values = match value {
+            Ordering::Less => [F::ONE, F::ZERO, F::ZERO],
+            Ordering::Equal => [F::ZERO, F::ONE, F::ZERO],
+            Ordering::Greater => [F::ZERO, F::ZERO, F::ONE],
+        };
+        self.set_targets(&[lt, eq, gt], &values);
+    }
+
+    pub fn get_bigint_target(&self, target: &BigIntTarget) -> BigUint {
+        let mut result = BigUint::zero();
+        for (i, &limb) in target.limbs.iter().enumerate() {
+            let limb_value = field_to_biguint(self.get_target(limb));
+            result += limb_value << i * LIMB_BITS;
+        }
+        result
+    }
+
+    pub fn set_bigint_target(&mut self, target: &BigIntTarget, value: &BigUint) {
+        let mut value_limbs = biguint_to_limbs(value);
+
+        debug_assert!(
+            value_limbs.len() <= target.limbs.len(),
+            "Not enough limbs to fit the given value");
+
+        while value_limbs.len() < target.limbs.len() {
+            value_limbs.push(F::ZERO);
+        }
+
+        self.set_targets(&target.limbs, &value_limbs);
+    }
+
+    pub fn get_foreign_field_target<FF: Field>(&self, target: &ForeignFieldTarget) -> FF {
+        biguint_to_field(self.get_bigint_target(&target.value))
+    }
+
+    pub fn set_foreign_field_target<FF: Field>(&mut self, target: &ForeignFieldTarget, value: FF) {
+        self.set_bigint_target(&target.value, &field_to_biguint(value))
     }
 
     pub fn get_wire(&self, wire: Wire) -> F {
