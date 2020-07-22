@@ -76,7 +76,7 @@ pub fn halo_n<C: HaloCurve>(s_bits: &[bool]) -> C::ScalarField {
 
 /// Compute `[n(s)].P` for a given `s`, where `n` is the injective function related to the Halo
 /// endomorphism.
-pub(crate) fn halo_n_mul<C: HaloCurve>(s_bits: &[bool], p: AffinePoint<C>) -> AffinePoint<C> {
+pub fn halo_n_mul<C: HaloCurve>(s_bits: &[bool], p: AffinePoint<C>) -> AffinePoint<C> {
     // This is based on Algorithm 1 of the Halo paper, except that we start with Acc = O.
 
     debug_assert_eq!(s_bits.len() % 2, 0, "Number of scalar bits must be even");
@@ -122,7 +122,7 @@ pub fn eval_poly<F: Field>(coeffs: &[F], x: F) -> F {
 }
 
 /// Compute `[x^0, x^1, ..., x^(n - 1)]`.
-pub(crate) fn powers<F: Field>(x: F, n: usize) -> Vec<F> {
+pub fn powers<F: Field>(x: F, n: usize) -> Vec<F> {
     let mut powers = Vec::new();
     let mut current = F::ONE;
     for i in 0..n {
