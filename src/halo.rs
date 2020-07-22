@@ -1,7 +1,7 @@
 use crate::plonk_challenger::Challenger;
 use crate::plonk_util::{halo_n, halo_n_mul, powers, reduce_with_powers};
 use crate::util::log2_strict;
-use crate::{msm_parallel, AffinePoint, Curve, Field, HaloCurve, PolynomialCommitment, ProjectivePoint, SchnorrProof};
+use crate::{msm_execute_parallel, msm_parallel, msm_precompute, AffinePoint, Curve, Field, HaloCurve, PolynomialCommitment, ProjectivePoint, Proof, SchnorrProof};
 use anyhow::Result;
 use rayon::prelude::*;
 
@@ -178,4 +178,44 @@ fn schnorr_protocol<C: HaloCurve>(
         z1,
         z2,
     }
+}
+
+/// Verify the final IPA.
+pub fn verify_ipa<C: HaloCurve>(
+    halo_l: &[AffinePoint<C>],
+    halo_r: &[AffinePoint<C>],
+    halo_g: AffinePoint<C>,
+    commitment: ProjectivePoint<C>,
+    value: C::ScalarField,
+    halo_b: C::ScalarField,
+    halo_us: &[C::ScalarField],
+    u_prime: ProjectivePoint<C>,
+    pedersen_h: AffinePoint<C>,
+    schnorr_challenge: C::ScalarField,
+    schnorr_proof: SchnorrProof<C>,
+) -> bool {
+    // Now we begin IPA verification by computing P' and u' as in Protocol 1 of Bulletproofs.
+    // In Protocol 1 we compute u' = [x] u, but we leverage to endomorphism, instead computing
+    // u' = [n(x)] u.
+
+    // Compute [c] [n(x)] u = [c] u'.
+    let u_n_x_c = C::convert(value) * u_prime;
+    let p_prime = commitment + u_n_x_c;
+
+    // Compute Q as defined in the Halo paper.
+    let mut points = halo_l.to_vec();
+    points.extend(halo_r.iter());
+    let mut scalars = halo_us.iter().map(|u| u.square()).collect::<Vec<_>>();
+    scalars.extend(
+        halo_us
+            .iter()
+            .map(|chal| chal.multiplicative_inverse_assuming_nonzero().square()),
+    );
+    let precomputation = msm_precompute(&AffinePoint::batch_to_projective(&points), 8);
+    let q = msm_execute_parallel(&precomputation, &scalars) + p_prime;
+
+    // Performing ZK opening protocol.
+    C::convert(schnorr_challenge) * q + schnorr_proof.r
+        == C::convert(schnorr_proof.z1) * (halo_g.to_projective() + C::convert(halo_b) * u_prime)
+            + C::convert(schnorr_proof.z2) * pedersen_h.to_projective()
 }
