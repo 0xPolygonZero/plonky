@@ -358,35 +358,44 @@ macro_rules! test_gate_low_degree {
             }
 
             // Low-degree extend them to 16n values.
-            let mut constant_coeffs_16n =
-                $crate::plonk_util::values_to_coeffs(&constant_values_n, &fft_precomputation_n);
-            let mut wire_coeffs_16n =
-                $crate::plonk_util::values_to_coeffs(&wire_values_n, &fft_precomputation_n);
-            for coeffs in constant_coeffs_16n
+            let mut constant_polynomials_16n = $crate::plonk_util::values_to_polynomials(
+                &constant_values_n,
+                &fft_precomputation_n,
+            );
+            let mut wire_polynomials_16n =
+                $crate::plonk_util::values_to_polynomials(&wire_values_n, &fft_precomputation_n);
+            for poly in constant_polynomials_16n
                 .iter_mut()
-                .chain(wire_coeffs_16n.iter_mut())
+                .chain(wire_polynomials_16n.iter_mut())
             {
-                while coeffs.len() < 16 * n {
-                    coeffs.push(<SF as $crate::field::Field>::ZERO);
-                }
+                poly.pad(16 * n);
             }
-            let constant_values_16n: Vec<Vec<SF>> = constant_coeffs_16n
+            let constant_values_16n: Vec<Vec<SF>> = constant_polynomials_16n
                 .iter()
-                .map(|coeffs| {
-                    $crate::fft::fft_with_precomputation_power_of_2(coeffs, &fft_precomputation_16n)
+                .map(|poly| {
+                    $crate::fft::fft_with_precomputation_power_of_2(
+                        &poly[..],
+                        &fft_precomputation_16n,
+                    )
                 })
                 .collect();
-            let wire_values_16n: Vec<Vec<SF>> = wire_coeffs_16n
+            let wire_values_16n: Vec<Vec<SF>> = wire_polynomials_16n
                 .iter()
-                .map(|coeffs| {
-                    $crate::fft::fft_with_precomputation_power_of_2(coeffs, &fft_precomputation_16n)
+                .map(|poly| {
+                    $crate::fft::fft_with_precomputation_power_of_2(
+                        &poly[..],
+                        &fft_precomputation_16n,
+                    )
                 })
                 .collect();
 
             // Make sure each extended polynomial is still degree <n.
             for values_16n in constant_values_16n.iter().chain(wire_values_16n.iter()) {
                 assert!(
-                    $crate::plonk_util::polynomial_degree_plus_1(values_16n, &fft_precomputation_16n) <= n
+                    $crate::plonk_util::polynomial_degree_plus_1(
+                        values_16n,
+                        &fft_precomputation_16n
+                    ) <= n
                 );
             }
 

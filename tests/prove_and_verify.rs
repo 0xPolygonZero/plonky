@@ -327,7 +327,6 @@ fn test_curve_add() -> Result<()> {
     let a = blake_hash_base_field_to_curve::<Tweedledum>(F::rand());
     let b = blake_hash_base_field_to_curve::<Tweedledum>(F::rand());
     let sum = (a + b).to_affine();
-    dbg!(a, b, sum);
 
     let mut builder = CircuitBuilder::<Tweedledee>::new(128);
 

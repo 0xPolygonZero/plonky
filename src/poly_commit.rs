@@ -98,4 +98,10 @@ impl<C: Curve> PolynomialCommitment<C> {
             CurvePoint::Projective(p) => p.to_affine(),
         }
     }
+
+    /// Returns the commitment point in affine coordinates.
+    /// `Self::batch_to_affine` should be run first for better performances.
+    pub fn to_affine_vec(comms: &[Self]) -> Vec<AffinePoint<C>> {
+        comms.iter().map(|c| c.to_affine()).collect()
+    }
 }

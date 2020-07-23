@@ -1,6 +1,6 @@
 use crate::partition::get_subgroup_shift;
 use crate::witness::Witness;
-use crate::{fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_execute_parallel, AffinePoint, CircuitBuilder, Curve, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, ProjectivePoint, Target, NUM_ROUTED_WIRES};
+use crate::{fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_execute_parallel, AffinePoint, CircuitBuilder, Curve, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, Polynomial, PolynomialCommitment, ProjectivePoint, Target, NUM_ROUTED_WIRES};
 use rayon::prelude::*;
 
 /// Evaluate the polynomial which vanishes on any multiplicative subgroup of a given order `n`.
@@ -152,11 +152,8 @@ pub(crate) fn powers_recursive<C: HaloCurve>(
 }
 
 /// Returns the evaluation of a list of polynomials at a point.
-pub(crate) fn eval_coeffs<F: Field>(coeffs: &[Vec<F>], powers: &[F]) -> Vec<F> {
-    coeffs
-        .iter()
-        .map(|c| F::inner_product(c, &powers))
-        .collect()
+pub(crate) fn eval_polys<F: Field>(polys: &[Polynomial<F>], powers: &[F]) -> Vec<F> {
+    polys.iter().map(|p| p.eval_from_power(powers)).collect()
 }
 
 /// Zero-pad a list of `n` polynomial coefficients to a length of `8n`, which is the degree at
@@ -171,33 +168,37 @@ pub(crate) fn pad_to_8n<F: Field>(coeffs: &[F]) -> Vec<F> {
     result
 }
 
-pub fn values_to_coeffs<F: Field>(
+pub(crate) fn values_to_polynomials<F: Field>(
     values_vec: &[Vec<F>],
     fft_precomputation: &FftPrecomputation<F>,
-) -> Vec<Vec<F>> {
+) -> Vec<Polynomial<F>> {
     values_vec
-        .iter()
-        .map(|values| ifft_with_precomputation_power_of_2(values, fft_precomputation))
+        .par_iter()
+        .map(|values| Polynomial::from_evaluations(&values, fft_precomputation))
         .collect()
 }
 
 pub(crate) fn coeffs_to_values<F: Field>(
-    coefficients_vec: &[Vec<F>],
+    polys_vec: &[Polynomial<F>],
     fft_precomputation: &FftPrecomputation<F>,
 ) -> Vec<Vec<F>> {
-    coefficients_vec
-        .iter()
-        .map(|coeffs| fft_with_precomputation_power_of_2(coeffs, fft_precomputation))
+    polys_vec
+        .par_iter()
+        .map(|poly| poly.eval_domain(fft_precomputation))
         .collect()
 }
 
 pub(crate) fn coeffs_to_values_padded<F: Field>(
-    coefficients_vec: &[Vec<F>],
+    polys_vec: &[Polynomial<F>],
     fft_precomputation: &FftPrecomputation<F>,
 ) -> Vec<Vec<F>> {
-    coefficients_vec
-        .iter()
-        .map(|coeffs| fft_with_precomputation_power_of_2(&pad_to_8n(coeffs), fft_precomputation))
+    polys_vec
+        .par_iter()
+        .map(|poly| {
+            let mut padded_poly = poly.clone();
+            padded_poly.pad(poly.len() * 8);
+            padded_poly.eval_domain(fft_precomputation)
+        })
         .collect()
 }
 
@@ -221,6 +222,24 @@ fn pedersen_commit<C: Curve>(
     let blinding_term = h.mul_with_precomputation(opening, mul_precomputation);
 
     msm_execute_parallel(pedersen_g_msm_precomputation, xs) + blinding_term
+}
+
+pub fn commit_polynomials<C: Curve>(
+    polynomials: &[Polynomial<C::ScalarField>],
+    msm_precomputation: &MsmPrecomputation<C>,
+    blinding_point: AffinePoint<C>,
+    blinding: bool,
+) -> Vec<PolynomialCommitment<C>> {
+    PolynomialCommitment::coeffs_vec_to_commitments(
+        polynomials
+            .iter()
+            .map(|p| p.coeffs())
+            .collect::<Vec<_>>()
+            .as_slice(),
+        msm_precomputation,
+        blinding_point,
+        blinding,
+    )
 }
 
 // Generate Z, which is used in Plonk's permutation argument.

@@ -1,10 +1,9 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crate::gates::*;
-use crate::plonk_util::{coeffs_to_values_padded, halo_n, sigma_polynomials, values_to_coeffs};
-use crate::poly_commit::PolynomialCommitment;
+use crate::plonk_util::{coeffs_to_values_padded, commit_polynomials, halo_n, sigma_polynomials, values_to_polynomials};
 use crate::util::{ceil_div_usize, log2_strict, transpose};
-use crate::{blake_hash_base_field_to_curve, blake_hash_usize_to_curve, fft_precompute, generate_rescue_constants, msm_precompute, AffinePoint, AffinePointTarget, Circuit, Curve, CurveMsmEndoResult, CurveMulEndoResult, CurveMulOp, Field, HaloCurve, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, NUM_CONSTANTS, NUM_WIRES};
+use crate::{blake_hash_base_field_to_curve, blake_hash_usize_to_curve, fft_precompute, generate_rescue_constants, msm_precompute, AffinePoint, AffinePointTarget, Circuit, Curve, CurveMsmEndoResult, CurveMulEndoResult, CurveMulOp, Field, HaloCurve, PartialWitness, Polynomial, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, NUM_CONSTANTS, NUM_WIRES};
 use std::marker::PhantomData;
 
 pub struct CircuitBuilder<C: HaloCurve> {
@@ -1388,9 +1387,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         let subgroup_8n =
             C::ScalarField::cyclic_subgroup_known_order(subgroup_generator_8n, 8 * degree);
 
-        let pedersen_g: Vec<_> = (0..degree)
-            .map(blake_hash_usize_to_curve::<C>)
-            .collect();
+        let pedersen_g: Vec<_> = (0..degree).map(blake_hash_usize_to_curve::<C>).collect();
         let pedersen_h = blake_hash_usize_to_curve::<C>(degree);
         let u = blake_hash_usize_to_curve::<C>(degree + 1);
 
@@ -1401,11 +1398,10 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         // While gate_constants is indexed by gate index first, this is indexed by wire index first.
         let wire_constants = transpose::<C::ScalarField>(&gate_constants);
 
-        let constants_coeffs: Vec<Vec<C::ScalarField>> =
-            values_to_coeffs(&wire_constants, &fft_precomputation_n);
-        let constants_8n = coeffs_to_values_padded(&constants_coeffs, &fft_precomputation_8n);
-        let c_constants = PolynomialCommitment::coeffs_vec_to_commitments(
-            &constants_coeffs,
+        let constant_polynomials = values_to_polynomials(&wire_constants, &fft_precomputation_n);
+        let constants_8n = coeffs_to_values_padded(&constant_polynomials, &fft_precomputation_8n);
+        let c_constants = commit_polynomials(
+            constant_polynomials.as_slice(),
             &pedersen_g_msm_precomputation,
             pedersen_h,
             false, // Circuit blinding is not necessary here.
@@ -1415,10 +1411,11 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         let sigma_chunks = sigma_polynomials(sigma, degree, subgroup_generator_n);
 
         // Compute S_sigma, then a commitment to it.
-        let s_sigma_coeffs = values_to_coeffs(&sigma_chunks, &fft_precomputation_n);
-        let s_sigma_values_8n = coeffs_to_values_padded(&s_sigma_coeffs, &fft_precomputation_8n);
-        let c_s_sigmas = PolynomialCommitment::coeffs_vec_to_commitments(
-            &s_sigma_coeffs,
+        let s_sigma_polynomials = values_to_polynomials(&sigma_chunks, &fft_precomputation_n);
+        let s_sigma_values_8n =
+            coeffs_to_values_padded(&s_sigma_polynomials, &fft_precomputation_8n);
+        let c_s_sigmas = commit_polynomials(
+            s_sigma_polynomials.as_slice(),
             &pedersen_g_msm_precomputation,
             pedersen_h,
             false, // Circuit blinding is not necessary here.
@@ -1437,10 +1434,10 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             pedersen_g,
             pedersen_h,
             u,
-            constants_coeffs,
+            constant_polynomials,
             constants_8n,
             c_constants,
-            s_sigma_coeffs,
+            s_sigma_polynomials,
             s_sigma_values_8n,
             c_s_sigmas,
             pedersen_g_msm_precomputation,

@@ -1,4 +1,4 @@
-use crate::{fft_precompute, fft_with_precomputation, ifft_with_precomputation_power_of_2, util::log2_ceil, FftPrecomputation, Field};
+use crate::{fft_precompute, fft_with_precomputation, ifft_with_precomputation_power_of_2, util::log2_ceil, AffinePoint, Curve, FftPrecomputation, Field, MsmPrecomputation, PolynomialCommitment};
 use std::ops::{Index, IndexMut, RangeBounds};
 use std::slice::{Iter, IterMut, SliceIndex};
 
@@ -34,65 +34,73 @@ where
 }
 
 impl<F: Field> Polynomial<F> {
-    fn from_coeffs(coeffs: &[F]) -> Self {
+    pub fn from_coeffs(coeffs: &[F]) -> Self {
         Self(coeffs.to_vec())
     }
 
-    fn coeffs(&self) -> Vec<F> {
+    pub fn coeffs(&self) -> Vec<F> {
         self.0.clone()
     }
 
-    fn empty() -> Self {
+    pub fn empty() -> Self {
         Self(Vec::new())
     }
 
-    fn zero(len: usize) -> Self {
+    pub fn zero(len: usize) -> Self {
         Self(vec![F::ZERO; len])
     }
 
-    fn iter(&self) -> Iter<F> {
+    pub fn iter(&self) -> Iter<F> {
         self.0.iter()
     }
 
-    fn iter_mut(&mut self) -> IterMut<F> {
+    pub fn iter_mut(&mut self) -> IterMut<F> {
         self.0.iter_mut()
     }
 
-    fn is_zero(&self) -> bool {
+    pub fn is_zero(&self) -> bool {
         self.0.iter().all(|x| x.is_zero())
     }
 
-    fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 
     fn drain<R: RangeBounds<usize>>(&mut self, range: R) {
         self.0.drain(range);
     }
 
-    fn eval(&self, x: F) -> F {
+    pub fn eval(&self, x: F) -> F {
         self.iter().rev().fold(F::ZERO, |acc, &c| acc * x + c)
     }
 
-    fn eval_domain(&self, fft_precomputation: &FftPrecomputation<F>) -> Vec<F> {
+    pub fn eval_from_power(&self, x_pow: &[F]) -> F {
+        F::inner_product(&self[..], x_pow)
+    }
+
+    pub fn eval_domain(&self, fft_precomputation: &FftPrecomputation<F>) -> Vec<F> {
         fft_with_precomputation(&self.coeffs(), fft_precomputation)
     }
 
-    fn from_evaluations(values: &[F], fft_precomputation: &FftPrecomputation<F>) -> Self {
+    pub fn from_evaluations(values: &[F], fft_precomputation: &FftPrecomputation<F>) -> Self {
         Self(ifft_with_precomputation_power_of_2(
             values,
             fft_precomputation,
         ))
     }
 
-    fn degree(&self) -> usize {
+    pub fn degree(&self) -> usize {
         (0usize..self.0.len())
             .rev()
             .find(|&i| self.0[i].is_nonzero())
             .expect("Zero polynomial")
     }
 
-    fn lead(&self) -> F {
+    pub fn lead(&self) -> F {
         self.iter()
             .rev()
             .find(|x| x.is_nonzero())
@@ -108,13 +116,13 @@ impl<F: Field> Polynomial<F> {
         Self(self.iter().map(|&x| -x).collect())
     }
 
-    fn trim(&mut self) {
+    pub fn trim(&mut self) {
         if !self.is_zero() {
             self.0.drain(self.degree() + 1..);
         }
     }
 
-    fn add(&self, other: &Self) -> Self {
+    pub fn add(&self, other: &Self) -> Self {
         let (mut a, mut b) = (self.clone(), other.clone());
         if a.len() < b.len() {
             a.pad(b.len())
@@ -124,12 +132,13 @@ impl<F: Field> Polynomial<F> {
         Self(a.iter().zip(b.iter()).map(|(&x, &y)| x + y).collect())
     }
 
-    fn pad(&mut self, len: usize) {
+    pub fn pad(&mut self, len: usize) {
+        self.trim();
         assert!(self.len() <= len);
         self.0.extend((self.len()..len).map(|_| F::ZERO));
     }
 
-    fn mul(&self, b: &Self) -> Self {
+    pub fn mul(&self, b: &Self) -> Self {
         if self.is_zero() || b.is_zero() {
             return Self::zero(1);
         }
@@ -231,7 +240,6 @@ impl<F: Field> Polynomial<F> {
                 .into();
             let mut q = rev_q.rev();
             let mut qb = q.mul(b);
-            qb.trim();
             qb.pad(self.len());
             let mut r = self.add(&qb.neg());
             q.trim();
@@ -288,6 +296,38 @@ impl<F: Field> Polynomial<F> {
             g_inv_pow = g_inv_pow * g_inv;
         });
         p
+    }
+
+    pub fn commit<C: Curve<ScalarField = F>>(
+        &self,
+        msm_precomputation: &MsmPrecomputation<C>,
+        blinding_point: AffinePoint<C>,
+        blinding: bool,
+    ) -> PolynomialCommitment<C> {
+        PolynomialCommitment::coeffs_to_commitment(
+            &self.coeffs(),
+            msm_precomputation,
+            blinding_point,
+            blinding,
+        )
+    }
+
+    pub fn commit_vec<C: Curve<ScalarField = F>>(
+        polynomials: &[Self],
+        msm_precomputation: &MsmPrecomputation<C>,
+        blinding_point: AffinePoint<C>,
+        blinding: bool,
+    ) -> Vec<PolynomialCommitment<C>> {
+        PolynomialCommitment::coeffs_vec_to_commitments(
+            polynomials
+                .iter()
+                .map(|p| p.coeffs())
+                .collect::<Vec<_>>()
+                .as_slice(),
+            msm_precomputation,
+            blinding_point,
+            blinding,
+        )
     }
 }
 
