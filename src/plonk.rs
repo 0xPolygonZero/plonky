@@ -6,6 +6,7 @@ use std::time::Instant;
 use anyhow::Result;
 use rayon::prelude::*;
 
+use crate::halo::batch_opening_proof;
 use crate::partition::{get_subgroup_shift, TargetPartitions};
 use crate::plonk_challenger::Challenger;
 use crate::plonk_proof::{OldProof, Proof, SchnorrProof};
@@ -393,7 +394,7 @@ impl<C: HaloCurve> Circuit<C> {
         ]
         .concat();
 
-        let halo_proof = crate::halo::batch_opening_proof(
+        let halo_proof = batch_opening_proof(
             &all_coeffs.iter().map(|c| c.as_slice()).collect::<Vec<_>>(),
             &commitments,
             &opening_points,
