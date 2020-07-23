@@ -10,13 +10,13 @@ use crate::halo::batch_opening_proof;
 use crate::partition::{get_subgroup_shift, TargetPartitions};
 use crate::plonk_challenger::Challenger;
 use crate::plonk_proof::{OldProof, Proof, SchnorrProof};
-use crate::plonk_util::{coeffs_to_values_padded, commit_polynomials, eval_l_1, eval_poly, eval_polys, eval_zero_poly, halo_n, halo_n_mul, pad_to_8n, permutation_polynomial, powers, reduce_with_powers, values_to_polynomials};
+use crate::plonk_util::{coeffs_to_values_padded, commit_polynomials, eval_l_1, eval_polys, eval_zero_poly, halo_n, halo_n_mul, pad_to_8n, permutation_polynomial, powers, reduce_with_powers, values_to_polynomials};
 use crate::poly_commit::PolynomialCommitment;
 use crate::polynomial::Polynomial;
 use crate::target::Target;
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::witness::{PartialWitness, Witness, WitnessGenerator};
-use crate::{evaluate_all_constraints, fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_parallel, AffinePoint, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, OpeningSet, ProjectivePoint, VerificationKey};
+use crate::{evaluate_all_constraints, fft_with_precomputation_power_of_2, msm_parallel, AffinePoint, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, OpeningSet, ProjectivePoint, VerificationKey};
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;

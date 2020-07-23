@@ -80,7 +80,7 @@ impl<F: Field> Challenger<F> {
         (self.get_challenge(), self.get_challenge())
     }
 
-    pub fn get_3_challenges(&mut self) -> (F, F, F) {
+    pub(crate) fn get_3_challenges(&mut self) -> (F, F, F) {
         (
             self.get_challenge(),
             self.get_challenge(),
@@ -88,7 +88,8 @@ impl<F: Field> Challenger<F> {
         )
     }
 
-    pub fn get_n_challenges(&mut self, n: usize) -> Vec<F> {
+    #[allow(dead_code)]
+    pub(crate) fn get_n_challenges(&mut self, n: usize) -> Vec<F> {
         (0..n).map(|_| self.get_challenge()).collect()
     }
 
@@ -182,6 +183,7 @@ impl<C: HaloCurve> RecursiveChallenger<C> {
         )
     }
 
+    #[allow(dead_code)]
     pub(crate) fn get_n_challenges(
         &mut self,
         builder: &mut CircuitBuilder<C>,

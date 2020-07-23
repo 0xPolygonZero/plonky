@@ -338,16 +338,6 @@ mod test {
     use rand::{thread_rng, Rng};
     use std::time::Instant;
 
-    fn evaluate_at_naive<F: Field>(coefficients: &[F], point: F) -> F {
-        let mut sum = F::ZERO;
-        let mut point_power = F::ONE;
-        for &c in coefficients {
-            sum = sum + c * point_power;
-            point_power = point_power * point;
-        }
-        sum
-    }
-
     #[test]
     fn test_polynomial_multiplication() {
         type F = TweedledeeBase;

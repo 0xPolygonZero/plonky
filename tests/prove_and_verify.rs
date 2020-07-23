@@ -1,6 +1,6 @@
 use anyhow::Result;
 use plonky::{blake_hash_base_field_to_curve, msm_parallel, rescue_hash_1_to_1, verify_proof, AffinePoint, Base4SumGate, Circuit, CircuitBuilder, Curve, CurveMulOp, Field, HaloCurve, PartialWitness, Target, Tweedledee, Tweedledum, Wire, Witness};
-use rand::{thread_rng, Rng, RngCore};
+use rand::{thread_rng, Rng};
 use std::time::Instant;
 
 // Make sure it's the same as in `plonk.rs`.

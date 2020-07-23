@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use crate::gates::*;
 use crate::plonk_util::{coeffs_to_values_padded, commit_polynomials, halo_n, sigma_polynomials, values_to_polynomials};
 use crate::util::{ceil_div_usize, log2_strict, transpose};
-use crate::{blake_hash_base_field_to_curve, blake_hash_usize_to_curve, fft_precompute, generate_rescue_constants, msm_precompute, AffinePoint, AffinePointTarget, Circuit, Curve, CurveMsmEndoResult, CurveMulEndoResult, CurveMulOp, Field, HaloCurve, PartialWitness, Polynomial, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, NUM_CONSTANTS, NUM_WIRES};
+use crate::{blake_hash_base_field_to_curve, blake_hash_usize_to_curve, fft_precompute, generate_rescue_constants, msm_precompute, AffinePoint, AffinePointTarget, Circuit, Curve, CurveMsmEndoResult, CurveMulEndoResult, CurveMulOp, Field, HaloCurve, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, NUM_CONSTANTS, NUM_WIRES};
 use std::marker::PhantomData;
 
 pub struct CircuitBuilder<C: HaloCurve> {

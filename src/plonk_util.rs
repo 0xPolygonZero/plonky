@@ -1,6 +1,6 @@
 use crate::partition::get_subgroup_shift;
 use crate::witness::Witness;
-use crate::{fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_execute_parallel, AffinePoint, CircuitBuilder, Curve, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, Polynomial, PolynomialCommitment, ProjectivePoint, Target, NUM_ROUTED_WIRES};
+use crate::{ifft_with_precomputation_power_of_2, msm_execute_parallel, AffinePoint, CircuitBuilder, Curve, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, Polynomial, PolynomialCommitment, ProjectivePoint, Target, NUM_ROUTED_WIRES};
 use rayon::prelude::*;
 
 /// Evaluate the polynomial which vanishes on any multiplicative subgroup of a given order `n`.
@@ -178,6 +178,7 @@ pub(crate) fn values_to_polynomials<F: Field>(
         .collect()
 }
 
+#[allow(dead_code)]
 pub(crate) fn coeffs_to_values<F: Field>(
     polys_vec: &[Polynomial<F>],
     fft_precomputation: &FftPrecomputation<F>,
@@ -210,6 +211,7 @@ pub fn pedersen_hash<C: Curve>(
     msm_execute_parallel(pedersen_g_msm_precomputation, xs)
 }
 
+#[allow(dead_code)]
 fn pedersen_commit<C: Curve>(
     xs: &[C::ScalarField],
     opening: C::ScalarField,
@@ -291,6 +293,7 @@ pub fn sigma_polynomials<F: Field>(
         .collect()
 }
 
+#[allow(dead_code)]
 pub(crate) fn polynomial_degree_plus_1<F: Field>(
     points: &[F],
     fft_precomputation: &FftPrecomputation<F>,
