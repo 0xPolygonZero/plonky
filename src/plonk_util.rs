@@ -24,7 +24,7 @@ pub(crate) fn eval_l_1<F: Field>(n: usize, x: F) -> F {
 }
 
 /// Computes a sum of terms weighted by powers of alpha.
-pub(crate) fn reduce_with_powers<F: Field>(terms: &[F], alpha: F) -> F {
+pub fn reduce_with_powers<F: Field>(terms: &[F], alpha: F) -> F {
     let mut sum = F::ZERO;
     for &term in terms.iter().rev() {
         sum = sum * alpha + term;
@@ -47,7 +47,7 @@ pub(crate) fn reduce_with_powers_recursive<C: HaloCurve>(
 
 /// Compute `n(x)` for a given `x`, where `n` is the injective function related to the Halo
 /// endomorphism.
-pub(crate) fn halo_n<C: HaloCurve>(s_bits: &[bool]) -> C::ScalarField {
+pub fn halo_n<C: HaloCurve>(s_bits: &[bool]) -> C::ScalarField {
     // This is based on Algorithm 2 of the Halo paper, except that we start with (a, b) = (0, 0).
 
     debug_assert_eq!(s_bits.len() % 2, 0, "Number of scalar bits must be even");
@@ -76,7 +76,7 @@ pub(crate) fn halo_n<C: HaloCurve>(s_bits: &[bool]) -> C::ScalarField {
 
 /// Compute `[n(s)].P` for a given `s`, where `n` is the injective function related to the Halo
 /// endomorphism.
-pub(crate) fn halo_n_mul<C: HaloCurve>(s_bits: &[bool], p: AffinePoint<C>) -> AffinePoint<C> {
+pub fn halo_n_mul<C: HaloCurve>(s_bits: &[bool], p: AffinePoint<C>) -> AffinePoint<C> {
     // This is based on Algorithm 1 of the Halo paper, except that we start with Acc = O.
 
     debug_assert_eq!(s_bits.len() % 2, 0, "Number of scalar bits must be even");
@@ -111,7 +111,7 @@ pub(crate) fn halo_n_mul<C: HaloCurve>(s_bits: &[bool], p: AffinePoint<C>) -> Af
     acc.to_affine()
 }
 
-pub(crate) fn eval_poly<F: Field>(coeffs: &[F], x: F) -> F {
+pub fn eval_poly<F: Field>(coeffs: &[F], x: F) -> F {
     let mut ans = F::ZERO;
     let mut x_pow = F::ONE;
     for &c in coeffs {
@@ -122,7 +122,7 @@ pub(crate) fn eval_poly<F: Field>(coeffs: &[F], x: F) -> F {
 }
 
 /// Compute `[x^0, x^1, ..., x^(n - 1)]`.
-pub(crate) fn powers<F: Field>(x: F, n: usize) -> Vec<F> {
+pub fn powers<F: Field>(x: F, n: usize) -> Vec<F> {
     let mut powers = Vec::new();
     let mut current = F::ONE;
     for i in 0..n {
@@ -171,7 +171,7 @@ pub(crate) fn pad_to_8n<F: Field>(coeffs: &[F]) -> Vec<F> {
     result
 }
 
-pub(crate) fn values_to_coeffs<F: Field>(
+pub fn values_to_coeffs<F: Field>(
     values_vec: &[Vec<F>],
     fft_precomputation: &FftPrecomputation<F>,
 ) -> Vec<Vec<F>> {

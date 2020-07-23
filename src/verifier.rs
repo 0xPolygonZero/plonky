@@ -3,6 +3,7 @@ use anyhow::{bail, ensure, Result};
 use crate::partition::get_subgroup_shift;
 
 use crate::gates::evaluate_all_constraints;
+use crate::halo::verify_ipa;
 use crate::plonk_proof::OldProof;
 use crate::plonk_util::{eval_poly, halo_g, halo_n, halo_n_mul, halo_s, pedersen_hash, powers, reduce_with_powers};
 use crate::util::{ceil_div_usize, log2_strict};
@@ -146,30 +147,29 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
     // Verify polynomial commitment openings.
     let pedersen_h = blake_hash_usize_to_curve(vk.degree);
     let u_curve = blake_hash_usize_to_curve(vk.degree + 1);
-    if !verify_all_ipas::<C>(
-        &vk.c_constants,
-        &vk.c_s_sigmas,
-        vk.num_public_inputs,
-        subgroup_generator_n,
-        u_curve,
-        pedersen_h,
-        &proof,
-        old_proofs,
-        challs.u,
-        challs.v,
-        challs.u_scaling,
-        challs.zeta,
-        &challs.halo_us,
-        challs.schnorr_challenge,
-        vk.security_bits,
-    ) {
-        bail!("Invalid IPA proof.");
-    }
+    ensure!(
+        verify_all_ipas::<C>(
+            &vk.c_constants,
+            &vk.c_s_sigmas,
+            vk.num_public_inputs,
+            subgroup_generator_n,
+            u_curve,
+            pedersen_h,
+            &proof,
+            old_proofs,
+            challs.u,
+            challs.v,
+            challs.u_scaling,
+            challs.zeta,
+            &challs.halo_us,
+            challs.schnorr_challenge,
+            vk.security_bits,
+        ),
+        "Invalid IPA proof."
+    );
 
     if verify_g {
-        let pedersen_g: Vec<_> = (0..vk.degree)
-            .map(blake_hash_usize_to_curve::<C>)
-            .collect();
+        let pedersen_g: Vec<_> = (0..vk.degree).map(blake_hash_usize_to_curve::<C>).collect();
         let w = 8; // TODO: Should really be set dynamically based on MSM size.
         let pedersen_g_msm_precomputation =
             msm_precompute(&AffinePoint::batch_to_projective(&pedersen_g), w);
@@ -263,57 +263,18 @@ fn verify_all_ipas<C: HaloCurve>(
         .collect::<Vec<_>>();
     let halo_b = reduce_with_powers(&halo_bs, v);
     verify_ipa::<C>(
-        proof,
+        &proof.halo_l,
+        &proof.halo_r,
+        proof.halo_g,
         c_reduction,
         reduced_opening,
         halo_b,
         halo_us,
         u_prime,
         pedersen_h,
-        proof.halo_g,
         schnorr_challenge,
         proof.schnorr_proof,
     )
-}
-
-/// Verify the final IPA.
-fn verify_ipa<C: HaloCurve>(
-    proof: &Proof<C>,
-    commitment: ProjectivePoint<C>,
-    value: C::ScalarField,
-    halo_b: C::ScalarField,
-    halo_us: &[C::ScalarField],
-    u_prime: ProjectivePoint<C>,
-    pedersen_h: AffinePoint<C>,
-    halo_g_curve: AffinePoint<C>,
-    schnorr_challenge: C::ScalarField,
-    schnorr_proof: SchnorrProof<C>,
-) -> bool {
-    // Now we begin IPA verification by computing P' and u' as in Protocol 1 of Bulletproofs.
-    // In Protocol 1 we compute u' = [x] u, but we leverage to endomorphism, instead computing
-    // u' = [n(x)] u.
-
-    // Compute [c] [n(x)] u = [c] u'.
-    let u_n_x_c = C::convert(value) * u_prime;
-    let p_prime = commitment + u_n_x_c;
-
-    // Compute Q as defined in the Halo paper.
-    let mut points = proof.halo_l.clone();
-    points.extend(proof.halo_r.iter());
-    let mut scalars = halo_us.iter().map(|u| u.square()).collect::<Vec<_>>();
-    scalars.extend(
-        halo_us
-            .iter()
-            .map(|chal| chal.multiplicative_inverse_assuming_nonzero().square()),
-    );
-    let precomputation = msm_precompute(&AffinePoint::batch_to_projective(&points), 8);
-    let q = msm_execute_parallel(&precomputation, &scalars) + p_prime;
-
-    // Performing ZK opening protocol.
-    C::convert(schnorr_challenge) * q + schnorr_proof.r
-        == C::convert(schnorr_proof.z1)
-            * (halo_g_curve.to_projective() + C::convert(halo_b) * u_prime)
-            + C::convert(schnorr_proof.z2) * pedersen_h.to_projective()
 }
 
 /// Verifies that the purported public inputs in a proof match a given set of scalars.

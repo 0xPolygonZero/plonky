@@ -109,11 +109,11 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for Base4SumGate<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{test_gate_low_degree, ArithmeticGate, Tweedledum};
+    use crate::{test_gate_low_degree, Base4SumGate, Tweedledum};
 
     test_gate_low_degree!(
-        low_degree_ArithmeticGate,
+        low_degree_Base4SumGate,
         Tweedledum,
-        ArithmeticGate<Tweedledum>
+        Base4SumGate<Tweedledum>
     );
 }

@@ -62,11 +62,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for BufferGate<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{test_gate_low_degree, ArithmeticGate, Tweedledum};
+    use crate::{test_gate_low_degree, BufferGate, Tweedledum};
 
-    test_gate_low_degree!(
-        low_degree_ArithmeticGate,
-        Tweedledum,
-        ArithmeticGate<Tweedledum>
-    );
+    test_gate_low_degree!(low_degree_BufferGate, Tweedledum, BufferGate<Tweedledum>);
 }

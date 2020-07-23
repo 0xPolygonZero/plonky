@@ -6,6 +6,7 @@ use std::time::Instant;
 use anyhow::Result;
 use rayon::prelude::*;
 
+use crate::halo::batch_opening_proof;
 use crate::partition::{get_subgroup_shift, TargetPartitions};
 use crate::plonk_challenger::Challenger;
 use crate::plonk_proof::{OldProof, Proof, SchnorrProof};
@@ -350,29 +351,6 @@ impl<C: HaloCurve> Circuit<C> {
         let u_sf = u_bf.try_convert::<C::ScalarField>()?;
         let u_scaling_sf = u_scaling_bf.try_convert::<C::ScalarField>()?;
 
-        // Make a list of all polynomials' commitment randomness and coefficients, to be reduced later.
-        // This must match the order of OpeningSet::to_vec.
-        let all_randomness = [
-            self.c_constants
-                .iter()
-                .map(|c| c.randomness)
-                .collect::<Vec<_>>(),
-            self.c_s_sigmas
-                .iter()
-                .map(|c| c.randomness)
-                .collect::<Vec<_>>(),
-            c_wires.iter().map(|c| c.randomness).collect::<Vec<_>>(),
-            vec![c_plonk_z.randomness],
-            c_plonk_t.iter().map(|c| c.randomness).collect::<Vec<_>>(),
-            old_proofs
-                .iter()
-                .map(|_| C::ScalarField::ZERO)
-                .collect::<Vec<_>>(),
-            c_pis_quotient
-                .map(|c| vec![c.randomness])
-                .unwrap_or_default(),
-        ]
-        .concat();
         let old_proofs_coeffs = old_proofs.iter().map(|p| p.coeffs()).collect::<Vec<_>>();
         let all_coeffs = [
             self.constants_coeffs.clone(),
@@ -385,146 +363,51 @@ impl<C: HaloCurve> Circuit<C> {
         ]
         .concat();
 
-        // Normally we would reduce these lists using powers of u, but for the sake of efficiency
-        // (particularly in the recursive verifier) we instead use n(u^i) for each u^i, where n is
-        // the injective function related to the Halo endomorphism. Here we compute n(u^i).
-        let actual_scalars: Vec<C::ScalarField> = powers(u_sf, all_coeffs.len())
-            .iter()
-            .map(|u_power| halo_n::<C>(&u_power.to_canonical_bool_vec()[..self.security_bits]))
-            .collect();
-
-        // Reduce the coefficient list to a single set of polynomial coefficients.
-        let mut reduced_coeffs = vec![C::ScalarField::ZERO; self.degree()];
-        for (i, coeffs) in all_coeffs.iter().enumerate() {
-            for (j, &c) in coeffs.iter().enumerate() {
-                reduced_coeffs[j] = reduced_coeffs[j] + actual_scalars[i] * c;
-            }
-        }
-
-        let u_prime = halo_n_mul(
-            &u_scaling_sf.to_canonical_bool_vec()[..self.security_bits],
-            self.u,
-        )
-        .to_projective();
-        // Final IPA proof.
-        let mut halo_a = reduced_coeffs;
-        // The Halo b vector is a random combination of the powers of all opening points.
-        let mut halo_b = self.build_halo_b(
-            &[
-                if output_pis {
-                    (0..2 * num_public_input_gates)
-                        .step_by(2)
-                        .map(|i| self.subgroup_n[i])
-                        .collect::<Vec<_>>()
-                } else {
-                    vec![]
-                },
-                vec![
-                    zeta_sf,
-                    zeta_sf * self.subgroup_generator_n,
-                    zeta_sf * self.subgroup_generator_n.exp_usize(GRID_WIDTH),
-                ],
-            ]
-            .concat(),
-            v_sf,
-        );
-
-        if cfg!(debug_assertions) {
-            // Reduce each opening set to a single point.
-            let opening_set_reductions: Vec<C::ScalarField> = all_opening_sets
+        let commitments = [
+            self.c_constants.clone(),
+            self.c_s_sigmas.clone(),
+            c_wires.clone(),
+            vec![c_plonk_z],
+            c_plonk_t.clone(),
+            old_proofs
                 .iter()
-                .map(|opening_set| {
-                    C::ScalarField::inner_product(&actual_scalars, &opening_set.to_vec())
-                })
-                .collect();
-            // The reduced opening point should be equal to the inner product of `a` and `b`
-            // for the argument to work.
-            assert_eq!(
-                reduce_with_powers(&opening_set_reductions, v_sf),
-                C::ScalarField::inner_product(&halo_a, &halo_b)
-            );
-        }
+                .map(|old| old.halo_g.into())
+                .collect::<Vec<_>>(),
+            c_pis_quotient.map(|c| vec![c]).unwrap_or_default(),
+        ]
+        .concat();
 
-        let mut halo_g = AffinePoint::batch_to_projective(&self.pedersen_g);
-        let mut halo_l = Vec::new();
-        let mut halo_r = Vec::new();
-        let mut randomness = C::ScalarField::inner_product(&actual_scalars, &all_randomness);
-        for j in (1..=self.degree_pow()).rev() {
-            let n = 1 << j;
-            let middle = n / 2;
+        let opening_points = [
+            if output_pis {
+                (0..2 * num_public_input_gates)
+                    .step_by(2)
+                    .map(|i| self.subgroup_n[i])
+                    .collect::<Vec<_>>()
+            } else {
+                vec![]
+            },
+            vec![
+                zeta_sf,
+                zeta_sf * self.subgroup_generator_n,
+                zeta_sf * self.subgroup_generator_n.exp_usize(GRID_WIDTH),
+            ],
+        ]
+        .concat();
 
-            debug_assert_eq!(halo_a.len(), n);
-            debug_assert_eq!(halo_b.len(), n);
-            debug_assert_eq!(halo_g.len(), n);
-
-            let a_lo = &halo_a[..middle];
-            let a_hi = &halo_a[middle..];
-            let b_lo = &halo_b[..middle];
-            let b_hi = &halo_b[middle..];
-            let g_lo = &halo_g[..middle];
-            let g_hi = &halo_g[middle..];
-
-            let window_size = 8;
-
-            // We may need to re-generate L_i/R_i a few times with different blinding factors until
-            // we get a challenge r such that n(r) is square.
-            let u_j = loop {
-                let l_j_blinding_factor = C::ScalarField::rand();
-                let r_j_blinding_factor = C::ScalarField::rand();
-
-                // L_i = <a_lo, G_hi> + [l_j] H + [<a_lo, b_hi>] U.
-                let halo_l_j = msm_parallel(a_lo, g_hi, window_size)
-                    + C::convert(l_j_blinding_factor) * self.pedersen_h.to_projective()
-                    + C::convert(C::ScalarField::inner_product(a_lo, b_hi)) * u_prime;
-                // R_i = <a_hi, G_lo> + [r_j] H + [<a_hi, b_lo>] U.
-                let halo_r_j = msm_parallel(a_hi, g_lo, window_size)
-                    + C::convert(r_j_blinding_factor) * self.pedersen_h.to_projective()
-                    + C::convert(C::ScalarField::inner_product(a_hi, b_lo)) * u_prime;
-
-                let mut challenger_fork = challenger.clone();
-                challenger_fork.observe_proj_points(&[halo_l_j, halo_r_j]);
-                let r_bf = challenger_fork.get_challenge();
-                let r_sf = r_bf.try_convert::<C::ScalarField>()?;
-                let r_bits = &r_sf.to_canonical_bool_vec()[..self.security_bits];
-                let u_j_squared = halo_n::<C>(r_bits);
-
-                if let Some(u_j) = u_j_squared.square_root() {
-                    let u_squared_inv = u_j_squared.multiplicative_inverse().expect("Improbable");
-
-                    halo_l.push(halo_l_j);
-                    halo_r.push(halo_r_j);
-                    randomness = randomness
-                        + u_j_squared * l_j_blinding_factor
-                        + u_squared_inv * r_j_blinding_factor;
-                    challenger = challenger_fork;
-
-                    break u_j;
-                }
-            };
-            let u_j_inv = u_j.multiplicative_inverse().expect("Improbable");
-
-            halo_a = C::ScalarField::add_slices(&u_j_inv.scale_slice(a_hi), &u_j.scale_slice(a_lo));
-            halo_b = C::ScalarField::add_slices(&u_j_inv.scale_slice(b_lo), &u_j.scale_slice(b_hi));
-            halo_g = g_lo
-                .into_par_iter()
-                .zip(g_hi)
-                .map(|(&g_lo_i, &g_hi_i)| msm_parallel(&[u_j_inv, u_j], &[g_lo_i, g_hi_i], 4))
-                .collect();
-        }
-
-        debug_assert_eq!(halo_g.len(), 1);
-        let halo_g = halo_g[0].to_affine();
-
-        debug_assert_eq!(halo_a.len(), 1);
-        debug_assert_eq!(halo_b.len(), 1);
-        let schnorr_proof = self.schnorr_protocol(
-            halo_a[0],
-            halo_b[0],
-            halo_g,
-            randomness,
-            u_prime,
+        let halo_proof = batch_opening_proof(
+            &all_coeffs.iter().map(|c| c.as_slice()).collect::<Vec<_>>(),
+            &commitments,
+            &opening_points,
+            &self.pedersen_g,
+            self.pedersen_h.to_projective(),
+            self.u,
+            u_sf,
+            v_sf,
+            u_scaling_sf,
+            self.degree(),
+            self.security_bits,
             &mut challenger,
-        );
+        )?;
 
         Ok(Proof {
             c_wires: c_wires.iter().map(|c| c.to_affine()).collect(),
@@ -535,10 +418,10 @@ impl<C: HaloCurve> Circuit<C> {
             o_local,
             o_right,
             o_below,
-            halo_l: ProjectivePoint::batch_to_affine(&halo_l),
-            halo_r: ProjectivePoint::batch_to_affine(&halo_r),
-            halo_g,
-            schnorr_proof,
+            halo_g: halo_proof.halo_g,
+            halo_l: halo_proof.halo_l,
+            halo_r: halo_proof.halo_r,
+            schnorr_proof: halo_proof.schnorr_proof,
         })
     }
 
@@ -777,47 +660,6 @@ impl<C: HaloCurve> Circuit<C> {
             }
         }
         result
-    }
-
-    pub fn build_halo_b(
-        &self,
-        points: &[C::ScalarField],
-        v: C::ScalarField,
-    ) -> Vec<C::ScalarField> {
-        let power_points = points
-            .iter()
-            .map(|&p| powers(p, self.degree()))
-            .collect::<Vec<_>>();
-        (0..self.degree())
-            .map(|i| reduce_with_powers(&power_points.iter().map(|v| v[i]).collect::<Vec<_>>(), v))
-            .collect()
-    }
-
-    fn schnorr_protocol(
-        &self,
-        halo_a: C::ScalarField,
-        halo_b: C::ScalarField,
-        halo_g: AffinePoint<C>,
-        randomness: C::ScalarField,
-        u_curve: ProjectivePoint<C>,
-        challenger: &mut Challenger<C::BaseField>,
-    ) -> SchnorrProof<C> {
-        let (d, s) = (C::ScalarField::rand(), C::ScalarField::rand());
-        let r_curve = C::convert(d) * (halo_g.to_projective() + C::convert(halo_b) * u_curve)
-            + C::convert(s) * self.pedersen_h.to_projective();
-
-        challenger.observe_proj_point(r_curve);
-        let chall_bf = challenger.get_challenge();
-        let chall = chall_bf
-            .try_convert::<C::ScalarField>()
-            .expect("Improbable");
-        let z1 = halo_a * chall + d;
-        let z2 = randomness * chall + s;
-        SchnorrProof {
-            r: r_curve.to_affine(),
-            z1,
-            z2,
-        }
     }
 
     pub fn to_vk(&self) -> VerificationKey<C> {

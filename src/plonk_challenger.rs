@@ -1,10 +1,10 @@
 use std::marker::PhantomData;
 
-use crate::{AffinePoint, AffinePointTarget, CircuitBuilder, Curve, Field, HaloCurve, ProjectivePoint, rescue_permutation, RESCUE_SPONGE_RATE, RESCUE_SPONGE_WIDTH, Target};
+use crate::{rescue_permutation, AffinePoint, AffinePointTarget, CircuitBuilder, Curve, Field, HaloCurve, ProjectivePoint, Target, RESCUE_SPONGE_RATE, RESCUE_SPONGE_WIDTH};
 
 /// Observes prover messages, and generates challenges by hashing the transcript.
 #[derive(Clone)]
-pub(crate) struct Challenger<F: Field> {
+pub struct Challenger<F: Field> {
     sponge_state: Vec<F>,
     input_buffer: Vec<F>,
     output_buffer: Vec<F>,
@@ -20,7 +20,7 @@ pub(crate) struct Challenger<F: Field> {
 /// multiple squeezes) and whose outputs are sometimes ignored (when we perform multiple
 /// absorptions). Thus the security properties of a duplex sponge still apply to our design.
 impl<F: Field> Challenger<F> {
-    pub(crate) fn new(security_bits: usize) -> Challenger<F> {
+    pub fn new(security_bits: usize) -> Challenger<F> {
         Challenger {
             sponge_state: vec![F::ZERO; RESCUE_SPONGE_WIDTH],
             input_buffer: Vec::new(),
@@ -29,49 +29,40 @@ impl<F: Field> Challenger<F> {
         }
     }
 
-    pub(crate) fn observe_element(&mut self, element: F) {
+    pub fn observe_element(&mut self, element: F) {
         // Any buffered outputs are now invalid, since they wouldn't reflect this input.
         self.output_buffer.clear();
 
         self.input_buffer.push(element);
     }
 
-    pub(crate) fn observe_elements(&mut self, elements: &[F]) {
+    pub fn observe_elements(&mut self, elements: &[F]) {
         for &element in elements {
             self.observe_element(element);
         }
     }
 
-    pub(crate) fn observe_affine_point<C: Curve<BaseField = F>>(&mut self, point: AffinePoint<C>) {
+    pub fn observe_affine_point<C: Curve<BaseField = F>>(&mut self, point: AffinePoint<C>) {
         debug_assert!(!point.zero);
         self.observe_element(point.x);
         self.observe_element(point.y);
     }
 
-    pub(crate) fn observe_affine_points<C: Curve<BaseField = F>>(
-        &mut self,
-        points: &[AffinePoint<C>],
-    ) {
+    pub fn observe_affine_points<C: Curve<BaseField = F>>(&mut self, points: &[AffinePoint<C>]) {
         for &point in points {
             self.observe_affine_point(point);
         }
     }
 
-    pub(crate) fn observe_proj_point<C: Curve<BaseField = F>>(
-        &mut self,
-        point: ProjectivePoint<C>,
-    ) {
+    pub fn observe_proj_point<C: Curve<BaseField = F>>(&mut self, point: ProjectivePoint<C>) {
         self.observe_affine_point(point.to_affine());
     }
 
-    pub(crate) fn observe_proj_points<C: Curve<BaseField = F>>(
-        &mut self,
-        points: &[ProjectivePoint<C>],
-    ) {
+    pub fn observe_proj_points<C: Curve<BaseField = F>>(&mut self, points: &[ProjectivePoint<C>]) {
         self.observe_affine_points(&ProjectivePoint::batch_to_affine(points));
     }
 
-    pub(crate) fn get_challenge(&mut self) -> F {
+    pub fn get_challenge(&mut self) -> F {
         self.absorb_buffered_inputs();
 
         if self.output_buffer.is_empty() {
@@ -80,18 +71,24 @@ impl<F: Field> Challenger<F> {
             self.output_buffer = self.sponge_state[0..RESCUE_SPONGE_RATE].to_vec();
         }
 
-        self.output_buffer.pop().expect("Output buffer should be non-empty")
+        self.output_buffer
+            .pop()
+            .expect("Output buffer should be non-empty")
     }
 
-    pub(crate) fn get_2_challenges(&mut self) -> (F, F) {
+    pub fn get_2_challenges(&mut self) -> (F, F) {
         (self.get_challenge(), self.get_challenge())
     }
 
-    pub(crate) fn get_3_challenges(&mut self) -> (F, F, F) {
-        (self.get_challenge(), self.get_challenge(), self.get_challenge())
+    pub fn get_3_challenges(&mut self) -> (F, F, F) {
+        (
+            self.get_challenge(),
+            self.get_challenge(),
+            self.get_challenge(),
+        )
     }
 
-    pub(crate) fn get_n_challenges(&mut self, n: usize) -> Vec<F> {
+    pub fn get_n_challenges(&mut self, n: usize) -> Vec<F> {
         (0..n).map(|_| self.get_challenge()).collect()
     }
 
@@ -165,7 +162,9 @@ impl<C: HaloCurve> RecursiveChallenger<C> {
             self.output_buffer = self.sponge_state[0..RESCUE_SPONGE_RATE].to_vec();
         }
 
-        self.output_buffer.pop().expect("Output buffer should be non-empty")
+        self.output_buffer
+            .pop()
+            .expect("Output buffer should be non-empty")
     }
 
     pub(crate) fn get_2_challenges(&mut self, builder: &mut CircuitBuilder<C>) -> (Target, Target) {
@@ -176,7 +175,11 @@ impl<C: HaloCurve> RecursiveChallenger<C> {
         &mut self,
         builder: &mut CircuitBuilder<C>,
     ) -> (Target, Target, Target) {
-        (self.get_challenge(builder), self.get_challenge(builder), self.get_challenge(builder))
+        (
+            self.get_challenge(builder),
+            self.get_challenge(builder),
+            self.get_challenge(builder),
+        )
     }
 
     pub(crate) fn get_n_challenges(
@@ -207,8 +210,8 @@ impl<C: HaloCurve> RecursiveChallenger<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{CircuitBuilder, Curve, Field, PartialWitness, Target, Tweedledum};
     use crate::plonk_challenger::{Challenger, RecursiveChallenger};
+    use crate::{CircuitBuilder, Curve, Field, PartialWitness, Target, Tweedledum};
 
     /// Tests for consistency between `Challenger` and `RecursiveChallenger`.
     #[test]
@@ -222,7 +225,8 @@ mod tests {
         let num_outputs_per_round = vec![1, 2, 4];
 
         // Generate random input messages.
-        let inputs_per_round: Vec<Vec<SF>> = num_inputs_per_round.iter()
+        let inputs_per_round: Vec<Vec<SF>> = num_inputs_per_round
+            .iter()
             .map(|&n| (0..n).map(|_| SF::rand()).collect::<Vec<_>>())
             .collect();
 
@@ -239,12 +243,13 @@ mod tests {
         for (r, inputs) in inputs_per_round.iter().enumerate() {
             recursive_challenger.observe_elements(&builder.constant_wires(inputs));
             recursive_outputs_per_round.push(
-                recursive_challenger.get_n_challenges(
-                    &mut builder, num_outputs_per_round[r]));
+                recursive_challenger.get_n_challenges(&mut builder, num_outputs_per_round[r]),
+            );
         }
         let circuit = builder.build();
         let witness = circuit.generate_partial_witness(PartialWitness::new());
-        let recursive_output_values_per_round: Vec<Vec<SF>> = recursive_outputs_per_round.iter()
+        let recursive_output_values_per_round: Vec<Vec<SF>> = recursive_outputs_per_round
+            .iter()
             .map(|outputs| witness.get_targets(outputs))
             .collect();
 
