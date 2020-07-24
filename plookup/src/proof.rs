@@ -7,6 +7,7 @@ use plonky::plonk_util::halo_n;
 use plonky::{AffinePoint, Curve, Field, HaloCurve, PolynomialCommitment};
 
 // TODO: The verifier should somehow have access to `c_f`, so we can probably remove it from the proof or make it optional.
+#[allow(clippy::type_complexity)]
 pub struct PlookupProof<C: HaloCurve> {
     pub c_f: AffinePoint<C>,
     pub c_t: AffinePoint<C>,

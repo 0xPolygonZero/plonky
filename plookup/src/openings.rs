@@ -66,6 +66,7 @@ impl<F: Field> PlookupOpenings<F> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn open_all_polynomials<F: Field>(
     f_poly: &Polynomial<F>,
     t_poly: &Polynomial<F>,

@@ -13,7 +13,7 @@ pub fn verify<C: HaloCurve>(t: &[C::ScalarField], proof: &PlookupProof<C>) -> Re
     let t = padded(t, n + 1);
     let fft_precomputation = fft_precompute(n + 1);
     let gs = (0..2 * n + 2)
-        .map(|i| blake_hash_usize_to_curve::<C>(i))
+        .map(blake_hash_usize_to_curve::<C>)
         .collect::<Vec<_>>();
     let h = blake_hash_usize_to_curve(2 * n + 2);
     let u_curve = blake_hash_usize_to_curve(2 * n + 3);

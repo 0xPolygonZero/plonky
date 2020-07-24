@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::ops::{Index, IndexMut, RangeBounds};
 use std::slice::{Iter, IterMut, SliceIndex};
 
-/// Polynomial struc holding a polynomial in coefficient form.
+/// Polynomial struct holding a polynomial in coefficient form.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Polynomial<F: Field>(Vec<F>);
 

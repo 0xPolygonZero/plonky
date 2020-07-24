@@ -1,7 +1,7 @@
 use crate::plonk_challenger::Challenger;
 use crate::plonk_util::{halo_n, halo_n_mul, powers, reduce_with_powers};
 use crate::util::log2_strict;
-use crate::{msm_execute_parallel, msm_parallel, msm_precompute, AffinePoint, Curve, Field, HaloCurve, PolynomialCommitment, ProjectivePoint, Proof, SchnorrProof};
+use crate::{msm_execute_parallel, msm_parallel, msm_precompute, AffinePoint, Curve, Field, HaloCurve, PolynomialCommitment, ProjectivePoint, SchnorrProof};
 use anyhow::Result;
 use rayon::prelude::*;
 

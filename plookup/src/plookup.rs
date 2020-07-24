@@ -1,3 +1,5 @@
+#![allow(clippy::many_single_char_names)]
+#![allow(clippy::too_many_arguments)]
 use crate::openings::open_all_polynomials;
 use crate::proof::PlookupProof;
 use anyhow::Result;
@@ -6,7 +8,7 @@ use plonky::plonk_challenger::Challenger;
 use plonky::plonk_util::reduce_with_powers;
 use plonky::polynomial::Polynomial;
 use plonky::util::log2_strict;
-use plonky::{blake_hash_usize_to_curve, fft_precompute, fft_with_precomputation, ifft_with_precomputation_power_of_2, msm_precompute, AffinePoint, Field, HaloCurve, PolynomialCommitment};
+use plonky::{blake_hash_usize_to_curve, fft_precompute, msm_precompute, AffinePoint, Field, HaloCurve};
 
 pub const SECURITY_BITS: usize = 128;
 
@@ -34,7 +36,7 @@ pub fn prove<C: HaloCurve>(f: &[C::ScalarField], t: &[C::ScalarField]) -> Result
 
     // Curve points used in the IPA.
     let gs = (0..2 * n + 2)
-        .map(|i| blake_hash_usize_to_curve::<C>(i))
+        .map(blake_hash_usize_to_curve::<C>)
         .collect::<Vec<_>>();
     let h = blake_hash_usize_to_curve(2 * n + 2);
     let u_curve = blake_hash_usize_to_curve(2 * n + 3);
