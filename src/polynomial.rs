@@ -1,11 +1,14 @@
 use crate::{fft_precompute, fft_with_precomputation, ifft_with_precomputation_power_of_2, util::log2_ceil, AffinePoint, Curve, FftPrecomputation, Field, MsmPrecomputation, PolynomialCommitment};
+use std::cmp::Ordering;
 use std::ops::{Index, IndexMut, RangeBounds};
 use std::slice::{Iter, IterMut, SliceIndex};
 
+/// Polynomial struc holding a polynomial in coefficient form.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Polynomial<F: Field>(Vec<F>);
 
 impl<F: Field> From<Vec<F>> for Polynomial<F> {
+    /// Takes a vector of coefficients and returns the corresponding polynomial.
     fn from(coeffs: Vec<F>) -> Self {
         Self(coeffs)
     }
@@ -18,6 +21,7 @@ where
 {
     type Output = I::Output;
 
+    /// Indexing on the coefficients.
     fn index(&self, index: I) -> &Self::Output {
         &self.0[index]
     }
@@ -34,18 +38,24 @@ where
 }
 
 impl<F: Field> Polynomial<F> {
+    /// Takes a slice of coefficients and returns the corresponding polynomial.
     pub fn from_coeffs(coeffs: &[F]) -> Self {
         Self(coeffs.to_vec())
     }
 
+    /// Returns the coefficient vector.
     pub fn coeffs(&self) -> Vec<F> {
         self.0.clone()
     }
 
+    /// Empty polynomial;
     pub fn empty() -> Self {
         Self(Vec::new())
     }
 
+    /// Zero polynomial with length `len`.
+    /// `len = 1` is the standard representation, but sometimes it's useful to set `len > 1`
+    /// to have polynomials with uniform length.
     pub fn zero(len: usize) -> Self {
         Self(vec![F::ZERO; len])
     }
@@ -62,35 +72,51 @@ impl<F: Field> Polynomial<F> {
         self.0.iter().all(|x| x.is_zero())
     }
 
+    /// Number of coefficients held by the polynomial. Is NOT equal to the degree in general.
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    /// Degree of the polynomial.
+    pub fn degree(&self) -> usize {
+        (0usize..self.len())
+            .rev()
+            .find(|&i| self[i].is_nonzero())
+            .expect("Zero polynomial")
     }
 
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
+    /// Removes the coefficients in the range `range`.
     fn drain<R: RangeBounds<usize>>(&mut self, range: R) {
         self.0.drain(range);
     }
 
+    /// Evaluates the polynomial at a point `x`.
     pub fn eval(&self, x: F) -> F {
         self.iter().rev().fold(F::ZERO, |acc, &c| acc * x + c)
     }
 
+    /// Evaluates the polynomial at a point `x`, given the list of powers of `x`.
+    /// Assumes that `self.len() == x_pow.len()`.
     pub fn eval_from_power(&self, x_pow: &[F]) -> F {
         F::inner_product(&self[..], x_pow)
     }
 
+    /// Evaluates the polynomial on subgroup of `F^*` with a given FFT precomputation.
     pub fn eval_domain(&self, fft_precomputation: &FftPrecomputation<F>) -> Vec<F> {
         let domain_size = fft_precomputation.size();
         if self.len() < domain_size {
+            // Need to pad the polynomial to have the same length as the domain.
             fft_with_precomputation(&self.padded(domain_size).coeffs(), fft_precomputation)
         } else {
             fft_with_precomputation(&self.coeffs(), fft_precomputation)
         }
     }
 
+    /// Computes the interpolating polynomial of a list of `values` on a subgroup of `F^*`.
     pub fn from_evaluations(values: &[F], fft_precomputation: &FftPrecomputation<F>) -> Self {
         Self(ifft_with_precomputation_power_of_2(
             values,
@@ -98,13 +124,7 @@ impl<F: Field> Polynomial<F> {
         ))
     }
 
-    pub fn degree(&self) -> usize {
-        (0usize..self.0.len())
-            .rev()
-            .find(|&i| self.0[i].is_nonzero())
-            .expect("Zero polynomial")
-    }
-
+    /// Leading coefficient.
     pub fn lead(&self) -> F {
         self.iter()
             .rev()
@@ -112,43 +132,50 @@ impl<F: Field> Polynomial<F> {
             .map_or(F::ZERO, |x| *x)
     }
 
+    /// Reverse the order of the coefficients, not taking into account the leading zero coefficients.
     fn rev(&self) -> Self {
         let d = self.degree();
         Self(self.0[..=d].iter().rev().copied().collect())
     }
 
+    /// Negates the polynomial's coefficients.
     fn neg(&self) -> Self {
         Self(self.iter().map(|&x| -x).collect())
     }
 
+    /// Removes leading zero coefficients.
     pub fn trim(&mut self) {
         if !self.is_zero() {
             self.0.drain(self.degree() + 1..);
         }
     }
 
+    /// Polynomial addition.
     pub fn add(&self, other: &Self) -> Self {
         let (mut a, mut b) = (self.clone(), other.clone());
-        if a.len() < b.len() {
-            a.pad(b.len())
-        } else if b.len() < a.len() {
-            b.pad(a.len());
+        match a.len().cmp(&b.len()) {
+            Ordering::Less => a.pad(b.len()),
+            Ordering::Greater => b.pad(a.len()),
+            _ => (),
         }
         Self(a.iter().zip(b.iter()).map(|(&x, &y)| x + y).collect())
     }
 
+    /// Zero-pad the coefficients to have a given length.
     pub fn pad(&mut self, len: usize) {
         self.trim();
         assert!(self.len() <= len);
         self.0.extend((self.len()..len).map(|_| F::ZERO));
     }
 
+    /// Returns the zero-padded polynomial.
     pub fn padded(&self, len: usize) -> Self {
         let mut a = self.clone();
         a.pad(len);
         a
     }
 
+    /// Polynomial multiplication.
     pub fn mul(&self, b: &Self) -> Self {
         if self.is_zero() || b.is_zero() {
             return Self::zero(1);
@@ -172,6 +199,9 @@ impl<F: Field> Polynomial<F> {
         ifft_with_precomputation_power_of_2(&mul_evals, &precomputation).into()
     }
 
+    /// Polynomial long division.
+    /// Returns `(q,r)` the quotient and remainder of the polynomial division of `a` by `b`.
+    /// Generally slower that the equivalent function `Polynomial::polynomial_division`.
     pub fn polynomial_long_division(&self, b: &Self) -> (Self, Self) {
         let (a_degree, b_degree) = (self.degree(), b.degree());
         if self.is_zero() {
@@ -232,6 +262,7 @@ impl<F: Field> Polynomial<F> {
         a
     }
 
+    /// Polynomial division.
     /// Returns `(q,r)` the quotient and remainder of the polynomial division of `a` by `b`.
     /// Algorithm from http://people.csail.mit.edu/madhu/ST12/scribe/lect06.pdf
     pub fn polynomial_division(&self, b: &Self) -> (Self, Self) {
@@ -309,6 +340,7 @@ impl<F: Field> Polynomial<F> {
         p
     }
 
+    /// Commits the polynomial.
     pub fn commit<C: Curve<ScalarField = F>>(
         &self,
         msm_precomputation: &MsmPrecomputation<C>,
@@ -317,24 +349,6 @@ impl<F: Field> Polynomial<F> {
     ) -> PolynomialCommitment<C> {
         PolynomialCommitment::coeffs_to_commitment(
             &self.coeffs(),
-            msm_precomputation,
-            blinding_point,
-            blinding,
-        )
-    }
-
-    pub fn commit_vec<C: Curve<ScalarField = F>>(
-        polynomials: &[Self],
-        msm_precomputation: &MsmPrecomputation<C>,
-        blinding_point: AffinePoint<C>,
-        blinding: bool,
-    ) -> Vec<PolynomialCommitment<C>> {
-        PolynomialCommitment::coeffs_vec_to_commitments(
-            polynomials
-                .iter()
-                .map(|p| p.coeffs())
-                .collect::<Vec<_>>()
-                .as_slice(),
             msm_precomputation,
             blinding_point,
             blinding,
