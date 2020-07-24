@@ -215,7 +215,7 @@ impl<C: HaloCurve> Circuit<C> {
         });
         // `vanishing_pis_poly` vanishes at the public input gates. It is thus divisible by the vanishing
         // polynomial at the public input gates. The quotient is computed here.
-        let pis_quotient_coeffs = vanishing_pis_poly.map(|poly| {
+        let pis_quotient_poly = vanishing_pis_poly.map(|poly| {
             // The vanishing polynomial of a set `S` is `prod_{s \in S} (X-s)`.
             // TODO: Faster implementation.
             let pis_quotient_denominator = (0..num_public_input_gates).fold(
@@ -237,7 +237,7 @@ impl<C: HaloCurve> Circuit<C> {
             ans
         });
         // Commit to the public inputs quotient polynomial.
-        let c_pis_quotient = pis_quotient_coeffs.as_ref().map(|poly| {
+        let c_pis_quotient = pis_quotient_poly.as_ref().map(|poly| {
             poly.commit(
                 &self.pedersen_g_msm_precomputation,
                 self.pedersen_h,
@@ -275,7 +275,7 @@ impl<C: HaloCurve> Circuit<C> {
                             &plonk_z_polynomial,
                             &plonk_t_poly_chunks,
                             old_proofs,
-                            &pis_quotient_coeffs,
+                            &pis_quotient_poly,
                             self.subgroup_generator_n.exp_usize(i),
                         )
                     })
@@ -291,7 +291,7 @@ impl<C: HaloCurve> Circuit<C> {
             &plonk_z_polynomial,
             &plonk_t_poly_chunks,
             old_proofs,
-            &pis_quotient_coeffs,
+            &pis_quotient_poly,
             zeta_sf,
         );
         let o_right = self.open_all_polynomials(
@@ -299,7 +299,7 @@ impl<C: HaloCurve> Circuit<C> {
             &plonk_z_polynomial,
             &plonk_t_poly_chunks,
             old_proofs,
-            &pis_quotient_coeffs,
+            &pis_quotient_poly,
             zeta_sf * self.subgroup_generator_n,
         );
         let o_below = self.open_all_polynomials(
@@ -307,7 +307,7 @@ impl<C: HaloCurve> Circuit<C> {
             &plonk_z_polynomial,
             &plonk_t_poly_chunks,
             old_proofs,
-            &pis_quotient_coeffs,
+            &pis_quotient_poly,
             zeta_sf * self.subgroup_generator_n.exp_usize(GRID_WIDTH),
         );
 
@@ -353,7 +353,7 @@ impl<C: HaloCurve> Circuit<C> {
             vec![plonk_z_polynomial],
             plonk_t_poly_chunks,
             old_proofs_polys,
-            pis_quotient_coeffs.map(|c| vec![c]).unwrap_or_default(),
+            pis_quotient_poly.map(|c| vec![c]).unwrap_or_default(),
         ]
         .concat();
 
@@ -389,7 +389,7 @@ impl<C: HaloCurve> Circuit<C> {
         .concat();
 
         let halo_proof = batch_opening_proof(
-            &all_coeffs.iter().map(|c| c.as_slice()).collect::<Vec<_>>(),
+            &all_coeffs.iter().map(|c| &c[..]).collect::<Vec<_>>(),
             &commitments,
             &opening_points,
             &self.pedersen_g,
