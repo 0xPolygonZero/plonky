@@ -1,16 +1,12 @@
 use crate::openings::open_all_polynomials;
 use crate::proof::PlookupProof;
 use anyhow::Result;
-use plonky;
 use plonky::halo::batch_opening_proof;
 use plonky::plonk_challenger::Challenger;
 use plonky::plonk_util::reduce_with_powers;
+use plonky::polynomial::Polynomial;
 use plonky::util::log2_strict;
-use plonky::{
-    blake_hash_usize_to_curve, divide_by_z_h, fft_precompute, fft_with_precomputation,
-    ifft_with_precomputation_power_of_2, msm_precompute, AffinePoint, Field, HaloCurve,
-    PolynomialCommitment,
-};
+use plonky::{blake_hash_usize_to_curve, fft_precompute, fft_with_precomputation, ifft_with_precomputation_power_of_2, msm_precompute, AffinePoint, Field, HaloCurve, PolynomialCommitment};
 
 pub const SECURITY_BITS: usize = 128;
 
@@ -29,12 +25,12 @@ pub fn prove<C: HaloCurve>(f: &[C::ScalarField], t: &[C::ScalarField]) -> Result
     // FFT precomputation on the cyclic subgroup of order `n+1`.
     let fft_precomputation = fft_precompute(n + 1);
 
-    // Compute the coefficients of the polynomials corresponding to `f`, `t`, `h1` and `h2`.
+    // Compute the polynomials corresponding to `f`, `t`, `h1` and `h2`.
     let f_padded = padded(&f, n + 1);
-    let f_coeffs = ifft_with_precomputation_power_of_2(&f_padded, &fft_precomputation);
-    let t_coeffs = ifft_with_precomputation_power_of_2(&t, &fft_precomputation);
-    let h1_coeffs = ifft_with_precomputation_power_of_2(&s[..n + 1], &fft_precomputation);
-    let h2_coeffs = ifft_with_precomputation_power_of_2(&s[n..], &fft_precomputation);
+    let f_poly = Polynomial::from_evaluations(&f_padded, &fft_precomputation);
+    let t_poly = Polynomial::from_evaluations(&t, &fft_precomputation);
+    let h1_poly = Polynomial::from_evaluations(&s[..n + 1], &fft_precomputation);
+    let h2_poly = Polynomial::from_evaluations(&s[n..], &fft_precomputation);
 
     // Curve points used in the IPA.
     let gs = (0..2 * n + 2)
@@ -46,12 +42,10 @@ pub fn prove<C: HaloCurve>(f: &[C::ScalarField], t: &[C::ScalarField]) -> Result
     let msm_precomputation_2n2 = msm_precompute(&AffinePoint::batch_to_projective(&gs), 8);
 
     // Commit to all polynomials.
-    let c_f = PolynomialCommitment::coeffs_to_commitment(&f_coeffs, &msm_precomputation, h, true);
-    let c_t = PolynomialCommitment::coeffs_to_commitment(&t_coeffs, &msm_precomputation, h, false);
-    let c_h1 =
-        PolynomialCommitment::coeffs_to_commitment(&h1_coeffs, &msm_precomputation, h, false);
-    let c_h2 =
-        PolynomialCommitment::coeffs_to_commitment(&h2_coeffs, &msm_precomputation, h, false);
+    let c_f = f_poly.commit(&msm_precomputation, h, true);
+    let c_t = t_poly.commit(&msm_precomputation, h, false);
+    let c_h1 = h1_poly.commit(&msm_precomputation, h, false);
+    let c_h2 = h2_poly.commit(&msm_precomputation, h, false);
 
     // Observe the commitments to get verifier challenges.
     // `beta` and `gamma` are used to construct the Plookup grand product.
@@ -68,8 +62,8 @@ pub fn prove<C: HaloCurve>(f: &[C::ScalarField], t: &[C::ScalarField]) -> Result
     // Compute and commit to the `z` grand product polynomial of Plookup.
     // `f` is a subset of `t` iff this polynomial is well-formed and its last value is 1.
     let z_values = grand_polynomial(&f, &t, &s, beta, gamma);
-    let z_coeffs = ifft_with_precomputation_power_of_2(&z_values, &fft_precomputation);
-    let c_z = PolynomialCommitment::coeffs_to_commitment(&z_coeffs, &msm_precomputation, h, true);
+    let z_poly = Polynomial::from_evaluations(&z_values, &fft_precomputation);
+    let c_z = z_poly.commit(&msm_precomputation, h, true);
 
     // Observe the commitment to get a verifier challenge.
     // `alpha` is used to batch all vanishing polynomials.
@@ -79,21 +73,17 @@ pub fn prove<C: HaloCurve>(f: &[C::ScalarField], t: &[C::ScalarField]) -> Result
 
     // Compute the coefficients of the "vanishing polynomial".
     // `f` is a subset of `t` iff this polynomial vanishes on subgroup `H`.
-    let vanishing_coeffs = vanishing_polynomial_coeffs(
-        &f_coeffs, &t_coeffs, &h1_coeffs, &h2_coeffs, &z_coeffs, beta, gamma, alpha, n,
+    let vanishing_poly = vanishing_polynomial(
+        &f_poly, &t_poly, &h1_poly, &h2_poly, &z_poly, beta, gamma, alpha, n,
     );
 
     // Commit to the quotient of the vanishing polynomial by `x^(n+1) - 1`. The quotient exists
     // because the vanishing polynomial vanishes on `H`.
-    let mut quotient_coeffs = divide_by_z_h(&vanishing_coeffs, n + 1);
-    plonky::trim(&mut quotient_coeffs);
-    assert!(quotient_coeffs.len() <= 2 * n + 1);
-    let c_quotient = PolynomialCommitment::coeffs_to_commitment(
-        &padded(&quotient_coeffs, 2 * n + 2),
-        &msm_precomputation_2n2,
-        h,
-        true,
-    );
+    let mut quotient_poly = vanishing_poly.divide_by_z_h(n + 1);
+    quotient_poly.trim();
+    assert!(quotient_poly.len() <= 2 * n + 1);
+    quotient_poly.pad(2 * n + 2);
+    let c_quotient = quotient_poly.commit(&msm_precomputation_2n2, h, true);
 
     // Observe the commitment to get a verifier challenge.
     // `zeta` is the point at which we'll open all polynomials.
@@ -104,12 +94,12 @@ pub fn prove<C: HaloCurve>(f: &[C::ScalarField], t: &[C::ScalarField]) -> Result
     // Open all polynomials.
     let generator = C::ScalarField::primitive_root_of_unity(log2_strict(n + 1));
     let openings = open_all_polynomials(
-        &f_coeffs,
-        &t_coeffs,
-        &h1_coeffs,
-        &h2_coeffs,
-        &z_coeffs,
-        &quotient_coeffs,
+        &f_poly,
+        &t_poly,
+        &h1_poly,
+        &h2_poly,
+        &z_poly,
+        &quotient_poly,
         zeta,
         generator,
     );
@@ -133,12 +123,12 @@ pub fn prove<C: HaloCurve>(f: &[C::ScalarField], t: &[C::ScalarField]) -> Result
     let commitments = vec![c_f, c_t, c_h1, c_h2, c_z, c_quotient];
 
     let coeffs = vec![
-        padded(&f_coeffs, 2 * n + 2),
-        padded(&t_coeffs, 2 * n + 2),
-        padded(&h1_coeffs, 2 * n + 2),
-        padded(&h2_coeffs, 2 * n + 2),
-        padded(&z_coeffs, 2 * n + 2),
-        padded(&quotient_coeffs, 2 * n + 2),
+        padded(&f_poly[..], 2 * n + 2),
+        padded(&t_poly[..], 2 * n + 2),
+        padded(&h1_poly[..], 2 * n + 2),
+        padded(&h2_poly[..], 2 * n + 2),
+        padded(&z_poly[..], 2 * n + 2),
+        padded(&quotient_poly[..], 2 * n + 2),
     ];
 
     // Compute the Halo opening proof.
@@ -210,25 +200,25 @@ fn grand_polynomial<F: Field>(f: &[F], t: &[F], s: &[F], beta: F, gamma: F) -> V
 }
 
 /// Computes the Plookup vanishing polynomial.
-fn vanishing_polynomial_coeffs<F: Field>(
-    f_coeffs: &[F],
-    t_coeffs: &[F],
-    h1_coeffs: &[F],
-    h2_coeffs: &[F],
-    z_coeffs: &[F],
+fn vanishing_polynomial<F: Field>(
+    f_poly: &Polynomial<F>,
+    t_poly: &Polynomial<F>,
+    h1_poly: &Polynomial<F>,
+    h2_poly: &Polynomial<F>,
+    z_poly: &Polynomial<F>,
     beta: F,
     gamma: F,
     alpha: F,
     n: usize,
-) -> Vec<F> {
+) -> Polynomial<F> {
     let order = 4 * (n + 1);
     let generator_4 = F::primitive_root_of_unity(log2_strict(order));
     let fft_precomp4 = fft_precompute(order);
-    let z_4_values = fft_with_precomputation(&padded(z_coeffs, order), &fft_precomp4);
-    let f_4_values = fft_with_precomputation(&padded(f_coeffs, order), &fft_precomp4);
-    let t_4_values = fft_with_precomputation(&padded(t_coeffs, order), &fft_precomp4);
-    let h1_4_values = fft_with_precomputation(&padded(h1_coeffs, order), &fft_precomp4);
-    let h2_4_values = fft_with_precomputation(&padded(h2_coeffs, order), &fft_precomp4);
+    let z_4_values = z_poly.eval_domain(&fft_precomp4);
+    let f_4_values = f_poly.eval_domain(&fft_precomp4);
+    let t_4_values = t_poly.eval_domain(&fft_precomp4);
+    let h1_4_values = h1_poly.eval_domain(&fft_precomp4);
+    let h2_4_values = h2_poly.eval_domain(&fft_precomp4);
 
     let beta1 = beta + F::ONE;
     let gamma_beta1 = gamma * beta1;
@@ -275,7 +265,7 @@ fn vanishing_polynomial_coeffs<F: Field>(
             )
         })
         .collect::<Vec<_>>();
-    ifft_with_precomputation_power_of_2(&values, &fft_precomp4)
+    Polynomial::from_evaluations(&values, &fft_precomp4)
 }
 
 /// Computes the evaluation of the `i`-th Lagrange basis polynomial of order `n` on a point `x`.

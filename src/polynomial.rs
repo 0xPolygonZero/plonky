@@ -83,7 +83,12 @@ impl<F: Field> Polynomial<F> {
     }
 
     pub fn eval_domain(&self, fft_precomputation: &FftPrecomputation<F>) -> Vec<F> {
-        fft_with_precomputation(&self.coeffs(), fft_precomputation)
+        let domain_size = fft_precomputation.size();
+        if self.len() < domain_size {
+            fft_with_precomputation(&self.padded(domain_size).coeffs(), fft_precomputation)
+        } else {
+            fft_with_precomputation(&self.coeffs(), fft_precomputation)
+        }
     }
 
     pub fn from_evaluations(values: &[F], fft_precomputation: &FftPrecomputation<F>) -> Self {
@@ -136,6 +141,12 @@ impl<F: Field> Polynomial<F> {
         self.trim();
         assert!(self.len() <= len);
         self.0.extend((self.len()..len).map(|_| F::ZERO));
+    }
+
+    pub fn padded(&self, len: usize) -> Self {
+        let mut a = self.clone();
+        a.pad(len);
+        a
     }
 
     pub fn mul(&self, b: &Self) -> Self {

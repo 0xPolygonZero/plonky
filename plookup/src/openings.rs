@@ -1,5 +1,4 @@
-use plonky::plonk_util::eval_poly;
-use plonky::Field;
+use plonky::{Field, Polynomial};
 
 pub struct Opening<F: Field> {
     pub local: F,
@@ -68,26 +67,22 @@ impl<F: Field> PlookupOpenings<F> {
 }
 
 pub fn open_all_polynomials<F: Field>(
-    f_coeffs: &[F],
-    t_coeffs: &[F],
-    h1_coeffs: &[F],
-    h2_coeffs: &[F],
-    z_coeffs: &[F],
-    quotient_coeffs: &[F],
+    f_poly: &Polynomial<F>,
+    t_poly: &Polynomial<F>,
+    h1_poly: &Polynomial<F>,
+    h2_poly: &Polynomial<F>,
+    z_poly: &Polynomial<F>,
+    quotient_poly: &Polynomial<F>,
     zeta: F,
     generator: F,
 ) -> PlookupOpenings<F> {
     let right = zeta * generator;
-    let f = (eval_poly(f_coeffs, zeta), eval_poly(f_coeffs, right)).into();
-    let t = (eval_poly(t_coeffs, zeta), eval_poly(t_coeffs, right)).into();
-    let h1 = (eval_poly(h1_coeffs, zeta), eval_poly(h1_coeffs, right)).into();
-    let h2 = (eval_poly(h2_coeffs, zeta), eval_poly(h2_coeffs, right)).into();
-    let z = (eval_poly(z_coeffs, zeta), eval_poly(z_coeffs, right)).into();
-    let quotient = (
-        eval_poly(quotient_coeffs, zeta),
-        eval_poly(quotient_coeffs, right),
-    )
-        .into();
+    let f = (f_poly.eval(zeta), f_poly.eval(right)).into();
+    let t = (t_poly.eval(zeta), t_poly.eval(right)).into();
+    let h1 = (h1_poly.eval(zeta), h1_poly.eval(right)).into();
+    let h2 = (h2_poly.eval(zeta), h2_poly.eval(right)).into();
+    let z = (z_poly.eval(zeta), z_poly.eval(right)).into();
+    let quotient = (quotient_poly.eval(zeta), quotient_poly.eval(right)).into();
     PlookupOpenings {
         f,
         t,

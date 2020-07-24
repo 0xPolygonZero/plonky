@@ -4,10 +4,7 @@ use anyhow::{ensure, Result};
 use plonky::halo::verify_ipa;
 use plonky::plonk_util::{halo_g, halo_n, halo_n_mul, powers, reduce_with_powers};
 use plonky::util::log2_strict;
-use plonky::{
-    blake_hash_usize_to_curve, fft_precompute, ifft_with_precomputation_power_of_2,
-    msm_execute_parallel, msm_precompute, AffinePoint, Field, HaloCurve, PolynomialCommitment,
-};
+use plonky::{blake_hash_usize_to_curve, fft_precompute, ifft_with_precomputation_power_of_2, msm_execute_parallel, msm_precompute, AffinePoint, Field, HaloCurve, PolynomialCommitment};
 
 /// Verifies that a proof is valid for a set `t`.
 /// TODO: The verifier should have some auxiliary knowledge of `c_t`. For now, it is stored in the `proof`.
