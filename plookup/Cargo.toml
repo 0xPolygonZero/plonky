@@ -1,0 +1,12 @@
+[package]
+name = "plookup"
+version = "0.1.0"
+authors = ["wborgeaud <williamborgeaud@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+plonky = {path="../../plonky"}
+anyhow = "1.0.31"
+rand = "0.7.3"
+itertools = "0.9.0"
+num = "0.2.1"

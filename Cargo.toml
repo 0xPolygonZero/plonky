@@ -11,6 +11,9 @@ categories = ["cryptography"]
 edition = "2018"
 default-run = "recursion"
 
+[workspace]
+members = ["plookup"]
+
 [dependencies]
 getrandom = "0.1.14"
 num = "0.2.1"
