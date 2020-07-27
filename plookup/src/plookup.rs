@@ -46,8 +46,8 @@ pub fn prove<C: HaloCurve>(f: &[C::ScalarField], t: &[C::ScalarField]) -> Result
     // Commit to all polynomials.
     let c_f = f_poly.commit(&msm_precomputation, h, true);
     let c_t = t_poly.commit(&msm_precomputation, h, false);
-    let c_h1 = h1_poly.commit(&msm_precomputation, h, false);
-    let c_h2 = h2_poly.commit(&msm_precomputation, h, false);
+    let c_h1 = h1_poly.commit(&msm_precomputation, h, true);
+    let c_h2 = h2_poly.commit(&msm_precomputation, h, true);
 
     // Observe the commitments to get verifier challenges.
     // `beta` and `gamma` are used to construct the Plookup grand product.
