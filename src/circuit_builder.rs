@@ -3,8 +3,9 @@ use std::collections::{BTreeMap, HashMap};
 use crate::gates::*;
 use crate::plonk_util::{commit_polynomials, halo_n, polynomials_to_values_padded, sigma_polynomials, values_to_polynomials};
 use crate::util::{ceil_div_usize, log2_strict, transpose};
-use crate::{blake_hash_base_field_to_curve, blake_hash_usize_to_curve, fft_precompute, generate_rescue_constants, msm_precompute, AffinePoint, AffinePointTarget, Circuit, Curve, CurveMsmEndoResult, CurveMulEndoResult, CurveMulOp, Field, HaloCurve, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, NUM_CONSTANTS, NUM_WIRES};
+use crate::{blake_hash_base_field_to_curve, blake_hash_usize_to_curve, fft_precompute, generate_rescue_constants, msm_precompute, AffinePoint, AffinePointTarget, Circuit, Curve, CurveMsmEndoResult, CurveMulEndoResult, CurveMulOp, Field, HaloCurve, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, NUM_CONSTANTS, NUM_WIRES, BoundedTarget};
 use std::marker::PhantomData;
+use num::{Zero, BigUint};
 
 pub struct CircuitBuilder<C: HaloCurve> {
     pub(crate) security_bits: usize,
@@ -78,6 +79,11 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
     pub fn zero_wire(&mut self) -> Target {
         self.constant_wire(C::ScalarField::ZERO)
+    }
+
+    pub fn zero_bounded_target(&mut self) -> BoundedTarget {
+        let zero = self.zero_wire();
+        BoundedTarget { target: zero, max: BigUint::zero() }
     }
 
     pub fn one_wire(&mut self) -> Target {
@@ -163,12 +169,136 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         self.copy(x, zero);
     }
 
-    pub fn assert_binary(&mut self, x: Target) {
+    pub fn assert_one(&mut self, x: Target) {
         let one = self.one_wire();
+        self.copy(x, one);
+    }
 
-        let x_minus_1 = self.sub(x, one);
-        let product = self.mul(x, x_minus_1);
-        self.assert_zero(product);
+    pub fn assert_binary(&mut self, x: Target) {
+        // This is typically implemented with a constraint like x * (x - 1) = 0.
+        // We rewrite this as x * x - x = 0, which requires just one gate in our model.
+        let lhs = self.mul_sub(x, x, x);
+        self.assert_zero(lhs);
+    }
+
+    /// Assert that each of the given targets is less than 4.
+    pub fn assert_all_base_4(&mut self, limbs: &[Target]) {
+        // We will leverage Base4SumGate, which checks that each of its limbs is base 4.
+        for chunk in limbs.chunks(Base4SumGate::<C>::NUM_ROUTED_LIMBS) {
+            let gate = self.num_gates();
+            self.add_gate_no_constants(Base4SumGate::new(gate));
+
+            // We don't care about Base4SumGate's accumulator wires, but we need to pass some
+            // (arbitrary) value to the old accumulator wire in order for the generator to run.
+            self.generate_constant(
+                Target::Wire(Wire { gate, input: Base4SumGate::<C>::WIRE_ACC_OLD }),
+                C::ScalarField::ZERO, // This value is arbitrary.
+            );
+
+            // Route each limb to one of Base4SumGate's routed limb wires.
+            for (i, &limb) in chunk.iter().enumerate() {
+                self.copy(
+                    limb,
+                    Target::Wire(Wire {
+                        gate,
+                        input: Base4SumGate::<C>::wire_limb(i),
+                    })
+                )
+            }
+        }
+    }
+
+    pub fn assert_nonzero(&mut self, x: Target) {
+        // An element is nonzero iff it has an inverse.
+        self.inv(x);
+    }
+
+    /// Returns `if x == 0 { 1 } else { 0 }`.
+    pub fn is_zero(&mut self, x: Target) -> Target {
+        // This is similar to the technique described in
+        // https://github.com/mir-protocol/r1cs-workshop/blob/master/workshop.pdf
+
+        let is_zero: Target = self.add_virtual_target();
+
+        // m will hold if x != 0 { -1 / x } else { 1 }.
+        let m = self.add_virtual_target();
+
+        struct IsZeroGenerator {
+            x: Target,
+            m: Target,
+            is_zero: Target,
+        }
+
+        impl<F: Field> WitnessGenerator<F> for IsZeroGenerator {
+            fn dependencies(&self) -> Vec<Target> {
+                vec![self.x]
+            }
+
+            fn generate(
+                &self,
+                _constants: &Vec<Vec<F>>,
+                witness: &PartialWitness<F>,
+            ) -> PartialWitness<F> {
+                let x = witness.get_target(self.x);
+                let (m, is_zero) = if x.is_zero() {
+                    (F::ONE, F::ONE)
+                } else {
+                    (-x.multiplicative_inverse().unwrap(), F::ZERO)
+                };
+
+                let mut result = PartialWitness::new();
+                result.set_target(self.m, m);
+                result.set_target(self.is_zero, is_zero);
+                result
+            }
+        }
+
+        self.add_generator(IsZeroGenerator { x, m, is_zero });
+
+        // Enforce that is_zero = x * m + 1.
+        let one = self.one_wire();
+        let x_m_plus_1 = self.mul_add(x, m, one);
+        self.copy(is_zero, x_m_plus_1);
+
+        // Enforce that is_zero * x = 0.
+        let is_zero_x = self.mul(is_zero, x);
+        self.assert_zero(is_zero_x);
+
+        is_zero
+    }
+
+    /// Returns `if x != 0 { 1 } else { 0 }`.
+    pub fn is_nonzero(&mut self, x: Target) -> Target {
+        let one = self.one_wire();
+        let is_zero = self.is_zero(x);
+        self.sub(one, is_zero)
+    }
+
+    /// Returns `if x == y { 1 } else { 0 }`.
+    pub fn is_equal(&mut self, x: Target, y: Target) -> Target {
+        let diff = self.sub(x, y);
+        self.is_zero(diff)
+    }
+
+    /// Returns `if x != y { 1 } else { 0 }`.
+    pub fn is_not_equal(&mut self, x: Target, y: Target) -> Target {
+        let diff = self.sub(x, y);
+        self.is_nonzero(diff)
+    }
+
+    /// Selects `x` or `y` based on `b`, which is assumed to be binary.
+    /// In particular, this returns `if b { x } else { y }`.
+    pub fn select(&mut self, b: Target, x: Target, y: Target) -> Target {
+        // This can be computed various ways, e.g.
+        //     b x + (1 - b) y
+        //     b x + y - b y
+        //     y + b (x - y)
+        // We will actually compute it as
+        //     b x - (b y - y)
+        // since this can be done with two mul_sub calls.
+
+        let b_y_minus_y = self.mul_sub(b, y, y);
+        self.mul_sub(b, x, b_y_minus_y)
     }
 
     /// Returns the negation of a bit `b`, which is assumed to be in `{0, 1}`.
@@ -406,7 +536,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
                     chunk[i],
                     Target::Wire(Wire {
                         gate: index,
-                        input: Base4SumGate::<C>::WIRE_LIMB_0 + i,
+                        input: Base4SumGate::<C>::wire_limb(i),
                     }),
                 );
                 sum = Target::Wire(Wire {
@@ -524,6 +654,17 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         })
     }
 
+    pub(crate) fn bounded_mul_add(
+        &mut self,
+        x: &BoundedTarget,
+        y: &BoundedTarget,
+        z: &BoundedTarget,
+    ) -> BoundedTarget {
+        let target = self.mul_add(x.target, y.target, z.target);
+        let max = &x.max * &y.max + &z.max;
+        BoundedTarget { target, max }
+    }
+
     /// Multiply and subtract; i.e. computes `x * y - z`.
     pub fn mul_sub(&mut self, x: Target, y: Target, z: Target) -> Target {
         let index = self.num_gates();
@@ -569,6 +710,13 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     fn split_binary(&mut self, x: Target, num_bits: usize) -> Vec<Target> {
         let (bits, _dibits) = self.split_binary_and_base_4(x, num_bits, 0);
         bits
+    }
+    
+    /// Splits `x` into its base 4 representation. Note that this method merely adds a generator to
+    /// populate the bit wires; it does not enforce constraints to verify the decomposition.
+    fn split_base_4(&mut self, x: Target, num_dibits: usize) -> Vec<Target> {
+        let (_bits, dibits) = self.split_binary_and_base_4(x, 0, num_dibits);
+        dibits
     }
 
     /// Splits `x` into a combination of binary and base 4 limbs. Note that this method merely adds
@@ -622,6 +770,61 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         };
         self.add_generator(generator);
         (bits, dibits)
+    }
+
+    /// Asserts that the given target's value is small enough to fit in the given number of dibits.
+    ///
+    /// Note: This is most efficient when `num_dibits` is a multiple of `Base4SumGate::NUM_LIMBS`.
+    pub(crate) fn assert_dibit_length(&mut self, x: Target, num_dibits: usize) {
+        // Get the purported base 4 decomposition of x.
+        let dibits = self.split_base_4(x, num_dibits);
+
+        // Accumulate each full chunk of NUM_LIMBS dibits using a Base4SumGate.
+        let mut sum = self.zero_wire();
+        let chunks = dibits.chunks_exact(Base4SumGate::<C>::NUM_LIMBS);
+        for chunk in chunks.clone() {
+            let gate = self.num_gates();
+            self.add_gate_no_constants(Base4SumGate::new(gate));
+
+            // Route sum into WIRE_ACC_OLD.
+            self.copy(
+                sum,
+                Target::Wire(Wire {
+                    gate,
+                    input: Base4SumGate::<C>::WIRE_ACC_OLD,
+                }),
+            );
+
+            for (i, &dibit) in chunk.iter().enumerate() {
+                self.copy(
+                    dibit,
+                    Target::Wire(Wire {
+                        gate,
+                        input: Base4SumGate::<C>::wire_limb(i),
+                    })
+                );
+            }
+
+            // Take WIRE_ACC_NEW as our updated sum.
+            sum = Target::Wire(Wire {
+                gate,
+                input: Base4SumGate::<C>::WIRE_ACC_NEW,
+            });
+        }
+
+        // If there is a partial chunk of dibits, it would be difficult to accumulate it with
+        // Base4SumGate, e.g. since it would always perform NUM_LIMBS doublings. So instead, we
+        // will accumulate it with simple arithmetic operations.
+        if !chunks.remainder().is_empty() {
+            self.assert_all_base_4(chunks.remainder());
+            let four = self.constant_wire_u32(4);
+            for &dibit in chunks.remainder() {
+                sum = self.mul_add(sum, four, dibit);
+            }
+        }
+
+        // Ensure that the weighted sum we computed matches the original value, x.
+        self.copy(sum, x);
     }
 
     pub fn rescue_hash_n_to_1(&mut self, inputs: &[Target]) -> Target {
@@ -1241,7 +1444,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
                         dibit,
                         Target::Wire(Wire {
                             gate,
-                            input: Base4SumGate::<C>::WIRE_LIMB_0 + i,
+                            input: Base4SumGate::<C>::wire_limb(i),
                         }),
                     );
                 }
@@ -1308,6 +1511,13 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             .push((affine_target_1.x, affine_target_2.x));
         self.copy_constraints
             .push((affine_target_1.y, affine_target_2.y));
+    }
+
+    /// Enforces a copy constraint between the two targets if the condition is non-zero.
+    pub fn conditional_copy(&mut self, condition: Target, target_1: Target, target_2: Target) {
+        let conditional_target_1 = self.mul(condition, target_1);
+        let conditional_target_2 = self.mul(condition, target_2);
+        self.copy(conditional_target_1, conditional_target_2);
     }
 
     /// Adds a gate with random wire values. By adding `k` of these gates, we can ensure that

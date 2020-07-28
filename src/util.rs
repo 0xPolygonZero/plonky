@@ -3,6 +3,10 @@ pub(crate) fn ceil_div_usize(a: usize, b: usize) -> usize {
     (a + b - 1) / b
 }
 
+pub(crate) fn pad_to_multiple_usize(a: usize, b: usize) -> usize {
+    ceil_div_usize(a, b) * b
+}
+
 /// Computes `ceil(log_2(n))`.
 pub(crate) fn log2_ceil(n: usize) -> usize {
     n.next_power_of_two().trailing_zeros() as usize

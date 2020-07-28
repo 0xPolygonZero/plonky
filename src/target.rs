@@ -1,4 +1,5 @@
 use crate::{NUM_ROUTED_WIRES, NUM_WIRES};
+use num::BigUint;
 
 /// A sort of proxy wire, in the context of routing and witness generation. It is not an actual
 /// witness element (i.e. wire) itself, but it can be copy-constrained to wires, listed as a
@@ -28,6 +29,14 @@ impl Wire {
 pub enum Target {
     VirtualTarget(VirtualTarget),
     Wire(Wire),
+}
+
+#[derive(Clone)]
+/// A `Target` with a (inclusive) known upper bound.
+pub struct BoundedTarget {
+    pub target: Target,
+    /// An inclusive upper bound on this number.
+    pub max: BigUint,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]

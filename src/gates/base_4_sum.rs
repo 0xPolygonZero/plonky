@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use crate::gates::Gate;
-use crate::{CircuitBuilder, Curve, Field, HaloCurve, PartialWitness, Target, WitnessGenerator};
+use crate::{CircuitBuilder, Curve, Field, HaloCurve, PartialWitness, Target, WitnessGenerator, NUM_ROUTED_WIRES, NUM_WIRES};
 
 /// A gate for accumulating base-4 limbs.
 pub struct Base4SumGate<C: Curve> {
@@ -19,8 +19,13 @@ impl<C: HaloCurve> Base4SumGate<C> {
 
     pub const WIRE_ACC_OLD: usize = 0;
     pub const WIRE_ACC_NEW: usize = 1;
-    pub const WIRE_LIMB_0: usize = 2;
-    pub const NUM_LIMBS: usize = 7;
+    pub const NUM_LIMBS: usize = NUM_WIRES - 2;
+    pub const NUM_ROUTED_LIMBS: usize = NUM_ROUTED_WIRES - 2;
+
+    /// Returns the index of the `i`th limb wire.
+    pub fn wire_limb(i: usize) -> usize {
+        2 + i
+    }
 }
 
 impl<C: HaloCurve> Gate<C> for Base4SumGate<C> {
@@ -37,7 +42,7 @@ impl<C: HaloCurve> Gate<C> for Base4SumGate<C> {
         let acc_old = local_wire_values[Self::WIRE_ACC_OLD];
         let acc_new = local_wire_values[Self::WIRE_ACC_NEW];
         let limbs: Vec<C::ScalarField> = (0..Self::NUM_LIMBS)
-            .map(|i| local_wire_values[Self::WIRE_LIMB_0 + i])
+            .map(|i| local_wire_values[Self::wire_limb(i)])
             .collect();
 
         let mut computed_acc_new = acc_old;
@@ -68,7 +73,7 @@ impl<C: HaloCurve> Gate<C> for Base4SumGate<C> {
         let acc_old = local_wire_values[Self::WIRE_ACC_OLD];
         let acc_new = local_wire_values[Self::WIRE_ACC_NEW];
         let limbs: Vec<Target> = (0..Self::NUM_LIMBS)
-            .map(|i| local_wire_values[Self::WIRE_LIMB_0 + i])
+            .map(|i| local_wire_values[Self::wire_limb(i)])
             .collect();
 
         let mut computed_acc_new = acc_old;
