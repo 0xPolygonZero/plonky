@@ -3,6 +3,7 @@ use anyhow::{anyhow, Result};
 use crate::plonk_challenger::Challenger;
 use crate::plonk_util::{halo_g, halo_n, halo_s};
 use crate::{AffinePoint, AffinePointTarget, Curve, Field, HaloCurve, PartialWitness, Target, NUM_WIRES, SECURITY_BITS};
+use std::marker::PhantomData;
 
 #[derive(Debug, Clone, Copy)]
 pub struct SchnorrProof<C: HaloCurve> {
@@ -11,10 +12,11 @@ pub struct SchnorrProof<C: HaloCurve> {
     pub z2: C::ScalarField,
 }
 
-pub struct SchnorrProofTarget {
-    pub r: AffinePointTarget,
+pub struct SchnorrProofTarget<C: HaloCurve> {
+    pub r: AffinePointTarget<C>,
     pub z1: Target,
     pub z2: Target,
+    pub(crate) phantom: PhantomData<C>,
 }
 
 #[derive(Debug, Clone)]
@@ -175,35 +177,36 @@ impl<C: HaloCurve> OldProof<C> {
 
 #[derive(Debug, Clone)]
 /// The `Target` version of `OldProof`.
-pub struct OldProofTarget {
-    pub halo_g: AffinePointTarget,
+pub struct OldProofTarget<C: HaloCurve> {
+    pub halo_g: AffinePointTarget<C>,
     pub halo_us: Vec<Target>,
+    pub(crate) phantom: PhantomData<C>,
 }
 
-impl OldProofTarget {
-    pub fn populate_witness<C: HaloCurve>(
+impl<C: HaloCurve> OldProofTarget<C> {
+    pub fn populate_witness(
         &self,
-        witness: &mut PartialWitness<C::BaseField>,
+        witness: &mut PartialWitness<C::ScalarField>,
         values: &OldProof<C>,
     ) -> Result<()> {
-        witness.set_point_target(self.halo_g, values.halo_g);
+        witness.set_point_target::<C>(self.halo_g, values.halo_g);
         debug_assert_eq!(self.halo_us.len(), values.halo_us.len());
         witness.set_targets(
             &self.halo_us,
-            &C::ScalarField::try_convert_all(&values.halo_us)?,
+            &values.halo_us,
         );
 
         Ok(())
     }
 }
 
-pub struct ProofTarget {
+pub struct ProofTarget<C: HaloCurve> {
     /// A commitment to each wire polynomial.
-    pub c_wires: Vec<AffinePointTarget>,
+    pub c_wires: Vec<AffinePointTarget<C>>,
     /// A commitment to Z, in the context of the permutation argument.
-    pub c_plonk_z: AffinePointTarget,
+    pub c_plonk_z: AffinePointTarget<C>,
     /// A commitment to the quotient polynomial.
-    pub c_plonk_t: Vec<AffinePointTarget>,
+    pub c_plonk_t: Vec<AffinePointTarget<C>>,
 
     /// The opening of each polynomial at each `PublicInputGate` index.
     pub o_public_inputs: Option<Vec<OpeningSetTarget>>,
@@ -215,16 +218,16 @@ pub struct ProofTarget {
     pub o_below: OpeningSetTarget,
 
     /// L_i in the Halo reduction.
-    pub halo_l_i: Vec<AffinePointTarget>,
+    pub halo_l_i: Vec<AffinePointTarget<C>>,
     /// R_i in the Halo reduction.
-    pub halo_r_i: Vec<AffinePointTarget>,
+    pub halo_r_i: Vec<AffinePointTarget<C>>,
     /// The purported value of G, i.e. <s, G>, in the context of Halo.
-    pub halo_g: AffinePointTarget,
+    pub halo_g: AffinePointTarget<C>,
     /// The data used in the final Schnorr protocol of the Halo opening proof.
-    pub schnorr_proof: SchnorrProofTarget,
+    pub schnorr_proof: SchnorrProofTarget<C>,
 }
 
-impl ProofTarget {
+impl<C: HaloCurve> ProofTarget<C> {
     /// `log_2(d)`, where `d` is the degree of the proof being verified.
     #[allow(dead_code)]
     fn degree_pow(&self) -> usize {
@@ -256,7 +259,7 @@ impl ProofTarget {
         targets_2d.concat()
     }
 
-    pub fn populate_witness<C: HaloCurve>(
+    pub fn populate_witness(
         &self,
         witness: &mut PartialWitness<C::BaseField>,
         values: Proof<C>,

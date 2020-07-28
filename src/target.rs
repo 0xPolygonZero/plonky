@@ -1,5 +1,6 @@
-use crate::{NUM_ROUTED_WIRES, NUM_WIRES};
+use crate::{NUM_ROUTED_WIRES, NUM_WIRES, HaloCurve};
 use num::BigUint;
+use std::marker::PhantomData;
 
 /// A sort of proxy wire, in the context of routing and witness generation. It is not an actual
 /// witness element (i.e. wire) itself, but it can be copy-constrained to wires, listed as a
@@ -66,32 +67,46 @@ impl PublicInput {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub struct AffinePointTarget {
+pub struct AffinePointTarget<C: HaloCurve> {
     pub x: Target,
     pub y: Target,
+    phantom: PhantomData<C>,
 }
 
-impl AffinePointTarget {
+impl<C: HaloCurve> AffinePointTarget<C> {
+    pub fn new(x: Target, y: Target) -> Self {
+        AffinePointTarget { x, y, phantom: PhantomData }
+    }
+
     pub fn to_vec(&self) -> Vec<Target> {
         vec![self.x, self.y]
     }
 }
 
 /// Represents a scalar * point multiplication operation.
-pub struct CurveMulOp {
+pub struct CurveMulOp<C: HaloCurve> {
     pub scalar: Target,
-    pub point: AffinePointTarget,
+    pub point: AffinePointTarget<C>,
+    phantom: PhantomData<C>,
 }
 
-pub struct CurveMulEndoResult {
-    pub mul_result: AffinePointTarget,
+impl<C: HaloCurve> CurveMulOp<C> {
+    pub fn new(scalar: Target, point: AffinePointTarget<C>) -> Self {
+        CurveMulOp { scalar, point, phantom: PhantomData }
+    }
+}
+
+pub struct CurveMulEndoResult<C: HaloCurve> {
+    pub mul_result: AffinePointTarget<C>,
     pub actual_scalar: Target,
+    pub(crate) phantom: PhantomData<C>,
 }
 
-pub struct CurveMsmEndoResult {
-    pub msm_result: AffinePointTarget,
+pub struct CurveMsmEndoResult<C: HaloCurve> {
+    pub msm_result: AffinePointTarget<C>,
     /// While `msm` computes a sum of `[s] P` terms, `msm_endo` computes a sum of `[n(s)] P` terms
     /// for some injective `n`. Here we return each `n(s)`, i.e., the scalar by which the point was
     /// actually multiplied.
     pub actual_scalars: Vec<Target>,
+    pub(crate) phantom: PhantomData<C>,
 }

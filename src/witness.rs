@@ -1,5 +1,5 @@
 use crate::util::transpose;
-use crate::{AffinePoint, AffinePointTarget, Curve, Field, PublicInput, Target, Wire, NUM_WIRES, OrderingTarget, field_to_biguint, LIMB_BITS, BigIntTarget, biguint_to_limbs, ForeignFieldTarget, biguint_to_field};
+use crate::{AffinePoint, AffinePointTarget, Field, PublicInput, Target, Wire, NUM_WIRES, OrderingTarget, field_to_biguint, LIMB_BITS, BigIntTarget, biguint_to_limbs, ForeignFieldTarget, biguint_to_field, HaloCurve};
 use std::{cmp::Ordering, collections::HashMap};
 use num::{Zero, BigUint};
 
@@ -42,9 +42,9 @@ impl<F: Field> PartialWitness<F> {
         targets.iter().map(|&t| self.get_target(t)).collect()
     }
 
-    pub fn get_point_target<InnerC: Curve<BaseField = F>>(
+    pub fn get_point_target<InnerC: HaloCurve<BaseField = F>>(
         &self,
-        target: AffinePointTarget,
+        target: AffinePointTarget<InnerC>,
     ) -> AffinePoint<InnerC> {
         let x = self.get_target(target.x);
         let y = self.get_target(target.y);
@@ -132,18 +132,18 @@ impl<F: Field> PartialWitness<F> {
             .for_each(|(&target, &value)| self.set_target(target, value))
     }
 
-    pub fn set_point_target<InnerC: Curve<BaseField = F>>(
+    pub fn set_point_target<InnerC: HaloCurve<BaseField = F>>(
         &mut self,
-        point_target: AffinePointTarget,
+        point_target: AffinePointTarget<InnerC>,
         point: AffinePoint<InnerC>,
     ) {
         self.set_target(point_target.x, point.x);
         self.set_target(point_target.y, point.y);
     }
 
-    pub fn set_point_targets<InnerC: Curve<BaseField = F>>(
+    pub fn set_point_targets<InnerC: HaloCurve<BaseField = F>>(
         &mut self,
-        point_targets: &[AffinePointTarget],
+        point_targets: &[AffinePointTarget<InnerC>],
         points: &[AffinePoint<InnerC>],
     ) {
         debug_assert_eq!(point_targets.len(), points.len());

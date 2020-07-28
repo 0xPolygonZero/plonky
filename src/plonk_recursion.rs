@@ -4,13 +4,14 @@ use crate::plonk_proof::OldProofTarget;
 use crate::plonk_util::{powers_recursive, reduce_with_powers_recursive};
 use crate::util::ceil_div_usize;
 use crate::{get_subgroup_shift, hash_usize_to_curve, AffinePointTarget, Circuit, CircuitBuilder, CurveMulEndoResult, CurveMulOp, Field, HaloCurve, OpeningSetTarget, ProofTarget, PublicInput, SchnorrProofTarget, Target, GRID_WIDTH, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER};
+use std::marker::PhantomData;
 
 /// Wraps a `Circuit` for recursive verification with inputs for the proof data.
-pub struct RecursiveCircuit<C: HaloCurve> {
+pub struct RecursiveCircuit<C: HaloCurve, InnerC: HaloCurve> {
     pub circuit: Circuit<C>,
     pub public_inputs: RecursionPublicInputs,
-    pub proof: ProofTarget,
-    pub old_proofs: Vec<OldProofTarget>,
+    pub proof: ProofTarget<InnerC>,
+    pub old_proofs: Vec<OldProofTarget<C>>,
 }
 
 /// Public inputs of the recursive circuit. This contains data for the inner proof which is needed
@@ -45,7 +46,7 @@ pub fn recursive_verification_circuit<
     security_bits: usize,
     num_public_inputs: usize,
     num_old_proofs: usize,
-) -> RecursiveCircuit<C> {
+) -> RecursiveCircuit<C, InnerC> {
     let mut builder = CircuitBuilder::<C>::new(security_bits);
     let public_inputs = RecursionPublicInputs {
         beta: builder.stage_public_input(),
@@ -86,7 +87,7 @@ pub fn recursive_verification_circuit<
         schnorr_proof: make_schnorr_proof(&mut builder),
     };
 
-    let old_proofs = make_old_proofs(&mut builder, num_old_proofs, degree_pow);
+    let old_proofs = make_old_proofs::<C, InnerC>(&mut builder, num_old_proofs, degree_pow);
 
     // Flatten the list of public input openings.
     let o_public_inputs: Option<Vec<Target>> = proof.o_public_inputs.as_ref().map(|pis| {
@@ -220,7 +221,7 @@ pub fn recursive_verification_circuit<
 /// Verify all IPAs in the given proof, and return IPA challenges.
 fn verify_all_ipas<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     builder: &mut CircuitBuilder<C>,
-    proof: &ProofTarget,
+    proof: &ProofTarget<InnerC>,
     zeta: Target,
     u: Target,
     v: Target,
@@ -236,7 +237,7 @@ fn verify_all_ipas<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     let dummy_point = builder.constant_affine_point(InnerC::GENERATOR_AFFINE);
     let c_constants = vec![dummy_point; NUM_CONSTANTS];
     let c_s_sigmas = vec![dummy_point; NUM_ROUTED_WIRES];
-    let c_all: Vec<AffinePointTarget> = [
+    let c_all: Vec<AffinePointTarget<InnerC>> = [
         c_constants,
         c_s_sigmas,
         proof.c_wires.clone(),
@@ -247,10 +248,7 @@ fn verify_all_ipas<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     let mut c_reduction_muls = Vec::new();
     let powers_of_u = powers_recursive(builder, u, c_all.len());
     for (&c, &power) in c_all.iter().zip(powers_of_u.iter()) {
-        let mul = CurveMulOp {
-            scalar: power,
-            point: c,
-        };
+        let mul = CurveMulOp::new(power, c);
         c_reduction_muls.push(mul);
     }
     let c_reduction_msm_result = builder.curve_msm_endo::<InnerC>(&c_reduction_muls);
@@ -276,17 +274,12 @@ fn verify_all_ipas<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     ));
     // u' is u scaled by n(u_scaling), giving a random generator.
     let u_prime = builder
-        .curve_mul_endo::<InnerC>(CurveMulOp {
-            scalar: u_scaling,
-            point: u,
-        })
+        .curve_mul_endo::<InnerC>(CurveMulOp::new(u_scaling, u))
         .mul_result;
 
     // Compute [v] u', where v is the (reduced) opened value.
-    let v_u_prime = builder.curve_mul::<InnerC>(CurveMulOp {
-        scalar: reduced_opening,
-        point: u_prime,
-    });
+    let v_u_prime = builder.curve_mul::<InnerC>(
+        CurveMulOp::new(reduced_opening, u_prime));
     let p_prime = builder.curve_add::<InnerC>(c_reduction, v_u_prime);
 
     let (halo_q, halo_us) =
@@ -329,19 +322,19 @@ fn verify_all_ipas<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
 /// Computes `Q` in the context of the Halo paper. Returns `(Q, halo_us)`.
 fn compute_halo_q<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     builder: &mut CircuitBuilder<C>,
-    proof: &ProofTarget,
+    proof: &ProofTarget<InnerC>,
     raw_ipa_challenges: &[Target],
-    p_prime: AffinePointTarget,
-) -> (AffinePointTarget, Vec<Target>) {
+    p_prime: AffinePointTarget<InnerC>,
+) -> (AffinePointTarget<InnerC>, Vec<Target>) {
     let mut sum = p_prime;
 
     // The summation of the L_i terms has the structure of an MSM.
     let mut l_muls = Vec::new();
     for (i, &raw_ipa_challenge) in raw_ipa_challenges.iter().enumerate() {
-        l_muls.push(CurveMulOp {
-            scalar: raw_ipa_challenge,
-            point: proof.halo_l_i[i],
-        });
+        l_muls.push(CurveMulOp::new(
+            raw_ipa_challenge,
+            proof.halo_l_i[i],
+        ));
     }
     let l_msm_result = builder.curve_msm_endo::<InnerC>(&l_muls);
     sum = builder.curve_add::<InnerC>(sum, l_msm_result.msm_result);
@@ -351,10 +344,11 @@ fn compute_halo_q<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
         let CurveMulEndoResult {
             mul_result,
             actual_scalar,
-        } = builder.curve_mul_inv_endo::<InnerC>(CurveMulOp {
-            scalar: raw_ipa_challenge,
-            point: proof.halo_r_i[i],
-        });
+            ..
+        } = builder.curve_mul_inv_endo::<InnerC>(CurveMulOp::new(
+            raw_ipa_challenge,
+            proof.halo_r_i[i],
+        ));
         sum = builder.curve_add::<InnerC>(sum, mul_result);
         // Make sure the scalars used to scale L_i and R_i match.
         builder.copy(actual_scalar, l_msm_result.actual_scalars[i]);
@@ -372,9 +366,9 @@ fn compute_halo_q<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
 /// Verify the final Schnorr protocol used in Halo.
 fn verify_schnorr<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     builder: &mut CircuitBuilder<C>,
-    proof: &ProofTarget,
-    u_prime: AffinePointTarget,
-    halo_q: AffinePointTarget,
+    proof: &ProofTarget<InnerC>,
+    u_prime: AffinePointTarget<InnerC>,
+    halo_q: AffinePointTarget<InnerC>,
     halo_b: Target,
     schnorr_challenge: Target,
     security_bits: usize,
@@ -388,24 +382,24 @@ fn verify_schnorr<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     // Perform ZK opening protocol.
     // LHS is [schnorr_challenge] * q + schnorr_proof.r.
     // RHS is [schnorr_proof.z1] * (halo_g + [halo_b] * u') + [schnorr_proof.z2] * pedersen_h.
-    let lhs = builder.curve_mul::<InnerC>(CurveMulOp {
-        scalar: schnorr_challenge,
-        point: halo_q,
-    });
+    let lhs = builder.curve_mul::<InnerC>(CurveMulOp::new(
+        schnorr_challenge,
+        halo_q,
+    ));
     let lhs = builder.curve_add::<InnerC>(lhs, proof.schnorr_proof.r);
-    let rhs = builder.curve_mul::<InnerC>(CurveMulOp {
-        scalar: halo_b,
-        point: u_prime,
-    });
+    let rhs = builder.curve_mul::<InnerC>(CurveMulOp::new(
+        halo_b,
+        u_prime,
+    ));
     let rhs = builder.curve_add::<InnerC>(rhs, proof.halo_g);
-    let rhs = builder.curve_mul::<InnerC>(CurveMulOp {
-        scalar: proof.schnorr_proof.z1,
-        point: rhs,
-    });
-    let tmp = builder.curve_mul::<InnerC>(CurveMulOp {
-        scalar: proof.schnorr_proof.z2,
-        point: pedersen_h,
-    });
+    let rhs = builder.curve_mul::<InnerC>(CurveMulOp::new(
+        proof.schnorr_proof.z1,
+        rhs,
+    ));
+    let tmp = builder.curve_mul::<InnerC>(CurveMulOp::new(
+        proof.schnorr_proof.z2,
+        pedersen_h,
+    ));
     let rhs = builder.curve_add::<InnerC>(rhs, tmp);
     // LHS should be equal to RHS.
     builder.copy_curve(lhs, rhs);
@@ -424,6 +418,7 @@ fn make_opening_set<C: HaloCurve>(
         o_old_proofs: builder.add_virtual_targets(num_old_proofs),
     }
 }
+
 fn make_opening_sets<C: HaloCurve>(
     builder: &mut CircuitBuilder<C>,
     n: usize,
@@ -434,23 +429,27 @@ fn make_opening_sets<C: HaloCurve>(
         .collect()
 }
 
-fn make_schnorr_proof<C: HaloCurve>(builder: &mut CircuitBuilder<C>) -> SchnorrProofTarget {
+fn make_schnorr_proof<C: HaloCurve, InnerC: HaloCurve>(
+    builder: &mut CircuitBuilder<C>,
+) -> SchnorrProofTarget<InnerC> {
     SchnorrProofTarget {
         r: builder.add_virtual_point_target(),
         z1: builder.add_virtual_target(),
         z2: builder.add_virtual_target(),
+        phantom: PhantomData,
     }
 }
 
-fn make_old_proofs<C: HaloCurve>(
+fn make_old_proofs<C: HaloCurve, InnerC: HaloCurve>(
     builder: &mut CircuitBuilder<C>,
     n: usize,
     degree_pow: usize,
-) -> Vec<OldProofTarget> {
+) -> Vec<OldProofTarget<C>> {
     (0..n)
         .map(|_| OldProofTarget {
             halo_g: builder.add_virtual_point_target(),
             halo_us: builder.add_virtual_targets(degree_pow),
+            phantom: PhantomData,
         })
         .collect()
 }
@@ -607,7 +606,7 @@ fn halo_g_recursive<C: HaloCurve>(
 
 fn verify_old_proof_evaluation<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     builder: &mut CircuitBuilder<C>,
-    old_proofs: &[OldProofTarget],
+    old_proofs: &[OldProofTarget<C>],
     o_local: &OpeningSetTarget,
     zeta: Target,
 ) {

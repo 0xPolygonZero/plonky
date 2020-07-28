@@ -1,19 +1,19 @@
 use std::marker::PhantomData;
 
 use crate::gates::{assert_binary_recursively, assert_inverses_recursively, Gate};
-use crate::{CircuitBuilder, Curve, Field, HaloCurve, PartialWitness, Target, Wire, WitnessGenerator};
+use crate::{CircuitBuilder, Field, HaloCurve, PartialWitness, Target, Wire, WitnessGenerator};
 
 /// A gate which performs incomplete point addition, conditioned on an input bit. In order to
 /// facilitate MSMs which use this gate, it also adds the bit to an accumulator.
 ///
 /// `C` is the curve whose points are being added.
-pub struct CurveAddGate<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> {
+pub struct CurveAddGate<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> {
     pub index: usize,
     _phantom_oc: PhantomData<C>,
     _phantom_ic: PhantomData<InnerC>,
 }
 
-impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> CurveAddGate<C, InnerC> {
+impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> CurveAddGate<C, InnerC> {
     pub fn new(index: usize) -> Self {
         CurveAddGate {
             index,
@@ -33,7 +33,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> CurveAddGate<C, In
     pub const WIRE_LAMBDA: usize = 8;
 }
 
-impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveAddGate<C, InnerC> {
+impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C> for CurveAddGate<C, InnerC> {
     const NAME: &'static str = "CurveAddGate";
 
     const PREFIX: &'static [bool] = &[true, false, true, false, true];
@@ -142,7 +142,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveA
     }
 }
 
-impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> WitnessGenerator<C::ScalarField>
+impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> WitnessGenerator<C::ScalarField>
     for CurveAddGate<C, InnerC>
 {
     fn dependencies(&self) -> Vec<Target> {

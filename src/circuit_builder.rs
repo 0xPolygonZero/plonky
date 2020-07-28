@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use crate::gates::*;
 use crate::plonk_util::{commit_polynomials, halo_n, polynomials_to_values_padded, sigma_polynomials, values_to_polynomials};
 use crate::util::{ceil_div_usize, log2_strict, transpose};
-use crate::{blake_hash_base_field_to_curve, blake_hash_usize_to_curve, fft_precompute, generate_rescue_constants, msm_precompute, AffinePoint, AffinePointTarget, Circuit, Curve, CurveMsmEndoResult, CurveMulEndoResult, CurveMulOp, Field, HaloCurve, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, NUM_CONSTANTS, NUM_WIRES, BoundedTarget};
+use crate::{blake_hash_base_field_to_curve, blake_hash_usize_to_curve, fft_precompute, generate_rescue_constants, msm_precompute, AffinePoint, AffinePointTarget, Circuit, CurveMsmEndoResult, CurveMulEndoResult, CurveMulOp, Field, HaloCurve, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, NUM_CONSTANTS, NUM_WIRES, BoundedTarget};
 use std::marker::PhantomData;
 use num::{Zero, BigUint};
 
@@ -67,13 +67,16 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         (0..n).map(|_i| self.add_virtual_target()).collect()
     }
 
-    pub fn add_virtual_point_target(&mut self) -> AffinePointTarget {
+    pub fn add_virtual_point_target<InnerC: HaloCurve>(&mut self) -> AffinePointTarget<InnerC> {
         let x = self.add_virtual_target();
         let y = self.add_virtual_target();
-        AffinePointTarget { x, y }
+        AffinePointTarget::new(x, y)
     }
 
-    pub fn add_virtual_point_targets(&mut self, n: usize) -> Vec<AffinePointTarget> {
+    pub fn add_virtual_point_targets<InnerC: HaloCurve>(
+        &mut self,
+        n: usize,
+    ) -> Vec<AffinePointTarget<InnerC>> {
         (0..n).map(|_i| self.add_virtual_point_target()).collect()
     }
 
@@ -127,15 +130,15 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         })
     }
 
-    pub fn constant_affine_point<InnerC: Curve<BaseField = C::ScalarField>>(
+    pub fn constant_affine_point<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &mut self,
         point: AffinePoint<InnerC>,
-    ) -> AffinePointTarget {
+    ) -> AffinePointTarget<InnerC> {
         assert!(!point.zero);
-        AffinePointTarget {
-            x: self.constant_wire(point.x),
-            y: self.constant_wire(point.y),
-        }
+        AffinePointTarget::new(
+            self.constant_wire(point.x),
+            self.constant_wire(point.y),
+        )
     }
 
     /// Adds a generator to populate the given target with the given constant.
@@ -905,9 +908,9 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     /// Assert that a given coordinate pair is on the curve `C`.
-    pub fn curve_assert_valid<InnerC: Curve<BaseField = C::ScalarField>>(
+    pub fn curve_assert_valid<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &mut self,
-        p: AffinePointTarget,
+        p: AffinePointTarget<InnerC>,
     ) {
         // Recall the short Weierstrass equation: y^2 = x^3 + a*x + b.
         let a = self.constant_wire(InnerC::A);
@@ -919,19 +922,19 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         self.copy(y_squared, rhs);
     }
 
-    pub fn curve_neg<InnerC: Curve<BaseField = C::ScalarField>>(
+    pub fn curve_neg<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &mut self,
-        p: AffinePointTarget,
-    ) -> AffinePointTarget {
+        p: AffinePointTarget<InnerC>,
+    ) -> AffinePointTarget<InnerC> {
         let neg_y = self.neg(p.y);
-        AffinePointTarget { x: p.x, y: neg_y }
+        AffinePointTarget::new(p.x, neg_y)
     }
 
-    pub fn curve_add<InnerC: Curve<BaseField = C::ScalarField>>(
+    pub fn curve_add<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &mut self,
-        p_1: AffinePointTarget,
-        p_2: AffinePointTarget,
-    ) -> AffinePointTarget {
+        p_1: AffinePointTarget<InnerC>,
+        p_2: AffinePointTarget<InnerC>,
+    ) -> AffinePointTarget<InnerC> {
         // Add a CurveAddGate, then add a BufferGate to receive the updated accumulator state.
         let add_index = self.num_gates();
         self.add_gate_no_constants(CurveAddGate::<C, InnerC>::new(add_index));
@@ -990,16 +993,13 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         self.copy(scalar_acc_old, zero);
         self.copy(scalar_acc_new, one);
 
-        AffinePointTarget {
-            x: result_x,
-            y: result_y,
-        }
+        AffinePointTarget::new(result_x, result_y)
     }
 
-    pub fn curve_double<InnerC: Curve<BaseField = C::ScalarField>>(
+    pub fn curve_double<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &mut self,
-        p: AffinePointTarget,
-    ) -> AffinePointTarget {
+        p: AffinePointTarget<InnerC>,
+    ) -> AffinePointTarget<InnerC> {
         let idx_dbl = self.num_gates();
         self.add_gate_no_constants(CurveDblGate::<C, InnerC>::new(idx_dbl));
         self.copy(
@@ -1016,57 +1016,58 @@ impl<C: HaloCurve> CircuitBuilder<C> {
                 input: CurveDblGate::<C, InnerC>::WIRE_Y_OLD,
             }),
         );
-        AffinePointTarget {
-            x: Target::Wire(Wire {
+        AffinePointTarget::new(
+            Target::Wire(Wire {
                 gate: idx_dbl,
                 input: CurveDblGate::<C, InnerC>::WIRE_X_NEW,
             }),
-            y: Target::Wire(Wire {
+            Target::Wire(Wire {
                 gate: idx_dbl,
                 input: CurveDblGate::<C, InnerC>::WIRE_Y_NEW,
-            }),
-        }
+            })
+        )
     }
 
-    pub fn curve_sub<InnerC: Curve<BaseField = C::ScalarField>>(
+    pub fn curve_sub<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &mut self,
-        p_1: AffinePointTarget,
-        p_2: AffinePointTarget,
-    ) -> AffinePointTarget {
+        p_1: AffinePointTarget<InnerC>,
+        p_2: AffinePointTarget<InnerC>,
+    ) -> AffinePointTarget<InnerC> {
         let neg_p_2 = self.curve_neg::<InnerC>(p_2);
         self.curve_add::<InnerC>(p_1, neg_p_2)
     }
 
-    pub fn curve_mul<InnerC: Curve<BaseField = C::ScalarField>>(
+    pub fn curve_mul<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &mut self,
-        mul: CurveMulOp,
-    ) -> AffinePointTarget {
+        mul: CurveMulOp<InnerC>,
+    ) -> AffinePointTarget<InnerC> {
         self.curve_msm::<InnerC>(&[mul])
     }
 
     /// Computes `[n(s)] p`.
     pub fn curve_mul_endo<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &mut self,
-        mul: CurveMulOp,
-    ) -> CurveMulEndoResult {
+        mul: CurveMulOp<InnerC>,
+    ) -> CurveMulEndoResult<InnerC> {
         let result = self.curve_msm_endo::<InnerC>(&[mul]);
         CurveMulEndoResult {
             mul_result: result.msm_result,
             actual_scalar: result.actual_scalars[0],
+            phantom: PhantomData,
         }
     }
 
     /// Computes `[1 / n(s)] p`.
     pub fn curve_mul_inv_endo<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &mut self,
-        mul: CurveMulOp,
-    ) -> CurveMulEndoResult {
+        mul: CurveMulOp<InnerC>,
+    ) -> CurveMulEndoResult<InnerC> {
         // We witness r = [1 / n(s)] p, then verify that [n(s)] r = p, and return r.
-        let CurveMulOp { scalar, point } = mul;
+        let CurveMulOp { scalar, point, .. } = mul;
 
         struct ResultGenerator<InnerC: HaloCurve> {
-            mul: CurveMulOp,
-            result: AffinePointTarget,
+            mul: CurveMulOp<InnerC>,
+            result: AffinePointTarget<InnerC>,
             security_bits: usize,
             _phantom: PhantomData<InnerC>,
         }
@@ -1109,25 +1110,24 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         });
 
         // Compute [n(s)] r, and verify that it matches p.
-        let mul_result = self.curve_mul_endo::<InnerC>(CurveMulOp {
-            scalar,
-            point: result,
-        });
+        let mul_result = self.curve_mul_endo::<InnerC>(
+            CurveMulOp::new(scalar, result));
         self.copy_curve(mul_result.mul_result, point);
 
         CurveMulEndoResult {
             mul_result: result,
             actual_scalar: mul_result.actual_scalar,
+            phantom: PhantomData,
         }
     }
 
     /// Note: This assumes the most significant bit of each scalar is unset. This occurs with high
     /// probability if the field size is slightly larger than a power of two and the scalars are
     /// uniformly random.
-    pub fn curve_msm<InnerC: Curve<BaseField = C::ScalarField>>(
+    pub fn curve_msm<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &mut self,
-        parts: &[CurveMulOp],
-    ) -> AffinePointTarget {
+        parts: &[CurveMulOp<InnerC>],
+    ) -> AffinePointTarget<InnerC> {
         // We assume each most significant bit is unset; see the note in the method doc.
         let f_bits = C::ScalarField::BITS - 1;
 
@@ -1210,27 +1210,27 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             // completed the last iteration of the MSM though, then we don't want to perform a final
             // doubling, so we will take its inputs as the result instead.
             if i == 0 {
-                acc = AffinePointTarget {
-                    x: Target::Wire(Wire {
+                acc = AffinePointTarget::new(
+                    Target::Wire(Wire {
                         gate: idx_dbl,
                         input: CurveDblGate::<C, InnerC>::WIRE_X_OLD,
                     }),
-                    y: Target::Wire(Wire {
+                    Target::Wire(Wire {
                         gate: idx_dbl,
                         input: CurveDblGate::<C, InnerC>::WIRE_Y_OLD,
                     }),
-                };
+                );
             } else {
-                acc = AffinePointTarget {
-                    x: Target::Wire(Wire {
+                acc = AffinePointTarget::new(
+                    Target::Wire(Wire {
                         gate: idx_dbl,
                         input: CurveDblGate::<C, InnerC>::WIRE_X_NEW,
                     }),
-                    y: Target::Wire(Wire {
+                    Target::Wire(Wire {
                         gate: idx_dbl,
                         input: CurveDblGate::<C, InnerC>::WIRE_Y_NEW,
                     }),
-                };
+                );
 
                 // Also double the filler, so we can subtract out a rescaled version later.
                 filler = filler.double();
@@ -1252,8 +1252,8 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     /// Like `curve_msm`, but uses the endomorphism described in the Halo paper.
     pub fn curve_msm_endo<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &mut self,
-        parts: &[CurveMulOp],
-    ) -> CurveMsmEndoResult {
+        parts: &[CurveMulOp<InnerC>],
+    ) -> CurveMsmEndoResult<InnerC> {
         let zero = self.zero_wire();
 
         // We assume each most significant bit is unset; see the note in curve_msm's method doc.
@@ -1389,27 +1389,27 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             // completed the last iteration of the MSM though, then we don't want to perform a final
             // doubling, so we will take its inputs as the result instead.
             if i == 0 {
-                acc = AffinePointTarget {
-                    x: Target::Wire(Wire {
+                acc = AffinePointTarget::new(
+                    Target::Wire(Wire {
                         gate,
                         input: CurveDblGate::<C, InnerC>::WIRE_X_OLD,
                     }),
-                    y: Target::Wire(Wire {
+                    Target::Wire(Wire {
                         gate,
                         input: CurveDblGate::<C, InnerC>::WIRE_Y_OLD,
                     }),
-                };
+                );
             } else {
-                acc = AffinePointTarget {
-                    x: Target::Wire(Wire {
+                acc = AffinePointTarget::new(
+                    Target::Wire(Wire {
                         gate,
                         input: CurveDblGate::<C, InnerC>::WIRE_X_NEW,
                     }),
-                    y: Target::Wire(Wire {
+                    Target::Wire(Wire {
                         gate,
                         input: CurveDblGate::<C, InnerC>::WIRE_Y_NEW,
                     }),
-                };
+                );
 
                 // Also double the filler, so we can subtract out a rescaled version later.
                 filler = filler.double();
@@ -1459,6 +1459,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         CurveMsmEndoResult {
             msm_result: acc,
             actual_scalars: scalar_acc_signed,
+            phantom: PhantomData,
         }
     }
 
@@ -1502,10 +1503,10 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     /// Add a copy constraint between two affine targets.
-    pub fn copy_curve(
+    pub fn copy_curve<InnerC: HaloCurve>(
         &mut self,
-        affine_target_1: AffinePointTarget,
-        affine_target_2: AffinePointTarget,
+        affine_target_1: AffinePointTarget<InnerC>,
+        affine_target_2: AffinePointTarget<InnerC>,
     ) {
         self.copy_constraints
             .push((affine_target_1.x, affine_target_2.x));
@@ -1700,11 +1701,11 @@ mod tests {
         let p1 = builder.constant_affine_point::<InnerC>(InnerC::GENERATOR_AFFINE);
 
         // Let p2 = [n(s)] p1.
-        let mul_result = builder.curve_mul_endo::<InnerC>(CurveMulOp { scalar, point: p1 });
+        let mul_result = builder.curve_mul_endo::<InnerC>(CurveMulOp::new(scalar, p1));
         let p2 = mul_result.mul_result;
 
         // Let p3 = [1 / n(s)] p2.
-        let mul_inv_result = builder.curve_mul_inv_endo::<InnerC>(CurveMulOp { scalar, point: p2 });
+        let mul_inv_result = builder.curve_mul_inv_endo::<InnerC>(CurveMulOp::new(scalar, p2));
         let p3 = mul_inv_result.mul_result;
 
         // Since the scalars cancel, p1 = p3.

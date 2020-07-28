@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::time::Instant;
 
-use plonky::{recursive_verification_circuit, verify_proof, BufferGate, Circuit, CircuitBuilder, PartialWitness, Tweedledee, Tweedledum};
+use plonky::{recursive_verification_circuit, verify_proof, BufferGate, Circuit, CircuitBuilder, PartialWitness, Tweedledee, Tweedledum, OldProof, TweedledumBase};
 
 const INNER_PROOF_DEGREE_POW: usize = 14;
 const INNER_PROOF_DEGREE: usize = 1 << INNER_PROOF_DEGREE_POW;
@@ -10,7 +10,7 @@ const SECURITY_BITS: usize = 128;
 fn main() -> Result<()> {
     println!("Generating inner circuit");
     let start = Instant::now();
-    let inner_circuit = generate_trivial_circuit();
+    let inner_circuit: Circuit<Tweedledum> = generate_trivial_circuit();
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!();
 
@@ -22,9 +22,9 @@ fn main() -> Result<()> {
 
     println!("Generating inner proof");
     let start = Instant::now();
-    let old_proofs = vec![];
+    let inner_old_proofs: Vec<OldProof<Tweedledum>> = vec![];
     let inner_proof = inner_circuit
-        .generate_proof::<Tweedledee>(inner_witness, &old_proofs, true, true)
+        .generate_proof::<Tweedledee>(inner_witness, &inner_old_proofs, true, true)
         .unwrap();
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!();
@@ -32,25 +32,26 @@ fn main() -> Result<()> {
     println!("Verifying inner proof");
     let start = Instant::now();
     let inner_vk = inner_circuit.to_vk();
-    verify_proof::<Tweedledum, Tweedledee>(&[], &inner_proof, &old_proofs, &inner_vk, true)?;
+    verify_proof::<Tweedledum, Tweedledee>(&[], &inner_proof, &inner_old_proofs, &inner_vk, true)?;
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!();
 
     println!("Generating recursion circuit...");
+    let recursion_old_proofs: Vec<OldProof<Tweedledee>> = vec![];
     let start = Instant::now();
     let recursion_circuit = recursive_verification_circuit::<Tweedledee, Tweedledum>(
         // INNER_PROOF_DEGREE_POW,
         inner_proof.halo_l.len(),
         SECURITY_BITS,
         0,
-        old_proofs.len(),
+        recursion_old_proofs.len(),
     );
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!("Gate count: {}", recursion_circuit.circuit.degree());
     println!();
 
     // Populate inputs.
-    let mut recursion_inputs = PartialWitness::new();
+    let mut recursion_inputs: PartialWitness<TweedledumBase> = PartialWitness::new();
     if let Err(e) = recursion_circuit
         .proof
         .populate_witness(&mut recursion_inputs, inner_proof.clone())
@@ -59,7 +60,7 @@ fn main() -> Result<()> {
     }
 
     // Populate old proofs inputs.
-    old_proofs
+    recursion_old_proofs
         .iter()
         .zip(recursion_circuit.old_proofs.iter())
         .for_each(|(p, pt)| {

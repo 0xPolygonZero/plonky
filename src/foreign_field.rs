@@ -59,7 +59,6 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 #[cfg(test)]
 mod tests {
     use crate::{CircuitBuilder, PartialWitness, Tweedledum, Field, Curve};
-    use num::{BigUint, FromPrimitive};
 
     #[test]
     fn test_foreign_field_add() {

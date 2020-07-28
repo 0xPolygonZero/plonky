@@ -142,12 +142,12 @@ impl<C: HaloCurve> RecursiveChallenger<C> {
         }
     }
 
-    pub(crate) fn observe_affine_point(&mut self, point: AffinePointTarget) {
+    pub(crate) fn observe_affine_point<InnerC: HaloCurve>(&mut self, point: AffinePointTarget<InnerC>) {
         self.observe_element(point.x);
         self.observe_element(point.y);
     }
 
-    pub(crate) fn observe_affine_points(&mut self, points: &[AffinePointTarget]) {
+    pub(crate) fn observe_affine_points<InnerC: HaloCurve>(&mut self, points: &[AffinePointTarget<InnerC>]) {
         for &point in points {
             self.observe_affine_point(point);
         }

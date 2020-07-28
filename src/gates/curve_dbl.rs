@@ -4,13 +4,13 @@ use crate::gates::{assert_inverses_recursively, Gate};
 use crate::{CircuitBuilder, Curve, Field, HaloCurve, PartialWitness, Target, Wire, WitnessGenerator};
 
 /// A curve which performs point doubling.
-pub struct CurveDblGate<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> {
+pub struct CurveDblGate<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> {
     pub index: usize,
     _phantom_oc: PhantomData<C>,
     _phantom_ic: PhantomData<InnerC>,
 }
 
-impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> CurveDblGate<C, InnerC> {
+impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> CurveDblGate<C, InnerC> {
     pub fn new(index: usize) -> Self {
         CurveDblGate {
             index,
@@ -27,7 +27,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> CurveDblGate<C, In
     pub const WIRE_LAMBDA: usize = 5;
 }
 
-impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveDblGate<C, InnerC> {
+impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C> for CurveDblGate<C, InnerC> {
     const NAME: &'static str = "CurveDblGate";
 
     const PREFIX: &'static [bool] = &[true, false, true, true, true];
@@ -105,7 +105,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveD
     }
 }
 
-impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> WitnessGenerator<C::ScalarField>
+impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> WitnessGenerator<C::ScalarField>
     for CurveDblGate<C, InnerC>
 {
     fn dependencies(&self) -> Vec<Target> {
