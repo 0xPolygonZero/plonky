@@ -10,7 +10,7 @@ use crate::halo::batch_opening_proof;
 use crate::partition::{get_subgroup_shift, TargetPartitions};
 use crate::plonk_challenger::Challenger;
 use crate::plonk_proof::{OldProof, Proof};
-use crate::plonk_util::{coeffs_to_values_padded, commit_polynomials, eval_l_1, eval_polys, eval_zero_poly, pad_to_8n, permutation_polynomial, powers, reduce_with_powers, values_to_polynomials};
+use crate::plonk_util::{commit_polynomials, eval_l_1, eval_polys, eval_zero_poly, pad_to_8n, permutation_polynomial, polynomials_to_values_padded, powers, reduce_with_powers, values_to_polynomials};
 use crate::poly_commit::PolynomialCommitment;
 use crate::polynomial::Polynomial;
 use crate::target::Target;
@@ -94,7 +94,7 @@ impl<C: HaloCurve> Circuit<C> {
         let wire_polynomials =
             values_to_polynomials(&wire_values_by_wire_index, &self.fft_precomputation_n);
         let wire_values_8n =
-            coeffs_to_values_padded(&wire_polynomials, &self.fft_precomputation_8n);
+            polynomials_to_values_padded(&wire_polynomials, &self.fft_precomputation_8n);
 
         // Commit to the wire polynomials.
         let c_wires = commit_polynomials(

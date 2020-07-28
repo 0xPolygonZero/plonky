@@ -178,26 +178,14 @@ pub(crate) fn values_to_polynomials<F: Field>(
         .collect()
 }
 
-#[allow(dead_code)]
-pub(crate) fn coeffs_to_values<F: Field>(
-    polys_vec: &[Polynomial<F>],
-    fft_precomputation: &FftPrecomputation<F>,
-) -> Vec<Vec<F>> {
-    polys_vec
-        .par_iter()
-        .map(|poly| poly.eval_domain(fft_precomputation))
-        .collect()
-}
-
-pub(crate) fn coeffs_to_values_padded<F: Field>(
+pub(crate) fn polynomials_to_values_padded<F: Field>(
     polys_vec: &[Polynomial<F>],
     fft_precomputation: &FftPrecomputation<F>,
 ) -> Vec<Vec<F>> {
     polys_vec
         .par_iter()
         .map(|poly| {
-            let mut padded_poly = poly.clone();
-            padded_poly.pad(poly.len() * 8);
+            let padded_poly = poly.padded(poly.len() * 8);
             padded_poly.eval_domain(fft_precomputation)
         })
         .collect()

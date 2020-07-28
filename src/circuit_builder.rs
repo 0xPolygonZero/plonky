@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crate::gates::*;
-use crate::plonk_util::{coeffs_to_values_padded, commit_polynomials, halo_n, sigma_polynomials, values_to_polynomials};
+use crate::plonk_util::{commit_polynomials, halo_n, polynomials_to_values_padded, sigma_polynomials, values_to_polynomials};
 use crate::util::{ceil_div_usize, log2_strict, transpose};
 use crate::{blake_hash_base_field_to_curve, blake_hash_usize_to_curve, fft_precompute, generate_rescue_constants, msm_precompute, AffinePoint, AffinePointTarget, Circuit, Curve, CurveMsmEndoResult, CurveMulEndoResult, CurveMulOp, Field, HaloCurve, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, NUM_CONSTANTS, NUM_WIRES};
 use std::marker::PhantomData;
@@ -1399,7 +1399,8 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         let wire_constants = transpose::<C::ScalarField>(&gate_constants);
 
         let constant_polynomials = values_to_polynomials(&wire_constants, &fft_precomputation_n);
-        let constants_8n = coeffs_to_values_padded(&constant_polynomials, &fft_precomputation_8n);
+        let constants_8n =
+            polynomials_to_values_padded(&constant_polynomials, &fft_precomputation_8n);
         let c_constants = commit_polynomials(
             constant_polynomials.as_slice(),
             &pedersen_g_msm_precomputation,
@@ -1413,7 +1414,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         // Compute S_sigma, then a commitment to it.
         let s_sigma_polynomials = values_to_polynomials(&sigma_chunks, &fft_precomputation_n);
         let s_sigma_values_8n =
-            coeffs_to_values_padded(&s_sigma_polynomials, &fft_precomputation_8n);
+            polynomials_to_values_padded(&s_sigma_polynomials, &fft_precomputation_8n);
         let c_s_sigmas = commit_polynomials(
             s_sigma_polynomials.as_slice(),
             &pedersen_g_msm_precomputation,

@@ -44,8 +44,8 @@ impl<F: Field> Polynomial<F> {
     }
 
     /// Returns the coefficient vector.
-    pub fn coeffs(&self) -> Vec<F> {
-        self.0.clone()
+    pub fn coeffs(&self) -> &[F] {
+        &self.0
     }
 
     /// Empty polynomial;
@@ -78,11 +78,20 @@ impl<F: Field> Polynomial<F> {
     }
 
     /// Degree of the polynomial.
+    /// Panics on zero polynomial.
     pub fn degree(&self) -> usize {
         (0usize..self.len())
             .rev()
             .find(|&i| self[i].is_nonzero())
             .expect("Zero polynomial")
+    }
+
+    /// Degree of the polynomial + 1.
+    fn degree_plus_one(&self) -> usize {
+        (0usize..self.len())
+            .rev()
+            .find(|&i| self[i].is_nonzero())
+            .map_or(0, |i| i + 1)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -145,9 +154,7 @@ impl<F: Field> Polynomial<F> {
 
     /// Removes leading zero coefficients.
     pub fn trim(&mut self) {
-        if !self.is_zero() {
-            self.0.drain(self.degree() + 1..);
-        }
+        self.0.drain(self.degree_plus_one()..);
     }
 
     /// Polynomial addition.
@@ -182,10 +189,8 @@ impl<F: Field> Polynomial<F> {
         }
         let a_deg = self.degree();
         let b_deg = b.degree();
-        let mut a_pad = self.clone();
-        a_pad.pad(a_deg + b_deg + 1);
-        let mut b_pad = b.clone();
-        b_pad.pad(a_deg + b_deg + 1);
+        let a_pad = self.padded(a_deg + b_deg + 1);
+        let b_pad = b.padded(a_deg + b_deg + 1);
 
         let precomputation = fft_precompute(a_deg + b_deg + 1);
         let a_evals = fft_with_precomputation(&a_pad.0, &precomputation);

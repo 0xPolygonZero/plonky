@@ -50,7 +50,7 @@ impl<C: Curve> PolynomialCommitment<C> {
 
     /// Creates a list of polynomial commitments from a list of polynomials in coefficients vector form.
     pub fn coeffs_vec_to_commitments(
-        coefficients_vec: &[Vec<C::ScalarField>],
+        coefficients_vec: &[&[C::ScalarField]],
         msm_precomputation: &MsmPrecomputation<C>,
         blinding_point: AffinePoint<C>,
         blinding: bool,
