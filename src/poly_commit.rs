@@ -50,7 +50,7 @@ impl<C: Curve> PolynomialCommitment<C> {
 
     /// Creates a list of polynomial commitments from a list of polynomials in coefficients vector form.
     pub fn coeffs_vec_to_commitments(
-        coefficients_vec: &[Vec<C::ScalarField>],
+        coefficients_vec: &[&[C::ScalarField]],
         msm_precomputation: &MsmPrecomputation<C>,
         blinding_point: AffinePoint<C>,
         blinding: bool,
@@ -97,5 +97,11 @@ impl<C: Curve> PolynomialCommitment<C> {
             CurvePoint::Affine(p) => p,
             CurvePoint::Projective(p) => p.to_affine(),
         }
+    }
+
+    /// Returns the commitment point in affine coordinates.
+    /// `Self::batch_to_affine` should be run first for better performances.
+    pub fn to_affine_vec(comms: &[Self]) -> Vec<AffinePoint<C>> {
+        comms.iter().map(|c| c.to_affine()).collect()
     }
 }

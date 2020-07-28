@@ -1,7 +1,7 @@
+use rand::Rng;
 use std::cmp::Ordering::Less;
 use std::convert::TryInto;
 use std::ops::{Add, Div, Mul, Neg, Sub};
-use rand::Rng;
 
 use unroll::unroll_for_loops;
 
@@ -9,7 +9,7 @@ use crate::nonzero_multiplicative_inverse_4;
 use crate::{add_4_4_no_overflow, cmp_4_4, field_to_biguint, rand_range_4, rand_range_4_from_rng, sub_4_4, Field};
 use std::cmp::Ordering;
 use std::fmt;
-use std::fmt::{Display, Formatter, Debug};
+use std::fmt::{Debug, Display, Formatter};
 
 /// An element of the Tweedledum group's base field.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Default)]
@@ -28,6 +28,7 @@ impl TweedledumBase {
     ];
 
     /// Twice the order of the field: 57896044618658097711785492504343953926644407311910638113546634138727284211714
+    #[allow(dead_code)]
     const ORDER_X2: [u64; 4] = [
         4792051847172980738,
         510387039183483763,
@@ -253,7 +254,6 @@ impl Field for TweedledumBase {
         v.len() == 4 && cmp_4_4(v[..].try_into().unwrap(), Self::ORDER) == Less
     }
 
-
     fn multiplicative_inverse_assuming_nonzero(&self) -> Self {
         // Let x R = self. We compute M((x R)^-1, R^3) = x^-1 R^-1 R^3 R^-1 = x^-1 R.
         let self_r_inv = nonzero_multiplicative_inverse_4(self.limbs, Self::ORDER);
@@ -287,7 +287,6 @@ impl PartialOrd for TweedledumBase {
     }
 }
 
-
 impl Display for TweedledumBase {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", field_to_biguint(*self))
@@ -300,11 +299,10 @@ impl Debug for TweedledumBase {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use crate::{Field, TweedledumBase};
     use crate::test_square_root;
+    use crate::{Field, TweedledumBase};
 
     #[test]
     fn primitive_root_order() {

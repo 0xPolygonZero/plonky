@@ -31,6 +31,12 @@ pub struct FftPrecomputation<F: Field> {
     subgroups_rev: Vec<Vec<F>>,
 }
 
+impl<F: Field> FftPrecomputation<F> {
+    pub fn size(&self) -> usize {
+        self.subgroups_rev.last().unwrap().len()
+    }
+}
+
 pub fn fft<F: Field>(coefficients: &[F]) -> Vec<F> {
     let precomputation = fft_precompute(coefficients.len());
     fft_with_precomputation(coefficients, &precomputation)

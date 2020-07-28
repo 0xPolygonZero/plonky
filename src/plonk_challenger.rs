@@ -182,6 +182,7 @@ impl<C: HaloCurve> RecursiveChallenger<C> {
         )
     }
 
+    #[allow(dead_code)]
     pub(crate) fn get_n_challenges(
         &mut self,
         builder: &mut CircuitBuilder<C>,

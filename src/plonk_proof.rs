@@ -226,6 +226,7 @@ pub struct ProofTarget {
 
 impl ProofTarget {
     /// `log_2(d)`, where `d` is the degree of the proof being verified.
+    #[allow(dead_code)]
     fn degree_pow(&self) -> usize {
         self.halo_l_i.len()
     }

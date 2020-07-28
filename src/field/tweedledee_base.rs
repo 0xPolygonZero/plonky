@@ -6,13 +6,10 @@ use std::ops::{Add, Div, Mul, Neg, Sub};
 use unroll::unroll_for_loops;
 
 use crate::nonzero_multiplicative_inverse_4;
-use crate::{
-    add_4_4_no_overflow, cmp_4_4, field_to_biguint, rand_range_4, rand_range_4_from_rng, sub_4_4,
-    Field,
-};
+use crate::{add_4_4_no_overflow, cmp_4_4, field_to_biguint, rand_range_4, rand_range_4_from_rng, sub_4_4, Field};
 use std::cmp::Ordering;
 use std::fmt;
-use std::fmt::{Display, Formatter, Debug};
+use std::fmt::{Debug, Display, Formatter};
 
 /// An element of the Tweedledee group's base field.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Default)]
@@ -31,6 +28,7 @@ impl TweedledeeBase {
     ];
 
     /// Twice the order of the field: 57896044618658097711785492504343953926644407311908866253894167926337156677634
+    #[allow(dead_code)]
     const ORDER_X2: [u64; 4] = [
         601617200389816322,
         510387039087431059,

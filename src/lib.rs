@@ -43,7 +43,7 @@ mod plonk_proof;
 mod plonk_recursion;
 pub mod plonk_util;
 pub mod poly_commit;
-mod polynomial;
+pub mod polynomial;
 mod pseudorandom;
 mod rescue;
 mod serialization;

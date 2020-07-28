@@ -9,14 +9,14 @@ use rayon::prelude::*;
 use crate::halo::batch_opening_proof;
 use crate::partition::{get_subgroup_shift, TargetPartitions};
 use crate::plonk_challenger::Challenger;
-use crate::plonk_proof::{OldProof, Proof, SchnorrProof};
-use crate::plonk_util::{coeffs_to_values_padded, eval_coeffs, eval_l_1, eval_poly, eval_zero_poly, halo_n, halo_n_mul, pad_to_8n, permutation_polynomial, powers, reduce_with_powers, values_to_coeffs};
+use crate::plonk_proof::{OldProof, Proof};
+use crate::plonk_util::{commit_polynomials, eval_l_1, eval_polys, eval_zero_poly, pad_to_8n, permutation_polynomial, polynomials_to_values_padded, powers, reduce_with_powers, values_to_polynomials};
 use crate::poly_commit::PolynomialCommitment;
-use crate::polynomial::{polynomial_division, polynomial_multiplication, trim as trim_polynomial};
+use crate::polynomial::Polynomial;
 use crate::target::Target;
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::witness::{PartialWitness, Witness, WitnessGenerator};
-use crate::{divide_by_z_h, evaluate_all_constraints, fft_with_precomputation_power_of_2, ifft_with_precomputation_power_of_2, msm_parallel, AffinePoint, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, OpeningSet, ProjectivePoint, VerificationKey};
+use crate::{evaluate_all_constraints, fft_with_precomputation_power_of_2, AffinePoint, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, OpeningSet, VerificationKey};
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
@@ -49,13 +49,13 @@ pub struct Circuit<C: HaloCurve> {
     /// The generator U used in Halo.
     pub u: AffinePoint<C>,
     /// Each constant polynomial, in coefficient form.
-    pub constants_coeffs: Vec<Vec<C::ScalarField>>,
+    pub constant_polynomials: Vec<Polynomial<C::ScalarField>>,
     /// Each constant polynomial, in point-value form, low-degree extended to be degree 8n.
     pub constants_8n: Vec<Vec<C::ScalarField>>,
     /// A commitment to each constant polynomial.
     pub c_constants: Vec<PolynomialCommitment<C>>,
     /// Each permutation polynomial, in coefficient form.
-    pub s_sigma_coeffs: Vec<Vec<C::ScalarField>>,
+    pub s_sigma_polynomials: Vec<Polynomial<C::ScalarField>>,
     /// Each permutation polynomial, low-degree extended to be degree 8n.
     pub s_sigma_values_8n: Vec<Vec<C::ScalarField>>,
     /// A commitment to each permutation polynomial.
@@ -91,12 +91,14 @@ impl<C: HaloCurve> Circuit<C> {
 
         // Convert the witness both to coefficient form and a degree-8n LDE.
         let wire_values_by_wire_index = &witness.transpose();
-        let wires_coeffs = values_to_coeffs(&wire_values_by_wire_index, &self.fft_precomputation_n);
-        let wire_values_8n = coeffs_to_values_padded(&wires_coeffs, &self.fft_precomputation_8n);
+        let wire_polynomials =
+            values_to_polynomials(&wire_values_by_wire_index, &self.fft_precomputation_n);
+        let wire_values_8n =
+            polynomials_to_values_padded(&wire_polynomials, &self.fft_precomputation_8n);
 
         // Commit to the wire polynomials.
-        let c_wires = PolynomialCommitment::coeffs_vec_to_commitments(
-            &wires_coeffs,
+        let c_wires = commit_polynomials(
+            &wire_polynomials,
             &self.pedersen_g_msm_precomputation,
             self.pedersen_h,
             blinding_commitments,
@@ -105,7 +107,7 @@ impl<C: HaloCurve> Circuit<C> {
         let num_public_input_gates = ceil_div_usize(self.num_public_inputs, NUM_WIRES);
         // Compute the wire coefficients when the public input gates are set to zero.
         // Used only when `output_pis` is false, so they are set to `None` if `output_pis` is true.
-        let wires_coeffs_no_pis = if output_pis {
+        let wire_polynomials_no_pis = if output_pis {
             None
         } else {
             let mut wire_values_by_wire_no_pis = wire_values_by_wire_index.clone();
@@ -115,14 +117,14 @@ impl<C: HaloCurve> Circuit<C> {
                     w[2 * i] = C::ScalarField::ZERO;
                 }
             });
-            let wires_coeffs_no_pis =
-                values_to_coeffs(&wire_values_by_wire_no_pis, &self.fft_precomputation_n);
-            Some(wires_coeffs_no_pis)
+            Some(values_to_polynomials(
+                &wire_values_by_wire_no_pis,
+                &self.fft_precomputation_n,
+            ))
         };
 
         // Generate a random beta and gamma from the transcript.
-        challenger
-            .observe_affine_points(&c_wires.iter().map(|c| c.to_affine()).collect::<Vec<_>>());
+        challenger.observe_affine_points(&PolynomialCommitment::to_affine_vec(&c_wires));
         let (beta_bf, gamma_bf) = challenger.get_2_challenges();
         let beta_sf = beta_bf.try_convert::<C::ScalarField>()?;
         let gamma_sf = gamma_bf.try_convert::<C::ScalarField>()?;
@@ -136,10 +138,9 @@ impl<C: HaloCurve> Circuit<C> {
             gamma_sf,
         );
         // Commit to Z.
-        let plonk_z_coeffs =
-            ifft_with_precomputation_power_of_2(&plonk_z_points_n, &self.fft_precomputation_n);
-        let c_plonk_z = PolynomialCommitment::coeffs_to_commitment(
-            &plonk_z_coeffs,
+        let plonk_z_polynomial =
+            Polynomial::from_evaluations(&plonk_z_points_n, &self.fft_precomputation_n);
+        let c_plonk_z = plonk_z_polynomial.commit(
             &self.pedersen_g_msm_precomputation,
             self.pedersen_h,
             blinding_commitments,
@@ -151,19 +152,19 @@ impl<C: HaloCurve> Circuit<C> {
         let alpha_sf = alpha_bf.try_convert::<C::ScalarField>()?;
 
         // Generate the vanishing polynomial.
-        let vanishing_coeffs = self.vanishing_poly_coeffs::<InnerC>(
+        let vanishing_poly = self.vanishing_poly::<InnerC>(
             &wire_values_8n,
             alpha_sf,
             beta_sf,
             gamma_sf,
-            &plonk_z_coeffs,
+            &plonk_z_polynomial[..],
         );
 
         if cfg!(debug_assertions) {
             // Check that the vanishing polynomial indeed vanishes.
             self.subgroup_n.iter().enumerate().for_each(|(i, &x)| {
                 assert!(
-                    eval_poly(&vanishing_coeffs, x).is_zero(),
+                    vanishing_poly.eval(x).is_zero(),
                     "{}-th gate constraints are not satisfied",
                     i
                 );
@@ -171,82 +172,73 @@ impl<C: HaloCurve> Circuit<C> {
         }
 
         // Compute the quotient polynomial, t(x) = vanishing(x) / Z_H(x).
-        let mut plonk_t_coeffs: Vec<C::ScalarField> =
-            divide_by_z_h(&vanishing_coeffs, self.degree());
+        let mut plonk_t_poly = vanishing_poly.divide_by_z_h(self.degree());
 
         if cfg!(debug_assertions) {
             // Check that division was performed correctly by evaluating at a random point.
-            let xxx = C::ScalarField::rand();
+            let x = C::ScalarField::rand();
             assert_eq!(
-                eval_poly(&plonk_t_coeffs, xxx),
-                eval_poly(&vanishing_coeffs, xxx) / eval_zero_poly(self.degree(), xxx)
+                plonk_t_poly.eval(x),
+                vanishing_poly.eval(x) / eval_zero_poly(self.degree(), x),
             );
         }
 
         // Pad the coefficients to 7n.
-        if plonk_t_coeffs.len() != QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER * self.degree() {
-            plonk_t_coeffs.extend(
-                (plonk_t_coeffs.len()..QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER * self.degree())
-                    .map(|_| C::ScalarField::ZERO),
-            );
-        }
+        plonk_t_poly.pad(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER * self.degree());
 
         // Split t into degree-n chunks.
-        let plonk_t_coeff_chunks: Vec<Vec<C::ScalarField>> = plonk_t_coeffs
+        let plonk_t_poly_chunks = plonk_t_poly
+            .coeffs()
             .chunks(self.degree())
-            .map(|chunk| chunk.to_vec())
-            .collect();
+            .map(|chunk| Polynomial::from(chunk.to_vec()))
+            .collect::<Vec<_>>();
 
         // Commit to the quotient polynomial.
-        let c_plonk_t = PolynomialCommitment::coeffs_vec_to_commitments(
-            &plonk_t_coeff_chunks,
+        let c_plonk_t = commit_polynomials(
+            &plonk_t_poly_chunks,
             &self.pedersen_g_msm_precomputation,
             self.pedersen_h,
             blinding_commitments,
         );
 
         // Combine the coefficients in `wires_coeffs_no_pis` using a linear combination weighted by `alpha`.
-        let vanishing_pis_coeffs = wires_coeffs_no_pis.map(|w| {
-            (0..self.degree())
-                .map(|i| {
-                    (0..w.len())
-                        .map(|j| w[j][i] * alpha_sf.exp_usize(j))
-                        .fold(C::ScalarField::ZERO, |acc, x| acc + x)
-                })
-                .collect::<Vec<_>>()
+        let vanishing_pis_poly = wire_polynomials_no_pis.map(|w| {
+            Polynomial::from(
+                (0..self.degree())
+                    .map(|i| {
+                        (0..w.len())
+                            .map(|j| w[j][i] * alpha_sf.exp_usize(j))
+                            .fold(C::ScalarField::ZERO, |acc, x| acc + x)
+                    })
+                    .collect::<Vec<_>>(),
+            )
         });
-        // `vanishing_pis_coeffs` vanishes at the public input gates. It is thus divisible by the vanishing
+        // `vanishing_pis_poly` vanishes at the public input gates. It is thus divisible by the vanishing
         // polynomial at the public input gates. The quotient is computed here.
-        let pis_quotient_coeffs = vanishing_pis_coeffs.map(|coeffs| {
+        let pis_quotient_poly = vanishing_pis_poly.map(|poly| {
             // The vanishing polynomial of a set `S` is `prod_{s \in S} (X-s)`.
             // TODO: Faster implementation.
-            let pis_quotient_denominator =
-                (0..num_public_input_gates).fold(vec![C::ScalarField::ONE], |acc, i| {
-                    let mut ans = polynomial_multiplication(
-                        &acc,
-                        &vec![-self.subgroup_n[2 * i], C::ScalarField::ONE],
-                    );
-                    trim_polynomial(&mut ans);
+            let pis_quotient_denominator = (0..num_public_input_gates).fold(
+                Polynomial::from(vec![C::ScalarField::ONE]),
+                |acc, i| {
+                    let mut ans =
+                        acc.mul(&vec![-self.subgroup_n[2 * i], C::ScalarField::ONE].into());
+                    ans.trim();
                     ans
-                });
-            let mut ans = polynomial_division(&coeffs, &pis_quotient_denominator).0;
+                },
+            );
+            let mut ans = poly.polynomial_division(&pis_quotient_denominator).0;
             if cfg!(debug_assertions) {
                 // Check that division was performed correctly by evaluating at a random point.
-                let xxx = C::ScalarField::rand();
-                assert_eq!(
-                    eval_poly(&ans, xxx),
-                    eval_poly(&coeffs, xxx) / eval_poly(&pis_quotient_denominator, xxx)
-                );
+                let x = C::ScalarField::rand();
+                assert_eq!(ans.eval(x), poly.eval(x) / pis_quotient_denominator.eval(x));
             }
-            for _ in ans.len()..self.degree() {
-                ans.push(C::ScalarField::ZERO);
-            }
+            ans.pad(self.degree());
             ans
         });
         // Commit to the public inputs quotient polynomial.
-        let c_pis_quotient = pis_quotient_coeffs.as_ref().map(|coeffs| {
-            PolynomialCommitment::coeffs_to_commitment(
-                coeffs,
+        let c_pis_quotient = pis_quotient_poly.as_ref().map(|poly| {
+            poly.commit(
                 &self.pedersen_g_msm_precomputation,
                 self.pedersen_h,
                 blinding_commitments,
@@ -258,8 +250,7 @@ impl<C: HaloCurve> Circuit<C> {
             .collect::<Vec<_>>();
 
         // Generate a random zeta from the transcript.
-        challenger
-            .observe_affine_points(&c_plonk_t.iter().map(|c| c.to_affine()).collect::<Vec<_>>());
+        challenger.observe_affine_points(&PolynomialCommitment::to_affine_vec(&c_plonk_t));
         if let Some(comm) = c_pis_quotient {
             challenger.observe_affine_point(comm.to_affine());
             // Observe the public inputs
@@ -280,11 +271,11 @@ impl<C: HaloCurve> Circuit<C> {
                     .map(|i| i * 2)
                     .map(|i| {
                         self.open_all_polynomials(
-                            &wires_coeffs,
-                            &plonk_z_coeffs,
-                            &plonk_t_coeff_chunks,
+                            &wire_polynomials,
+                            &plonk_z_polynomial,
+                            &plonk_t_poly_chunks,
                             old_proofs,
-                            &pis_quotient_coeffs,
+                            &pis_quotient_poly,
                             self.subgroup_generator_n.exp_usize(i),
                         )
                     })
@@ -296,27 +287,27 @@ impl<C: HaloCurve> Circuit<C> {
 
         // Open all polynomials at zeta, zeta * g, and zeta * g^65.
         let o_local = self.open_all_polynomials(
-            &wires_coeffs,
-            &plonk_z_coeffs,
-            &plonk_t_coeff_chunks,
+            &wire_polynomials,
+            &plonk_z_polynomial,
+            &plonk_t_poly_chunks,
             old_proofs,
-            &pis_quotient_coeffs,
+            &pis_quotient_poly,
             zeta_sf,
         );
         let o_right = self.open_all_polynomials(
-            &wires_coeffs,
-            &plonk_z_coeffs,
-            &plonk_t_coeff_chunks,
+            &wire_polynomials,
+            &plonk_z_polynomial,
+            &plonk_t_poly_chunks,
             old_proofs,
-            &pis_quotient_coeffs,
+            &pis_quotient_poly,
             zeta_sf * self.subgroup_generator_n,
         );
         let o_below = self.open_all_polynomials(
-            &wires_coeffs,
-            &plonk_z_coeffs,
-            &plonk_t_coeff_chunks,
+            &wire_polynomials,
+            &plonk_z_polynomial,
+            &plonk_t_poly_chunks,
             old_proofs,
-            &pis_quotient_coeffs,
+            &pis_quotient_poly,
             zeta_sf * self.subgroup_generator_n.exp_usize(GRID_WIDTH),
         );
 
@@ -351,15 +342,18 @@ impl<C: HaloCurve> Circuit<C> {
         let u_sf = u_bf.try_convert::<C::ScalarField>()?;
         let u_scaling_sf = u_scaling_bf.try_convert::<C::ScalarField>()?;
 
-        let old_proofs_coeffs = old_proofs.iter().map(|p| p.coeffs()).collect::<Vec<_>>();
+        let old_proofs_polys = old_proofs
+            .iter()
+            .map(|p| Polynomial::from(p.coeffs()))
+            .collect::<Vec<_>>();
         let all_coeffs = [
-            self.constants_coeffs.clone(),
-            self.s_sigma_coeffs.clone(),
-            wires_coeffs,
-            vec![plonk_z_coeffs],
-            plonk_t_coeff_chunks,
-            old_proofs_coeffs,
-            pis_quotient_coeffs.map(|c| vec![c]).unwrap_or_default(),
+            self.constant_polynomials.clone(),
+            self.s_sigma_polynomials.clone(),
+            wire_polynomials,
+            vec![plonk_z_polynomial],
+            plonk_t_poly_chunks,
+            old_proofs_polys,
+            pis_quotient_poly.map(|c| vec![c]).unwrap_or_default(),
         ]
         .concat();
 
@@ -395,7 +389,7 @@ impl<C: HaloCurve> Circuit<C> {
         .concat();
 
         let halo_proof = batch_opening_proof(
-            &all_coeffs.iter().map(|c| c.as_slice()).collect::<Vec<_>>(),
+            &all_coeffs.iter().map(|c| &c[..]).collect::<Vec<_>>(),
             &commitments,
             &opening_points,
             &self.pedersen_g,
@@ -425,14 +419,14 @@ impl<C: HaloCurve> Circuit<C> {
         })
     }
 
-    fn vanishing_poly_coeffs<InnerC: HaloCurve<BaseField = C::ScalarField>>(
+    fn vanishing_poly<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &self,
         wire_values_8n: &[Vec<C::ScalarField>],
         alpha_sf: C::ScalarField,
         beta_sf: C::ScalarField,
         gamma_sf: C::ScalarField,
         plonk_z_coeffs: &[C::ScalarField],
-    ) -> Vec<C::ScalarField> {
+    ) -> Polynomial<C::ScalarField> {
         let degree = self.degree();
         let k_is = (0..NUM_ROUTED_WIRES)
             .map(get_subgroup_shift::<C::ScalarField>)
@@ -505,30 +499,30 @@ impl<C: HaloCurve> Circuit<C> {
             })
             .collect::<Vec<_>>();
 
-        ifft_with_precomputation_power_of_2(&vanishing_points, &self.fft_precomputation_8n)
+        Polynomial::from_evaluations(&vanishing_points, &self.fft_precomputation_8n)
     }
 
     /// Open each polynomial at the given point, `zeta`.
     fn open_all_polynomials(
         &self,
-        wire_coeffs: &[Vec<C::ScalarField>],
-        plonk_z_coeffs: &[C::ScalarField],
-        plonk_t_coeffs: &[Vec<C::ScalarField>],
+        wire_poly: &[Polynomial<C::ScalarField>],
+        plonk_z_poly: &Polynomial<C::ScalarField>,
+        plonk_t_polys: &[Polynomial<C::ScalarField>],
         old_proofs: &[OldProof<C>],
-        pi_quotient_coeffs: &Option<Vec<C::ScalarField>>,
+        pi_quotient_poly: &Option<Polynomial<C::ScalarField>>,
         zeta: C::ScalarField,
     ) -> OpeningSet<C::ScalarField> {
         let powers_of_zeta = powers(zeta, self.degree());
 
         OpeningSet {
-            o_constants: eval_coeffs(&self.constants_coeffs, &powers_of_zeta),
-            o_plonk_sigmas: eval_coeffs(&self.s_sigma_coeffs, &powers_of_zeta),
-            o_wires: eval_coeffs(&wire_coeffs, &powers_of_zeta),
-            o_plonk_z: C::ScalarField::inner_product(&plonk_z_coeffs, &powers_of_zeta),
-            o_plonk_t: eval_coeffs(&plonk_t_coeffs, &powers_of_zeta),
-            o_pi_quotient: pi_quotient_coeffs
+            o_constants: eval_polys(&self.constant_polynomials, &powers_of_zeta),
+            o_plonk_sigmas: eval_polys(&self.s_sigma_polynomials, &powers_of_zeta),
+            o_wires: eval_polys(&wire_poly, &powers_of_zeta),
+            o_plonk_z: plonk_z_poly.eval_from_power(&powers_of_zeta),
+            o_plonk_t: eval_polys(&plonk_t_polys, &powers_of_zeta),
+            o_pi_quotient: pi_quotient_poly
                 .as_ref()
-                .map(|coeffs| C::ScalarField::inner_product(&coeffs, &powers_of_zeta)),
+                .map(|poly| poly.eval_from_power(&powers_of_zeta)),
             o_old_proofs: old_proofs
                 .iter()
                 .map(|p| p.evaluate_g(zeta))
