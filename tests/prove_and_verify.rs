@@ -234,7 +234,6 @@ fn test_proof_factorial_public_input() -> Result<()> {
 fn test_proof_public_input() -> Result<()> {
     // Set many random public inputs
     let n = thread_rng().gen_range(1, 200);
-    let n = 10;
     let values = (0..n)
         .map(|_| <Tweedledee as Curve>::ScalarField::rand())
         .collect::<Vec<_>>();
@@ -252,10 +251,7 @@ fn test_proof_public_input() -> Result<()> {
         .unwrap();
     let pis = circuit.get_public_inputs(&witness);
     // Check that the public inputs are set correctly in the proof.
-    values
-        .iter()
-        .enumerate()
-        .for_each(|(i, &v)| assert_eq!(v, pis[i]));
+    assert_eq!(values, pis);
     let vk = circuit.to_vk();
     verify_proof::<Tweedledee, Tweedledum>(&values, &proof, &[], &vk, true)?;
 

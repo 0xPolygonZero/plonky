@@ -265,8 +265,12 @@ impl<F: Field> Polynomial<F> {
             tmp = tmp.add(&c);
             tmp.iter_mut().for_each(|x| *x = -(*x));
             tmp.trim();
-            let b = &a.mul(&tmp)[..l];
-            a.0.extend_from_slice(b);
+            let mut b = a.mul(&tmp);
+            b.trim();
+            if b.len() > l {
+                b.drain(l..);
+            }
+            a.0.extend_from_slice(&b[..]);
         }
         a.drain(n..);
         a
