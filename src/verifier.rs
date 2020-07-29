@@ -42,16 +42,6 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
     // Verify that the proof parameters are valid.
     check_proof_parameters(proof)?;
 
-    if proof.o_public_inputs.is_some() {
-        // Check public inputs.
-        verify_public_inputs(public_inputs, &proof, vk.num_public_inputs)?;
-    } else {
-        ensure!(
-            proof.c_pis_quotient.is_some(),
-            "Public input information missing from the proof."
-        );
-    }
-
     // Observe the transcript and generate the associated challenge points using Fiat-Shamir.
     let challs = proof.get_challenges(public_inputs, old_proofs)?;
 
@@ -118,27 +108,25 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
     let subgroup_generator_n = C::ScalarField::primitive_root_of_unity(log2_strict(vk.degree));
 
     // Verify that the purported opening of the public input quotient polynomial is valid.
-    if let Some(purported_pis_quotient_opening) = proof.o_local.o_pi_quotient {
-        let num_public_input_gates = ceil_div_usize(vk.num_public_inputs, NUM_WIRES);
-        // Compute the denominator `prod_{pi \in PI} (X - pi)`.
-        let pis_quotient_denominator = (0..num_public_input_gates)
-            .fold(C::ScalarField::ONE, |acc, i| {
-                acc * (challs.zeta - subgroup_generator_n.exp_usize(2 * i))
-            });
-        let pis_quotient_numerator =
-            C::ScalarField::inner_product(&proof.o_local.o_wires, &powers(challs.alpha, NUM_WIRES))
-                - public_inputs_to_polynomial(
-                    public_inputs,
-                    challs.alpha,
-                    vk.degree,
-                    vk.fft_precomputation.as_ref(),
-                )
-                .eval(challs.zeta);
-        let computed_pis_quotient_opening = pis_quotient_numerator / pis_quotient_denominator;
+    let num_public_input_gates = ceil_div_usize(vk.num_public_inputs, NUM_WIRES);
+    // Compute the denominator `prod_{pi \in PI} (X - pi)`.
+    let pis_quotient_denominator = (0..num_public_input_gates)
+        .fold(C::ScalarField::ONE, |acc, i| {
+            acc * (challs.zeta - subgroup_generator_n.exp_usize(2 * i))
+        });
+    let pis_quotient_numerator =
+        C::ScalarField::inner_product(&proof.o_local.o_wires, &powers(challs.alpha, NUM_WIRES))
+            - public_inputs_to_polynomial(
+                public_inputs,
+                challs.alpha,
+                vk.degree,
+                vk.fft_precomputation.as_ref(),
+            )
+            .eval(challs.zeta);
+    let computed_pis_quotient_opening = pis_quotient_numerator / pis_quotient_denominator;
 
-        if computed_pis_quotient_opening != purported_pis_quotient_opening {
-            bail!("Incorrect opening of the public inputs quotient polynomial.");
-        }
+    if computed_pis_quotient_opening != proof.o_local.o_pi_quotient {
+        bail!("Incorrect opening of the public inputs quotient polynomial.");
     }
 
     // Verify polynomial commitment openings.
@@ -213,7 +201,7 @@ fn verify_all_ipas<C: HaloCurve>(
         &[proof.c_plonk_z],
         &proof.c_plonk_t,
         &old_proofs.iter().map(|p| p.halo_g).collect::<Vec<_>>(),
-        &proof.c_pis_quotient.map(|c| vec![c]).unwrap_or_default(),
+        &[proof.c_pis_quotient],
     ]
     .concat();
     let powers_of_u = powers(u, c_all.len());
@@ -237,23 +225,11 @@ fn verify_all_ipas<C: HaloCurve>(
     let u_prime =
         halo_n_mul(&u_scaling.to_canonical_bool_vec()[..security_bits], u_curve).to_projective();
 
-    let num_public_input_gates = ceil_div_usize(num_public_inputs, NUM_WIRES);
-    let points = [
-        if proof.o_public_inputs.is_some() {
-            (0..2 * num_public_input_gates)
-                .step_by(2)
-                .map(|i| subgroup_generator_n.exp_usize(i))
-                .collect::<Vec<_>>()
-        } else {
-            vec![]
-        },
-        vec![
-            zeta,
-            zeta * subgroup_generator_n,
-            zeta * subgroup_generator_n.exp_usize(GRID_WIDTH),
-        ],
-    ]
-    .concat();
+    let points = vec![
+        zeta,
+        zeta * subgroup_generator_n,
+        zeta * subgroup_generator_n.exp_usize(GRID_WIDTH),
+    ];
     let halo_bs = points
         .iter()
         .map(|&p| halo_g(p, &halo_us))
@@ -272,26 +248,6 @@ fn verify_all_ipas<C: HaloCurve>(
         schnorr_challenge,
         proof.schnorr_proof,
     )
-}
-
-/// Verifies that the purported public inputs in a proof match a given set of scalars.
-fn verify_public_inputs<C: HaloCurve>(
-    public_inputs: &[C::ScalarField],
-    proof: &Proof<C>,
-    num_public_inputs: usize,
-) -> Result<()> {
-    if public_inputs.len() != num_public_inputs {
-        bail!("Incorrect number of public inputs.")
-    }
-    if let Some(proof_pis) = &proof.o_public_inputs {
-        for i in 0..num_public_inputs {
-            // If the value `v` doesn't match the corresponding wire in the `PublicInputGate`, return false.
-            if public_inputs[i] != proof_pis[i / NUM_WIRES].o_wires[i % NUM_WIRES] {
-                bail!("{}-th public input is incorrect", i);
-            }
-        }
-    }
-    Ok(())
 }
 
 /// Verifies that the purported openings at `zeta` for the old proofs in `old_proofs` is valid.

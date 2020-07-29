@@ -3,9 +3,9 @@ use std::collections::{BTreeMap, HashMap};
 use crate::gates::*;
 use crate::plonk_util::{commit_polynomials, halo_n, polynomials_to_values_padded, sigma_polynomials, values_to_polynomials};
 use crate::util::{ceil_div_usize, log2_strict, transpose};
-use crate::{blake_hash_base_field_to_curve, blake_hash_usize_to_curve, fft_precompute, generate_rescue_constants, msm_precompute, AffinePoint, AffinePointTarget, Circuit, Curve, CurveMsmEndoResult, CurveMulEndoResult, CurveMulOp, Field, HaloCurve, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, NUM_CONSTANTS, NUM_WIRES, BoundedTarget};
+use crate::{blake_hash_base_field_to_curve, blake_hash_usize_to_curve, fft_precompute, generate_rescue_constants, msm_precompute, AffinePoint, AffinePointTarget, BoundedTarget, Circuit, Curve, CurveMsmEndoResult, CurveMulEndoResult, CurveMulOp, Field, HaloCurve, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, NUM_CONSTANTS, NUM_WIRES};
+use num::{BigUint, Zero};
 use std::marker::PhantomData;
-use num::{Zero, BigUint};
 
 pub struct CircuitBuilder<C: HaloCurve> {
     pub(crate) security_bits: usize,
@@ -83,7 +83,10 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
     pub fn zero_bounded_target(&mut self) -> BoundedTarget {
         let zero = self.zero_wire();
-        BoundedTarget { target: zero, max: BigUint::zero() }
+        BoundedTarget {
+            target: zero,
+            max: BigUint::zero(),
+        }
     }
 
     pub fn one_wire(&mut self) -> Target {
@@ -191,7 +194,10 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             // We don't care about Base4SumGate's accumulator wires, but we need to pass some
             // (arbitrary) value to the old accumulator wire in order for the generator to run.
             self.generate_constant(
-                Target::Wire(Wire { gate, input: Base4SumGate::<C>::WIRE_ACC_OLD }),
+                Target::Wire(Wire {
+                    gate,
+                    input: Base4SumGate::<C>::WIRE_ACC_OLD,
+                }),
                 C::ScalarField::ZERO, // This value is arbitrary.
             );
 
@@ -202,7 +208,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
                     Target::Wire(Wire {
                         gate,
                         input: Base4SumGate::<C>::wire_limb(i),
-                    })
+                    }),
                 )
             }
         }
@@ -711,7 +717,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         let (bits, _dibits) = self.split_binary_and_base_4(x, num_bits, 0);
         bits
     }
-    
+
     /// Splits `x` into its base 4 representation. Note that this method merely adds a generator to
     /// populate the bit wires; it does not enforce constraints to verify the decomposition.
     fn split_base_4(&mut self, x: Target, num_dibits: usize) -> Vec<Target> {
@@ -801,7 +807,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
                     Target::Wire(Wire {
                         gate,
                         input: Base4SumGate::<C>::wire_limb(i),
-                    })
+                    }),
                 );
             }
 
@@ -1712,7 +1718,7 @@ mod tests {
 
         let circuit = builder.build();
         let witness = circuit.generate_witness(PartialWitness::new());
-        let proof = circuit.generate_proof::<InnerC>(witness, &[], false, true)?;
+        let proof = circuit.generate_proof::<InnerC>(&witness, &[], false)?;
         let vk = circuit.to_vk();
         verify_proof::<C, InnerC>(&[], &proof, &[], &vk, true)?;
 
