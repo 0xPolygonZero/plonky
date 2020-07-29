@@ -5,9 +5,9 @@ use crate::partition::get_subgroup_shift;
 use crate::gates::evaluate_all_constraints;
 use crate::halo::verify_ipa;
 use crate::plonk_proof::OldProof;
-use crate::plonk_util::{eval_poly, halo_g, halo_n, halo_n_mul, halo_s, pedersen_hash, powers, reduce_with_powers};
+use crate::plonk_util::{halo_g, halo_n, halo_n_mul, halo_s, pedersen_hash, powers, reduce_with_powers};
 use crate::util::{ceil_div_usize, log2_strict};
-use crate::{blake_hash_usize_to_curve, fft_precompute, ifft_with_precomputation_power_of_2, msm_execute_parallel, msm_precompute, AffinePoint, Circuit, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, Proof, GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES};
+use crate::{blake_hash_usize_to_curve, fft_precompute, msm_execute_parallel, msm_precompute, AffinePoint, Circuit, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, Polynomial, Proof, GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES};
 
 pub const SECURITY_BITS: usize = 128;
 
@@ -53,7 +53,7 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
     }
 
     // Observe the transcript and generate the associated challenge points using Fiat-Shamir.
-    let challs = proof.get_challenges(public_inputs)?;
+    let challs = proof.get_challenges(public_inputs, old_proofs)?;
 
     // Check the old proofs' openings.
     verify_old_proof_evaluation(old_proofs, &proof, challs.zeta)?;
@@ -125,18 +125,15 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
             .fold(C::ScalarField::ONE, |acc, i| {
                 acc * (challs.zeta - subgroup_generator_n.exp_usize(2 * i))
             });
-        // Compute the numerator `WirePoly - PIPoly`.
-        let pis_quotient_numerator = (0..NUM_WIRES).fold(C::ScalarField::ZERO, |acc, i| {
-            acc + proof.o_local.o_wires[i] * challs.alpha.exp_usize(i)
-        }) - eval_poly(
-            &public_inputs_to_polynomial(
-                public_inputs,
-                challs.alpha,
-                vk.degree,
-                vk.fft_precomputation.as_ref(),
-            ),
-            challs.zeta,
-        );
+        let pis_quotient_numerator =
+            C::ScalarField::inner_product(&proof.o_local.o_wires, &powers(challs.alpha, NUM_WIRES))
+                - public_inputs_to_polynomial(
+                    public_inputs,
+                    challs.alpha,
+                    vk.degree,
+                    vk.fft_precomputation.as_ref(),
+                )
+                .eval(challs.zeta);
         let computed_pis_quotient_opening = pis_quotient_numerator / pis_quotient_denominator;
 
         if computed_pis_quotient_opening != purported_pis_quotient_opening {
@@ -403,12 +400,13 @@ fn public_inputs_to_wires_vec<F: Field>(public_inputs: &[F]) -> Vec<Vec<F>> {
     wires
 }
 
+/// Returns the polynomial interpolating the (scaled) public input values at the `PublicInputGate`s.
 fn public_inputs_to_polynomial<F: Field>(
     public_inputs: &[F],
     alpha: F,
     degree: usize,
     fft_precomputation: Option<&FftPrecomputation<F>>,
-) -> Vec<F> {
+) -> Polynomial<F> {
     let pis_wires_vec = public_inputs_to_wires_vec(public_inputs);
     let mut scaled_wires_vec = (0..pis_wires_vec[0].len())
         .map(|i| {
@@ -422,7 +420,7 @@ fn public_inputs_to_polynomial<F: Field>(
     }
 
     fft_precomputation.map_or_else(
-        || ifft_with_precomputation_power_of_2(&scaled_wires_vec, &fft_precompute(degree)),
-        |precomp| ifft_with_precomputation_power_of_2(&scaled_wires_vec, precomp),
+        || Polynomial::from_evaluations(&scaled_wires_vec, &fft_precompute(degree)),
+        |precomp| Polynomial::from_evaluations(&scaled_wires_vec, precomp),
     )
 }

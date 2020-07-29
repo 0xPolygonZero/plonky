@@ -249,8 +249,9 @@ impl<C: HaloCurve> Circuit<C> {
             .map(|i| wire_values_by_wire_index[i % NUM_WIRES][2 * (i / NUM_WIRES)])
             .collect::<Vec<_>>();
 
-        // Generate a random zeta from the transcript.
+        // Observe the `t` polynomial commitment.
         challenger.observe_affine_points(&PolynomialCommitment::to_affine_vec(&c_plonk_t));
+        // If the proof doesn't output public inputs, observe the `pis_quotient` polynomial commitment and the public inputs.
         if let Some(comm) = c_pis_quotient {
             challenger.observe_affine_point(comm.to_affine());
             // Observe the public inputs
@@ -259,6 +260,11 @@ impl<C: HaloCurve> Circuit<C> {
                     .expect("Public inputs should fit in both fields"),
             )
         }
+        // Observe the old proofs' `G` points.
+        old_proofs
+            .iter()
+            .for_each(|old_proof| challenger.observe_affine_point(old_proof.halo_g));
+        // Generate a random `zeta` from the transcript.
         let zeta_bf = challenger.get_challenge();
         let zeta_sf =
             C::try_convert_b2s(zeta_bf).expect("should fit in both fields with high probability");

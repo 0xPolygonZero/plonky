@@ -75,7 +75,11 @@ impl<C: HaloCurve> Proof<C> {
     }
 
     // Computes all challenges used in the proof verification.
-    pub fn get_challenges(&self, public_inputs: &[C::ScalarField]) -> Result<ProofChallenge<C>> {
+    pub fn get_challenges(
+        &self,
+        public_inputs: &[C::ScalarField],
+        old_proofs: &[OldProof<C>],
+    ) -> Result<ProofChallenge<C>> {
         let mut challenger = Challenger::new(SECURITY_BITS);
         let error_msg = "Conversion from base to scalar field failed.";
         challenger.observe_affine_points(&self.c_wires);
@@ -93,6 +97,9 @@ impl<C: HaloCurve> Proof<C> {
                     .expect("Public inputs should fit in both fields"),
             )
         }
+        old_proofs
+            .iter()
+            .for_each(|old_proof| challenger.observe_affine_point(old_proof.halo_g));
         let zeta_bf = challenger.get_challenge();
         let zeta = C::try_convert_b2s(zeta_bf).map_err(|_| anyhow!(error_msg))?;
         for os in self.all_opening_sets().iter() {
