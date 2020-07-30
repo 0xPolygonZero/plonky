@@ -333,12 +333,11 @@ impl<C: HaloCurve> Circuit<C> {
         ]
         .concat();
 
-        let opening_points = [vec![
+        let opening_points = vec![
             zeta_sf,
             zeta_sf * self.subgroup_generator_n,
             zeta_sf * self.subgroup_generator_n.exp_usize(GRID_WIDTH),
-        ]]
-        .concat();
+        ];
 
         let halo_proof = batch_opening_proof(
             &all_coeffs.iter().map(|c| &c[..]).collect::<Vec<_>>(),
