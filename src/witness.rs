@@ -1,7 +1,7 @@
 use crate::util::transpose;
-use crate::{AffinePoint, AffinePointTarget, Curve, Field, PublicInput, Target, Wire, NUM_WIRES, OrderingTarget, field_to_biguint, LIMB_BITS, BigIntTarget, biguint_to_limbs, ForeignFieldTarget, biguint_to_field};
+use crate::{biguint_to_field, biguint_to_limbs, field_to_biguint, AffinePoint, AffinePointTarget, BigIntTarget, Curve, Field, ForeignFieldTarget, OrderingTarget, PublicInput, Target, Wire, LIMB_BITS, NUM_WIRES};
+use num::{BigUint, Zero};
 use std::{cmp::Ordering, collections::HashMap};
-use num::{Zero, BigUint};
 
 pub struct PartialWitness<F: Field> {
     wire_values: HashMap<Target, F>,
@@ -64,7 +64,7 @@ impl<F: Field> PartialWitness<F> {
         if lt_eq_gt == &[F::ZERO, F::ZERO, F::ONE] {
             return Ordering::Greater;
         }
-        
+
         panic!("Invalid ordering values")
     }
 
@@ -92,7 +92,8 @@ impl<F: Field> PartialWitness<F> {
 
         debug_assert!(
             value_limbs.len() <= target.limbs.len(),
-            "Not enough limbs to fit the given value");
+            "Not enough limbs to fit the given value"
+        );
 
         while value_limbs.len() < target.limbs.len() {
             value_limbs.push(F::ZERO);

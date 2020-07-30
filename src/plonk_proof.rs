@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 
 use crate::plonk_challenger::Challenger;
 use crate::plonk_util::{halo_g, halo_n, halo_s};
-use crate::{AffinePoint, AffinePointTarget, Curve, Field, HaloCurve, PartialWitness, Target, NUM_WIRES, SECURITY_BITS};
+use crate::{AffinePoint, AffinePointTarget, Curve, Field, HaloCurve, PartialWitness, Target, SECURITY_BITS};
 
 #[derive(Debug, Clone, Copy)]
 pub struct SchnorrProof<C: HaloCurve> {
@@ -26,12 +26,8 @@ pub struct Proof<C: HaloCurve> {
     /// A commitment to the quotient polynomial.
     pub c_plonk_t: Vec<AffinePoint<C>>,
     /// A commitment to the public input quotient polynomial.
-    /// Is `None` iff `o_public_inputs` is `Some`.
-    pub c_pis_quotient: Option<AffinePoint<C>>,
+    pub c_pis_quotient: AffinePoint<C>,
 
-    /// The opening of each polynomial at each `PublicInputGate` index.
-    /// Is `None` iff `c_pis_quotient` is `Some`.
-    pub o_public_inputs: Option<Vec<OpeningSet<C::ScalarField>>>,
     /// The opening of each polynomial at `zeta`.
     pub o_local: OpeningSet<C::ScalarField>,
     /// The opening of each polynomial at `g * zeta`.
@@ -50,32 +46,20 @@ pub struct Proof<C: HaloCurve> {
 }
 
 impl<C: HaloCurve> Proof<C> {
-    pub fn get_public_inputs(&self, count: usize) -> Option<Vec<C::ScalarField>> {
-        self.o_public_inputs.as_ref().map(|pis| {
-            (0..count)
-                .map(|i| {
-                    let pi_gate_idx = i / NUM_WIRES;
-                    let wire_idx = i % NUM_WIRES;
-                    pis[pi_gate_idx].o_wires[wire_idx]
-                })
-                .collect()
-        })
-    }
-
     pub fn all_opening_sets(&self) -> Vec<OpeningSet<C::ScalarField>> {
-        [
-            self.o_public_inputs.as_deref().unwrap_or_default(),
-            &[
-                self.o_local.clone(),
-                self.o_right.clone(),
-                self.o_below.clone(),
-            ],
+        vec![
+            self.o_local.clone(),
+            self.o_right.clone(),
+            self.o_below.clone(),
         ]
-        .concat()
     }
 
     // Computes all challenges used in the proof verification.
-    pub fn get_challenges(&self, public_inputs: &[C::ScalarField]) -> Result<ProofChallenge<C>> {
+    pub fn get_challenges(
+        &self,
+        public_inputs: &[C::ScalarField],
+        old_proofs: &[OldProof<C>],
+    ) -> Result<ProofChallenge<C>> {
         let mut challenger = Challenger::new(SECURITY_BITS);
         let error_msg = "Conversion from base to scalar field failed.";
         challenger.observe_affine_points(&self.c_wires);
@@ -86,13 +70,14 @@ impl<C: HaloCurve> Proof<C> {
         let alpha_bf = challenger.get_challenge();
         let alpha = C::try_convert_b2s(alpha_bf).map_err(|_| anyhow!(error_msg))?;
         challenger.observe_affine_points(&self.c_plonk_t);
-        if let Some(comm) = self.c_pis_quotient {
-            challenger.observe_affine_point(comm);
-            challenger.observe_elements(
-                &C::ScalarField::try_convert_all(public_inputs)
-                    .expect("Public inputs should fit in both fields"),
-            )
-        }
+        challenger.observe_affine_point(self.c_pis_quotient);
+        challenger.observe_elements(
+            &C::ScalarField::try_convert_all(public_inputs)
+                .expect("Public inputs should fit in both fields"),
+        );
+        old_proofs
+            .iter()
+            .for_each(|old_proof| challenger.observe_affine_point(old_proof.halo_g));
         let zeta_bf = challenger.get_challenge();
         let zeta = C::try_convert_b2s(zeta_bf).map_err(|_| anyhow!(error_msg))?;
         for os in self.all_opening_sets().iter() {
@@ -265,18 +250,6 @@ impl ProofTarget {
         witness.set_point_target(self.c_plonk_z, values.c_plonk_z);
         witness.set_point_targets(&self.c_plonk_t, &values.c_plonk_t);
 
-        debug_assert_eq!(
-            self.o_public_inputs.as_ref().map(|pis| pis.len()),
-            values.o_public_inputs.as_ref().map(|pis| pis.len())
-        );
-        if let (Some(values_pis), Some(target_pis)) =
-            (&values.o_public_inputs, &self.o_public_inputs)
-        {
-            for (o_pi_targets, o_pi_values) in target_pis.iter().zip(values_pis) {
-                o_pi_targets.populate_witness(witness, o_pi_values)?;
-            }
-        }
-
         self.o_local.populate_witness(witness, &values.o_local)?;
         self.o_right.populate_witness(witness, &values.o_right)?;
         self.o_below.populate_witness(witness, &values.o_below)?;
@@ -315,8 +288,7 @@ pub struct OpeningSet<F: Field> {
     /// The purported opening of some old proofs `halo_g` polynomials.
     pub o_old_proofs: Vec<F>,
     /// The purported opening of the public input quotient polynomial.
-    /// Is `None` when the prover opens at the public input gates.
-    pub o_pi_quotient: Option<F>,
+    pub o_pi_quotient: F,
 }
 
 impl<F: Field> OpeningSet<F> {
@@ -328,10 +300,7 @@ impl<F: Field> OpeningSet<F> {
             &[self.o_plonk_z],
             self.o_plonk_t.as_slice(),
             self.o_old_proofs.as_slice(),
-            self.o_pi_quotient
-                .map(|o| vec![o])
-                .as_deref()
-                .unwrap_or_default(),
+            &[self.o_pi_quotient],
         ]
         .concat()
     }

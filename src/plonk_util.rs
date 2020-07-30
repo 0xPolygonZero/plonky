@@ -281,6 +281,24 @@ pub fn sigma_polynomials<F: Field>(
         .collect()
 }
 
+/// Given polynomials `[p_0,...,p_k]` of degree `degree` and `alpha \in F`, returns `\sum_{i=0}^k alpha^i p_i`.
+pub(crate) fn scale_polynomials<F: Field>(
+    polynomials: Vec<Polynomial<F>>,
+    alpha: F,
+    degree: usize,
+) -> Polynomial<F> {
+    let alpha_powers = powers(alpha, polynomials.len());
+    Polynomial::from(
+        (0..degree)
+            .map(|i| {
+                (0..polynomials.len())
+                    .map(|j| polynomials[j][i] * alpha_powers[j])
+                    .fold(F::ZERO, |acc, x| acc + x)
+            })
+            .collect::<Vec<_>>(),
+    )
+}
+
 #[allow(dead_code)]
 pub(crate) fn polynomial_degree_plus_1<F: Field>(
     points: &[F],

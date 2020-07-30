@@ -152,6 +152,11 @@ impl<F: Field> Polynomial<F> {
         Self(self.iter().map(|&x| -x).collect())
     }
 
+    /// Multiply the polynomial's coefficients by a scalar.
+    fn scalar_mul(&self, c: F) -> Self {
+        Self(self.iter().map(|&x| c * x).collect())
+    }
+
     /// Removes leading zero coefficients.
     pub fn trim(&mut self) {
         self.0.drain(self.degree_plus_one()..);
@@ -260,8 +265,12 @@ impl<F: Field> Polynomial<F> {
             tmp = tmp.add(&c);
             tmp.iter_mut().for_each(|x| *x = -(*x));
             tmp.trim();
-            let b = &a.mul(&tmp)[..l];
-            a.0.extend_from_slice(b);
+            let mut b = a.mul(&tmp);
+            b.trim();
+            if b.len() > l {
+                b.drain(l..);
+            }
+            a.0.extend_from_slice(&b[..]);
         }
         a.drain(n..);
         a
@@ -278,6 +287,11 @@ impl<F: Field> Polynomial<F> {
             panic!("Division by zero polynomial");
         } else if a_degree < b_degree {
             (Self::zero(1), self.clone())
+        } else if b_degree == 0 {
+            (
+                self.scalar_mul(b[0].multiplicative_inverse_assuming_nonzero()),
+                Self::empty(),
+            )
         } else {
             let rev_b = b.rev();
             let rev_b_inv = rev_b.inv_mod_xn(a_degree - b_degree + 1);
@@ -419,6 +433,20 @@ mod test {
         let (a_deg, b_deg) = (rng.gen_range(1, 10_000), rng.gen_range(1, 10_000));
         let a = Polynomial((0..a_deg).map(|_| F::rand()).collect());
         let b = Polynomial((0..b_deg).map(|_| F::rand()).collect());
+        let (q, r) = a.polynomial_division(&b);
+        for _ in 0..1000 {
+            let x = F::rand();
+            assert_eq!(a.eval(x), b.eval(x) * q.eval(x) + r.eval(x));
+        }
+    }
+
+    #[test]
+    fn test_polynomial_division_by_constant() {
+        type F = TweedledeeBase;
+        let mut rng = thread_rng();
+        let a_deg = rng.gen_range(1, 10_000);
+        let a = Polynomial((0..a_deg).map(|_| F::rand()).collect());
+        let b = Polynomial::from(vec![F::rand()]);
         let (q, r) = a.polynomial_division(&b);
         for _ in 0..1000 {
             let x = F::rand();
