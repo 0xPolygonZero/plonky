@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 
 use crate::plonk_challenger::Challenger;
 use crate::plonk_util::{halo_g, halo_n, halo_s};
-use crate::{AffinePoint, AffinePointTarget, Curve, Field, HaloCurve, PartialWitness, Target, NUM_WIRES, SECURITY_BITS};
+use crate::{AffinePoint, AffinePointTarget, Curve, Field, HaloCurve, PartialWitness, Target, SECURITY_BITS};
 
 #[derive(Debug, Clone, Copy)]
 pub struct SchnorrProof<C: HaloCurve> {

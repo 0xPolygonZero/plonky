@@ -136,7 +136,6 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
         verify_all_ipas::<C>(
             &vk.c_constants,
             &vk.c_s_sigmas,
-            vk.num_public_inputs,
             subgroup_generator_n,
             u_curve,
             pedersen_h,
@@ -179,7 +178,6 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
 fn verify_all_ipas<C: HaloCurve>(
     c_constants: &[AffinePoint<C>],
     c_s_sigmas: &[AffinePoint<C>],
-    num_public_inputs: usize,
     subgroup_generator_n: C::ScalarField,
     u_curve: AffinePoint<C>,
     pedersen_h: AffinePoint<C>,

@@ -3,9 +3,6 @@ use plonky::{blake_hash_base_field_to_curve, msm_parallel, rescue_hash_1_to_1, v
 use rand::{thread_rng, Rng};
 use std::time::Instant;
 
-// Make sure it's the same as in `plonk.rs`.
-const NUM_WIRES: usize = 9;
-
 fn get_trivial_circuit<C: HaloCurve>(x: C::ScalarField) -> (Circuit<C>, Witness<C::ScalarField>) {
     let mut builder = CircuitBuilder::<C>::new(128);
     let t = builder.constant_wire(x);

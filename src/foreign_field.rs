@@ -1,4 +1,4 @@
-use crate::{HaloCurve, CircuitBuilder, BigIntTarget, Field, field_to_biguint};
+use crate::{field_to_biguint, BigIntTarget, CircuitBuilder, Field, HaloCurve};
 use num::{BigUint, One};
 
 /// Represents an element of a field other than the native field.
@@ -9,7 +9,9 @@ pub struct ForeignFieldTarget {
 
 impl ForeignFieldTarget {
     pub fn zero() -> Self {
-        ForeignFieldTarget { value: BigIntTarget::zero() }
+        ForeignFieldTarget {
+            value: BigIntTarget::zero(),
+        }
     }
 }
 
@@ -23,9 +25,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         &mut self,
         terms: &[ForeignFieldTarget],
     ) -> ForeignFieldTarget {
-        let term_values = terms.iter()
-            .map(|ff| ff.value.clone())
-            .collect::<Vec<_>>();
+        let term_values = terms.iter().map(|ff| ff.value.clone()).collect::<Vec<_>>();
         let sum = self.bigint_add_many(&term_values);
         self.reduce::<FF>(&sum)
     }
@@ -58,8 +58,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{CircuitBuilder, PartialWitness, Tweedledum, Field, Curve};
-    use num::{BigUint, FromPrimitive};
+    use crate::{CircuitBuilder, Curve, Field, PartialWitness, Tweedledum};
 
     #[test]
     fn test_foreign_field_add() {
