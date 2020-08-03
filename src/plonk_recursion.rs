@@ -8,28 +8,28 @@ use crate::{get_subgroup_shift, hash_usize_to_curve, AffinePointTarget, Circuit,
 /// Wraps a `Circuit` for recursive verification with inputs for the proof data.
 pub struct RecursiveCircuit<C: HaloCurve> {
     pub circuit: Circuit<C>,
-    pub public_inputs: RecursionPublicInputs,
-    pub proof: ProofTarget,
-    pub old_proofs: Vec<OldProofTarget>,
+    pub public_inputs: RecursionPublicInputs<C::ScalarField>,
+    pub proof: ProofTarget<C>,
+    pub old_proofs: Vec<OldProofTarget<C>>,
 }
 
 /// Public inputs of the recursive circuit. This contains data for the inner proof which is needed
 /// to complete verification of it.
-pub struct RecursionPublicInputs {
-    beta: PublicInput,
-    gamma: PublicInput,
-    alpha: PublicInput,
-    zeta: PublicInput,
-    o_constants: Vec<PublicInput>,
-    o_plonk_sigmas: Vec<PublicInput>,
-    o_local_wires: Vec<PublicInput>,
-    o_right_wires: Vec<PublicInput>,
-    o_below_wires: Vec<PublicInput>,
-    o_plonk_z_local: PublicInput,
-    o_plonk_z_right: PublicInput,
-    o_plonk_t: Vec<PublicInput>,
-    halo_us: Vec<PublicInput>,
-    old_proofs: Vec<PublicInput>,
+pub struct RecursionPublicInputs<F: Field> {
+    beta: PublicInput<F>,
+    gamma: PublicInput<F>,
+    alpha: PublicInput<F>,
+    zeta: PublicInput<F>,
+    o_constants: Vec<PublicInput<F>>,
+    o_plonk_sigmas: Vec<PublicInput<F>>,
+    o_local_wires: Vec<PublicInput<F>>,
+    o_right_wires: Vec<PublicInput<F>>,
+    o_below_wires: Vec<PublicInput<F>>,
+    o_plonk_z_local: PublicInput<F>,
+    o_plonk_z_right: PublicInput<F>,
+    o_plonk_t: Vec<PublicInput<F>>,
+    halo_us: Vec<PublicInput<F>>,
+    old_proofs: Vec<PublicInput<F>>,
 }
 
 /// The number of `PublicInputGate`s needed to route the given number of public inputs.
@@ -68,7 +68,7 @@ pub fn recursive_verification_circuit<
 
     builder.route_public_inputs();
 
-    let proof = ProofTarget {
+    let proof = ProofTarget::<InnerC> {
         c_wires: builder.add_virtual_point_targets(NUM_WIRES),
         c_plonk_z: builder.add_virtual_point_target(),
         c_plonk_t: builder.add_virtual_point_targets(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
@@ -89,12 +89,13 @@ pub fn recursive_verification_circuit<
     let old_proofs = make_old_proofs(&mut builder, num_old_proofs, degree_pow);
 
     // Flatten the list of public input openings.
-    let o_public_inputs: Option<Vec<Target>> = proof.o_public_inputs.as_ref().map(|pis| {
-        pis.iter()
-            .cloned()
-            .flat_map(|opening_set| opening_set.o_wires)
-            .collect()
-    });
+    let o_public_inputs: Option<Vec<Target<C::ScalarField>>> =
+        proof.o_public_inputs.as_ref().map(|pis| {
+            pis.iter()
+                .cloned()
+                .flat_map(|opening_set| opening_set.o_wires)
+                .collect()
+        });
 
     verify_assumptions::<C, InnerC>(
         &mut builder,
@@ -220,23 +221,23 @@ pub fn recursive_verification_circuit<
 /// Verify all IPAs in the given proof, and return IPA challenges.
 fn verify_all_ipas<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     builder: &mut CircuitBuilder<C>,
-    proof: &ProofTarget,
-    zeta: Target,
-    u: Target,
-    v: Target,
-    u_scaling: Target,
-    raw_ipa_challenges: Vec<Target>,
-    schnorr_challenge: Target,
+    proof: &ProofTarget<C>,
+    zeta: Target<C::ScalarField>,
+    u: Target<C::ScalarField>,
+    v: Target<C::ScalarField>,
+    u_scaling: Target<C::ScalarField>,
+    raw_ipa_challenges: Vec<Target<C::ScalarField>>,
+    schnorr_challenge: Target<C::ScalarField>,
     num_public_input_gates: usize,
     security_bits: usize,
-) -> Vec<Target> {
+) -> Vec<Target<C::ScalarField>> {
     // Reduce all polynomial commitments to a single one, i.e. a random combination of them.
     // TODO: Configure the actual constants and permutations of whatever circuit we wish to verify.
     // For now, we use a dummy point for each of those polynomial commitments.
     let dummy_point = builder.constant_affine_point(InnerC::GENERATOR_AFFINE);
     let c_constants = vec![dummy_point; NUM_CONSTANTS];
     let c_s_sigmas = vec![dummy_point; NUM_ROUTED_WIRES];
-    let c_all: Vec<AffinePointTarget> = [
+    let c_all: Vec<AffinePointTarget<C>> = [
         c_constants,
         c_s_sigmas,
         proof.c_wires.clone(),
@@ -258,7 +259,7 @@ fn verify_all_ipas<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     let c_reduction = c_reduction_msm_result.msm_result;
 
     // For each opening set, we do a similar reduction, using the actual scalars above.
-    let opening_set_reductions: Vec<Target> = proof
+    let opening_set_reductions: Vec<Target<C::ScalarField>> = proof
         .all_opening_sets()
         .iter()
         .map(|opening_set| {
@@ -294,7 +295,7 @@ fn verify_all_ipas<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
 
     let generator_n_value = C::ScalarField::primitive_root_of_unity(raw_ipa_challenges.len());
     let generator_n = builder.constant_wire(generator_n_value);
-    let mut points: Vec<Target> = (0..2 * num_public_input_gates)
+    let mut points: Vec<Target<C::ScalarField>> = (0..2 * num_public_input_gates)
         .scan(C::ScalarField::ONE, |acc, _| {
             let tmp = *acc;
             *acc = *acc * generator_n_value;
@@ -329,10 +330,10 @@ fn verify_all_ipas<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
 /// Computes `Q` in the context of the Halo paper. Returns `(Q, halo_us)`.
 fn compute_halo_q<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     builder: &mut CircuitBuilder<C>,
-    proof: &ProofTarget,
-    raw_ipa_challenges: &[Target],
-    p_prime: AffinePointTarget,
-) -> (AffinePointTarget, Vec<Target>) {
+    proof: &ProofTarget<C>,
+    raw_ipa_challenges: &[Target<C::ScalarField>],
+    p_prime: AffinePointTarget<C>,
+) -> (AffinePointTarget<C>, Vec<Target<C::ScalarField>>) {
     let mut sum = p_prime;
 
     // The summation of the L_i terms has the structure of an MSM.
@@ -372,11 +373,11 @@ fn compute_halo_q<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
 /// Verify the final Schnorr protocol used in Halo.
 fn verify_schnorr<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     builder: &mut CircuitBuilder<C>,
-    proof: &ProofTarget,
-    u_prime: AffinePointTarget,
-    halo_q: AffinePointTarget,
-    halo_b: Target,
-    schnorr_challenge: Target,
+    proof: &ProofTarget<C>,
+    u_prime: AffinePointTarget<C>,
+    halo_q: AffinePointTarget<C>,
+    halo_b: Target<C::ScalarField>,
+    schnorr_challenge: Target<C::ScalarField>,
     security_bits: usize,
 ) {
     // The H point used for blinding polynomial commitments. Set to H(degree).
@@ -414,7 +415,7 @@ fn verify_schnorr<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
 fn make_opening_set<C: HaloCurve>(
     builder: &mut CircuitBuilder<C>,
     num_old_proofs: usize,
-) -> OpeningSetTarget {
+) -> OpeningSetTarget<C> {
     OpeningSetTarget {
         o_constants: builder.add_virtual_targets(NUM_CONSTANTS),
         o_plonk_sigmas: builder.add_virtual_targets(NUM_ROUTED_WIRES),
@@ -428,13 +429,13 @@ fn make_opening_sets<C: HaloCurve>(
     builder: &mut CircuitBuilder<C>,
     n: usize,
     num_old_proofs: usize,
-) -> Vec<OpeningSetTarget> {
+) -> Vec<OpeningSetTarget<C>> {
     (0..n)
         .map(|_i| make_opening_set(builder, num_old_proofs))
         .collect()
 }
 
-fn make_schnorr_proof<C: HaloCurve>(builder: &mut CircuitBuilder<C>) -> SchnorrProofTarget {
+fn make_schnorr_proof<C: HaloCurve>(builder: &mut CircuitBuilder<C>) -> SchnorrProofTarget<C> {
     SchnorrProofTarget {
         r: builder.add_virtual_point_target(),
         z1: builder.add_virtual_target(),
@@ -446,7 +447,7 @@ fn make_old_proofs<C: HaloCurve>(
     builder: &mut CircuitBuilder<C>,
     n: usize,
     degree_pow: usize,
-) -> Vec<OldProofTarget> {
+) -> Vec<OldProofTarget<C>> {
     (0..n)
         .map(|_| OldProofTarget {
             halo_g: builder.add_virtual_point_target(),
@@ -462,8 +463,8 @@ fn make_old_proofs<C: HaloCurve>(
 fn verify_assumptions<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     builder: &mut CircuitBuilder<C>,
     degree_pow: usize,
-    public_inputs: &RecursionPublicInputs,
-    o_public_inputs: &[Target],
+    public_inputs: &RecursionPublicInputs<C::ScalarField>,
+    o_public_inputs: &[Target<C::ScalarField>],
 ) {
     let degree = 1 << degree_pow;
     let degree_f = C::ScalarField::from_canonical_usize(degree);
@@ -472,27 +473,27 @@ fn verify_assumptions<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField
     let one = builder.one_wire();
 
     // Convert inner proof data from `PublicInput`s to `Target`s.
-    let o_constants: Vec<Target> = public_inputs
+    let o_constants: Vec<Target<C::ScalarField>> = public_inputs
         .o_constants
         .iter()
         .map(|pi| o_public_inputs[pi.index])
         .collect();
-    let o_sigmas: Vec<Target> = public_inputs
+    let o_sigmas: Vec<Target<C::ScalarField>> = public_inputs
         .o_plonk_sigmas
         .iter()
         .map(|pi| o_public_inputs[pi.index])
         .collect();
-    let o_local_wires: Vec<Target> = public_inputs
+    let o_local_wires: Vec<Target<C::ScalarField>> = public_inputs
         .o_local_wires
         .iter()
         .map(|pi| o_public_inputs[pi.index])
         .collect();
-    let o_right_wires: Vec<Target> = public_inputs
+    let o_right_wires: Vec<Target<C::ScalarField>> = public_inputs
         .o_right_wires
         .iter()
         .map(|pi| o_public_inputs[pi.index])
         .collect();
-    let o_below_wires: Vec<Target> = public_inputs
+    let o_below_wires: Vec<Target<C::ScalarField>> = public_inputs
         .o_below_wires
         .iter()
         .map(|pi| o_public_inputs[pi.index])
@@ -556,7 +557,7 @@ fn verify_assumptions<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField
 
     // Evaluate the quotient polynomial, and assert that it matches the prover's opening.
     let quotient_eval = builder.div(vanishing_eval, zero_eval);
-    let t_components: Vec<Target> = public_inputs
+    let t_components: Vec<Target<C::ScalarField>> = public_inputs
         .o_plonk_t
         .iter()
         .map(|pi| o_public_inputs[pi.index])
@@ -568,9 +569,9 @@ fn verify_assumptions<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField
 /// Computes a sum of terms weighted by the given coefficients.
 fn reduce_with_coefficients<C: HaloCurve>(
     builder: &mut CircuitBuilder<C>,
-    terms: &[Target],
-    coefficients: &[Target],
-) -> Target {
+    terms: &[Target<C::ScalarField>],
+    coefficients: &[Target<C::ScalarField>],
+) -> Target<C::ScalarField> {
     let mut reduction = builder.zero_wire();
     for (i, &term) in terms.iter().enumerate() {
         reduction = builder.mul_add(coefficients[i], term, reduction);
@@ -582,18 +583,18 @@ fn reduce_with_coefficients<C: HaloCurve>(
 /// component at some point zeta, this function evaluates the composite polynomial at zeta.
 fn eval_composite_poly<C: HaloCurve>(
     builder: &mut CircuitBuilder<C>,
-    component_evals: &[Target],
-    zeta_power_d: Target,
-) -> Target {
+    component_evals: &[Target<C::ScalarField>],
+    zeta_power_d: Target<C::ScalarField>,
+) -> Target<C::ScalarField> {
     reduce_with_powers_recursive(builder, component_evals, zeta_power_d)
 }
 
 /// Evaluate `g(X, {u_i})` as defined in the Halo paper.
 fn halo_g_recursive<C: HaloCurve>(
     builder: &mut CircuitBuilder<C>,
-    x: Target,
-    us: &[Target],
-) -> Target {
+    x: Target<C::ScalarField>,
+    us: &[Target<C::ScalarField>],
+) -> Target<C::ScalarField> {
     let mut product = builder.one_wire();
     let mut x_power = x;
     for &u_i in us.iter().rev() {
@@ -607,9 +608,9 @@ fn halo_g_recursive<C: HaloCurve>(
 
 fn verify_old_proof_evaluation<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     builder: &mut CircuitBuilder<C>,
-    old_proofs: &[OldProofTarget],
-    o_local: &OpeningSetTarget,
-    zeta: Target,
+    old_proofs: &[OldProofTarget<C>],
+    o_local: &OpeningSetTarget<C>,
+    zeta: Target<C::ScalarField>,
 ) {
     for (i, p) in old_proofs.iter().enumerate() {
         let computed = halo_g_recursive(builder, zeta, &p.halo_us);

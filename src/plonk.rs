@@ -32,7 +32,7 @@ pub struct Circuit<C: HaloCurve> {
     pub security_bits: usize,
     pub num_public_inputs: usize,
     pub gate_constants: Vec<Vec<C::ScalarField>>,
-    pub routing_target_partitions: TargetPartitions,
+    pub routing_target_partitions: TargetPartitions<C::ScalarField>,
     pub generators: Vec<Box<dyn WitnessGenerator<C::ScalarField>>>,
     /// A generator of `subgroup_n`.
     pub subgroup_generator_n: C::ScalarField,
@@ -488,7 +488,8 @@ impl<C: HaloCurve> Circuit<C> {
         let start = Instant::now();
 
         // Index generator indices by their dependencies.
-        let mut generator_indices_by_deps: HashMap<Target, Vec<usize>> = HashMap::new();
+        let mut generator_indices_by_deps: HashMap<Target<C::ScalarField>, Vec<usize>> =
+            HashMap::new();
         for (i, generator) in self.generators.iter().enumerate() {
             for dep in generator.dependencies() {
                 generator_indices_by_deps
@@ -520,7 +521,7 @@ impl<C: HaloCurve> Circuit<C> {
         //   newly-populated targets.
         // - Generate a new set of pending generators based on the newly-populated targets.
         while !pending_generator_indices.is_empty() {
-            let mut populated_targets: Vec<Target> = Vec::new();
+            let mut populated_targets: Vec<Target<C::ScalarField>> = Vec::new();
 
             for &generator_idx in &pending_generator_indices {
                 let generator: &dyn WitnessGenerator<C::ScalarField> =
@@ -584,7 +585,7 @@ impl<C: HaloCurve> Circuit<C> {
     fn generate_copies(
         &self,
         witness: &PartialWitness<C::ScalarField>,
-        targets: &[Target],
+        targets: &[Target<C::ScalarField>],
     ) -> PartialWitness<C::ScalarField> {
         let mut result = PartialWitness::new();
 

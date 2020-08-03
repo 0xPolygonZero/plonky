@@ -50,11 +50,11 @@ impl<C: HaloCurve> Gate<C> for ArithmeticGate<C> {
 
     fn evaluate_unfiltered_recursively(
         builder: &mut CircuitBuilder<C>,
-        local_constant_values: &[Target],
-        local_wire_values: &[Target],
-        _right_wire_values: &[Target],
-        _below_wire_values: &[Target],
-    ) -> Vec<Target> {
+        local_constant_values: &[Target<C::ScalarField>],
+        local_wire_values: &[Target<C::ScalarField>],
+        _right_wire_values: &[Target<C::ScalarField>],
+        _below_wire_values: &[Target<C::ScalarField>],
+    ) -> Vec<Target<C::ScalarField>> {
         let const_0 = local_constant_values[Self::PREFIX.len()];
         let const_1 = local_constant_values[Self::PREFIX.len() + 1];
         let multiplicand_0 = local_wire_values[Self::WIRE_MULTIPLICAND_0];
@@ -70,7 +70,7 @@ impl<C: HaloCurve> Gate<C> for ArithmeticGate<C> {
 }
 
 impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for ArithmeticGate<C> {
-    fn dependencies(&self) -> Vec<Target> {
+    fn dependencies(&self) -> Vec<Target<C::ScalarField>> {
         vec![
             Target::Wire(Wire {
                 gate: self.index,

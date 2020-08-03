@@ -76,9 +76,8 @@ impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C>
         vec![
             computed_x3 - x3,
             computed_y3 - y3,
-            scalar_acc_unsigned_new - (scalar_acc_unsigned_old.quadruple()
-                + scalar_bit_1.double()
-                + scalar_bit_0),
+            scalar_acc_unsigned_new
+                - (scalar_acc_unsigned_old.quadruple() + scalar_bit_1.double() + scalar_bit_0),
             scalar_acc_signed_new - (scalar_acc_signed_old.double() + signed_limb),
             scalar_bit_0 * (scalar_bit_0 - one),
             scalar_bit_1 * (scalar_bit_1 - one),
@@ -88,11 +87,11 @@ impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C>
 
     fn evaluate_unfiltered_recursively(
         builder: &mut CircuitBuilder<C>,
-        _local_constant_values: &[Target],
-        local_wire_values: &[Target],
-        right_wire_values: &[Target],
-        below_wire_values: &[Target],
-    ) -> Vec<Target> {
+        _local_constant_values: &[Target<C::ScalarField>],
+        local_wire_values: &[Target<C::ScalarField>],
+        right_wire_values: &[Target<C::ScalarField>],
+        below_wire_values: &[Target<C::ScalarField>],
+    ) -> Vec<Target<C::ScalarField>> {
         let one = builder.one_wire();
         let two = builder.two_wire();
         let four = builder.constant_wire_u32(4);
@@ -156,7 +155,7 @@ impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C>
 impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> WitnessGenerator<C::ScalarField>
     for CurveEndoGate<C, InnerC>
 {
-    fn dependencies(&self) -> Vec<Target> {
+    fn dependencies(&self) -> Vec<Target<C::ScalarField>> {
         vec![
             Target::Wire(Wire {
                 gate: self.index,

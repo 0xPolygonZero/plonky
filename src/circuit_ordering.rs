@@ -1,15 +1,15 @@
-use crate::{HaloCurve, CircuitBuilder, Target, Field, WitnessGenerator, PartialWitness};
+use crate::{CircuitBuilder, Field, HaloCurve, PartialWitness, Target, WitnessGenerator};
 use std::cmp::Ordering;
 
 #[derive(Copy, Clone)]
-pub struct OrderingTarget {
-    pub lt: Target,
-    pub eq: Target,
-    pub gt: Target,
+pub struct OrderingTarget<F: Field> {
+    pub lt: Target<F>,
+    pub eq: Target<F>,
+    pub gt: Target<F>,
 }
 
 impl<C: HaloCurve> CircuitBuilder<C> {
-    pub fn constant_ordering(&mut self, ordering: Ordering) -> OrderingTarget {
+    pub fn constant_ordering(&mut self, ordering: Ordering) -> OrderingTarget<C::ScalarField> {
         match ordering {
             Ordering::Less => self.ordering_lt(),
             Ordering::Equal => self.ordering_eq(),
@@ -17,25 +17,40 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
     }
 
-    pub fn ordering_lt(&mut self) -> OrderingTarget {
+    pub fn ordering_lt(&mut self) -> OrderingTarget<C::ScalarField> {
         let _false = self.zero_wire();
         let _true = self.one_wire();
-        OrderingTarget { lt: _true, eq: _false, gt: _false }
+        OrderingTarget {
+            lt: _true,
+            eq: _false,
+            gt: _false,
+        }
     }
 
-    pub fn ordering_eq(&mut self) -> OrderingTarget {
+    pub fn ordering_eq(&mut self) -> OrderingTarget<C::ScalarField> {
         let _false = self.zero_wire();
         let _true = self.one_wire();
-        OrderingTarget { lt: _false, eq: _true, gt: _false }
+        OrderingTarget {
+            lt: _false,
+            eq: _true,
+            gt: _false,
+        }
     }
 
-    pub fn ordering_gt(&mut self) -> OrderingTarget {
+    pub fn ordering_gt(&mut self) -> OrderingTarget<C::ScalarField> {
         let _false = self.zero_wire();
         let _true = self.one_wire();
-        OrderingTarget { lt: _false, eq: _false, gt: _true }
+        OrderingTarget {
+            lt: _false,
+            eq: _false,
+            gt: _true,
+        }
     }
 
-    pub fn add_virtual_ordering_target(&mut self, validate: bool) -> OrderingTarget {
+    pub fn add_virtual_ordering_target(
+        &mut self,
+        validate: bool,
+    ) -> OrderingTarget<C::ScalarField> {
         let lt = self.add_virtual_target();
         let eq = self.add_virtual_target();
         let gt = self.add_virtual_target();
@@ -48,19 +63,28 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     /// Adds a generator to generate `ordering` by comparing `lhs` and `rhs`.
-    pub(crate) fn add_ordering_generator(&mut self, ordering: OrderingTarget, lhs: Target, rhs: Target) {
-        struct OrderingGenerator {
-            ordering: OrderingTarget,
-            lhs: Target,
-            rhs: Target,
+    pub(crate) fn add_ordering_generator(
+        &mut self,
+        ordering: OrderingTarget<C::ScalarField>,
+        lhs: Target<C::ScalarField>,
+        rhs: Target<C::ScalarField>,
+    ) {
+        struct OrderingGenerator<F: Field> {
+            ordering: OrderingTarget<F>,
+            lhs: Target<F>,
+            rhs: Target<F>,
         }
 
-        impl<F: Field> WitnessGenerator<F> for OrderingGenerator {
-            fn dependencies(&self) -> Vec<Target> {
+        impl<F: Field> WitnessGenerator<F> for OrderingGenerator<F> {
+            fn dependencies(&self) -> Vec<Target<F>> {
                 vec![self.lhs, self.rhs]
             }
 
-            fn generate(&self, _constants: &Vec<Vec<F>>, witness: &PartialWitness<F>) -> PartialWitness<F> {
+            fn generate(
+                &self,
+                _constants: &Vec<Vec<F>>,
+                witness: &PartialWitness<F>,
+            ) -> PartialWitness<F> {
                 let lhs = witness.get_target(self.lhs);
                 let rhs = witness.get_target(self.rhs);
 
@@ -73,7 +97,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         self.add_generator(OrderingGenerator { ordering, lhs, rhs });
     }
 
-    pub fn ordering_assert_valid(&mut self, ordering: OrderingTarget) {
+    pub fn ordering_assert_valid(&mut self, ordering: OrderingTarget<C::ScalarField>) {
         let OrderingTarget { lt, eq, gt } = ordering;
 
         self.assert_binary(lt);

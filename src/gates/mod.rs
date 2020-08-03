@@ -129,11 +129,11 @@ pub fn evaluate_all_constraints_recursively<
     InnerC: HaloCurve<BaseField = C::ScalarField>,
 >(
     builder: &mut CircuitBuilder<C>,
-    local_constant_values: &[Target],
-    local_wire_values: &[Target],
-    right_wire_values: &[Target],
-    below_wire_values: &[Target],
-) -> Vec<Target> {
+    local_constant_values: &[Target<C::ScalarField>],
+    local_wire_values: &[Target<C::ScalarField>],
+    right_wire_values: &[Target<C::ScalarField>],
+    below_wire_values: &[Target<C::ScalarField>],
+) -> Vec<Target<C::ScalarField>> {
     let constraint_sets_per_gate = vec![
         CurveAddGate::<C, InnerC>::evaluate_filtered_recursively(
             builder,
@@ -220,7 +220,10 @@ pub fn evaluate_all_constraints_recursively<
 }
 
 /// Computes `x * (x - 1)`, which should vanish iff `x` is binary.
-fn assert_binary_recursively<C: HaloCurve>(builder: &mut CircuitBuilder<C>, x: Target) -> Target {
+fn assert_binary_recursively<C: HaloCurve>(
+    builder: &mut CircuitBuilder<C>,
+    x: Target<C::ScalarField>,
+) -> Target<C::ScalarField> {
     let one = builder.one_wire();
     let x_minus_one = builder.sub(x, one);
     builder.mul(x, x_minus_one)
@@ -229,9 +232,9 @@ fn assert_binary_recursively<C: HaloCurve>(builder: &mut CircuitBuilder<C>, x: T
 /// Computes `x * y - 1`, which should vanish iff `x` and `y` are inverses.
 fn assert_inverses_recursively<C: HaloCurve>(
     builder: &mut CircuitBuilder<C>,
-    x: Target,
-    y: Target,
-) -> Target {
+    x: Target<C::ScalarField>,
+    y: Target<C::ScalarField>,
+) -> Target<C::ScalarField> {
     let one = builder.one_wire();
     let x_y = builder.mul(x, y);
     builder.sub(x_y, one)
@@ -262,11 +265,11 @@ pub trait Gate<C: HaloCurve>: WitnessGenerator<C::ScalarField> {
 
     fn evaluate_filtered_recursively(
         builder: &mut CircuitBuilder<C>,
-        local_constant_values: &[Target],
-        local_wire_values: &[Target],
-        right_wire_values: &[Target],
-        below_wire_values: &[Target],
-    ) -> Vec<Target> {
+        local_constant_values: &[Target<C::ScalarField>],
+        local_wire_values: &[Target<C::ScalarField>],
+        right_wire_values: &[Target<C::ScalarField>],
+        below_wire_values: &[Target<C::ScalarField>],
+    ) -> Vec<Target<C::ScalarField>> {
         let filter = Self::evaluate_prefix_filter_recursively(builder, local_constant_values);
         let unfiltered = Self::evaluate_unfiltered_recursively(
             builder,
@@ -296,8 +299,8 @@ pub trait Gate<C: HaloCurve>: WitnessGenerator<C::ScalarField> {
 
     fn evaluate_prefix_filter_recursively(
         builder: &mut CircuitBuilder<C>,
-        local_constant_values: &[Target],
-    ) -> Target {
+        local_constant_values: &[Target<C::ScalarField>],
+    ) -> Target<C::ScalarField> {
         let one = builder.one_wire();
         let mut product = one;
         for (i, &bit) in Self::PREFIX.iter().enumerate() {
@@ -322,11 +325,11 @@ pub trait Gate<C: HaloCurve>: WitnessGenerator<C::ScalarField> {
     /// Like the other `evaluate` method, but in the context of a recursive circuit.
     fn evaluate_unfiltered_recursively(
         builder: &mut CircuitBuilder<C>,
-        local_constant_values: &[Target],
-        local_wire_values: &[Target],
-        right_wire_values: &[Target],
-        below_wire_values: &[Target],
-    ) -> Vec<Target>;
+        local_constant_values: &[Target<C::ScalarField>],
+        local_wire_values: &[Target<C::ScalarField>],
+        right_wire_values: &[Target<C::ScalarField>],
+        below_wire_values: &[Target<C::ScalarField>],
+    ) -> Vec<Target<C::ScalarField>>;
 }
 
 /// Test that a gate's constraints are within degree 8n, including the gate prefix filter.

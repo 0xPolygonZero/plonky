@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use crate::{rescue_permutation, AffinePoint, AffinePointTarget, CircuitBuilder, Curve, Field, HaloCurve, ProjectivePoint, Target, RESCUE_SPONGE_RATE, RESCUE_SPONGE_WIDTH};
 
 /// Observes prover messages, and generates challenges by hashing the transcript.
@@ -111,49 +109,58 @@ impl<F: Field> Challenger<F> {
 }
 
 /// A recursive version of `Challenger`.
-pub(crate) struct RecursiveChallenger<C: HaloCurve> {
-    sponge_state: Vec<Target>,
-    input_buffer: Vec<Target>,
-    output_buffer: Vec<Target>,
-    _phantom: PhantomData<C>,
+pub(crate) struct RecursiveChallenger<F: Field> {
+    sponge_state: Vec<Target<F>>,
+    input_buffer: Vec<Target<F>>,
+    output_buffer: Vec<Target<F>>,
 }
 
-impl<C: HaloCurve> RecursiveChallenger<C> {
-    pub(crate) fn new(builder: &mut CircuitBuilder<C>) -> RecursiveChallenger<C> {
+impl<F: Field> RecursiveChallenger<F> {
+    pub(crate) fn new<C: HaloCurve<ScalarField = F>>(
+        builder: &mut CircuitBuilder<C>,
+    ) -> RecursiveChallenger<F> {
         let zero = builder.zero_wire();
         RecursiveChallenger {
             sponge_state: vec![zero; RESCUE_SPONGE_WIDTH],
             input_buffer: Vec::new(),
             output_buffer: Vec::new(),
-            _phantom: PhantomData,
         }
     }
 
-    pub(crate) fn observe_element(&mut self, target: Target) {
+    pub(crate) fn observe_element(&mut self, target: Target<F>) {
         // Any buffered outputs are now invalid, since they wouldn't reflect this input.
         self.output_buffer.clear();
 
         self.input_buffer.push(target);
     }
 
-    pub(crate) fn observe_elements(&mut self, targets: &[Target]) {
+    pub(crate) fn observe_elements(&mut self, targets: &[Target<F>]) {
         for &target in targets {
             self.observe_element(target);
         }
     }
 
-    pub(crate) fn observe_affine_point(&mut self, point: AffinePointTarget) {
+    pub(crate) fn observe_affine_point<C: Curve<BaseField = F>>(
+        &mut self,
+        point: AffinePointTarget<C>,
+    ) {
         self.observe_element(point.x);
         self.observe_element(point.y);
     }
 
-    pub(crate) fn observe_affine_points(&mut self, points: &[AffinePointTarget]) {
+    pub(crate) fn observe_affine_points<C: Curve<BaseField = F>>(
+        &mut self,
+        points: &[AffinePointTarget<C>],
+    ) {
         for &point in points {
             self.observe_affine_point(point);
         }
     }
 
-    pub(crate) fn get_challenge(&mut self, builder: &mut CircuitBuilder<C>) -> Target {
+    pub(crate) fn get_challenge<C: HaloCurve<ScalarField = F>>(
+        &mut self,
+        builder: &mut CircuitBuilder<C>,
+    ) -> Target<C::ScalarField> {
         self.absorb_buffered_inputs(builder);
 
         if self.output_buffer.is_empty() {
@@ -167,14 +174,21 @@ impl<C: HaloCurve> RecursiveChallenger<C> {
             .expect("Output buffer should be non-empty")
     }
 
-    pub(crate) fn get_2_challenges(&mut self, builder: &mut CircuitBuilder<C>) -> (Target, Target) {
+    pub(crate) fn get_2_challenges<C: HaloCurve<ScalarField = F>>(
+        &mut self,
+        builder: &mut CircuitBuilder<C>,
+    ) -> (Target<C::ScalarField>, Target<C::ScalarField>) {
         (self.get_challenge(builder), self.get_challenge(builder))
     }
 
-    pub(crate) fn get_3_challenges(
+    pub(crate) fn get_3_challenges<C: HaloCurve<ScalarField = F>>(
         &mut self,
         builder: &mut CircuitBuilder<C>,
-    ) -> (Target, Target, Target) {
+    ) -> (
+        Target<C::ScalarField>,
+        Target<C::ScalarField>,
+        Target<C::ScalarField>,
+    ) {
         (
             self.get_challenge(builder),
             self.get_challenge(builder),
@@ -183,16 +197,19 @@ impl<C: HaloCurve> RecursiveChallenger<C> {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn get_n_challenges(
+    pub(crate) fn get_n_challenges<C: HaloCurve<ScalarField = F>>(
         &mut self,
         builder: &mut CircuitBuilder<C>,
         n: usize,
-    ) -> Vec<Target> {
+    ) -> Vec<Target<C::ScalarField>> {
         (0..n).map(|_| self.get_challenge(builder)).collect()
     }
 
     /// Absorb any buffered inputs. After calling this, the input buffer will be empty.
-    fn absorb_buffered_inputs(&mut self, builder: &mut CircuitBuilder<C>) {
+    fn absorb_buffered_inputs<C: HaloCurve<ScalarField = F>>(
+        &mut self,
+        builder: &mut CircuitBuilder<C>,
+    ) {
         for input_chunk in self.input_buffer.chunks(RESCUE_SPONGE_RATE) {
             // Add the inputs to our sponge state.
             for (i, &input) in input_chunk.iter().enumerate() {
@@ -240,7 +257,7 @@ mod tests {
 
         let mut builder = CircuitBuilder::<C>::new(128);
         let mut recursive_challenger = RecursiveChallenger::new(&mut builder);
-        let mut recursive_outputs_per_round: Vec<Vec<Target>> = Vec::new();
+        let mut recursive_outputs_per_round: Vec<Vec<Target<C::BaseField>>> = Vec::new();
         for (r, inputs) in inputs_per_round.iter().enumerate() {
             recursive_challenger.observe_elements(&builder.constant_wires(inputs));
             recursive_outputs_per_round.push(

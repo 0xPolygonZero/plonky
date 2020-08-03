@@ -59,21 +59,21 @@ impl<C: HaloCurve> Gate<C> for RescueStepBGate<C> {
 
     fn evaluate_unfiltered_recursively(
         builder: &mut CircuitBuilder<C>,
-        local_constant_values: &[Target],
-        local_wire_values: &[Target],
-        right_wire_values: &[Target],
-        _below_wire_values: &[Target],
-    ) -> Vec<Target> {
-        let ins: Vec<Target> = (0..RESCUE_SPONGE_WIDTH)
+        local_constant_values: &[Target<C::ScalarField>],
+        local_wire_values: &[Target<C::ScalarField>],
+        right_wire_values: &[Target<C::ScalarField>],
+        _below_wire_values: &[Target<C::ScalarField>],
+    ) -> Vec<Target<C::ScalarField>> {
+        let ins: Vec<Target<C::ScalarField>> = (0..RESCUE_SPONGE_WIDTH)
             .map(|i| local_wire_values[Self::wire_acc(i)])
             .collect();
 
-        let exps: Vec<Target> = ins
+        let exps: Vec<Target<C::ScalarField>> = ins
             .into_iter()
             .map(|n| builder.exp_constant_usize(n, 5))
             .collect();
 
-        let outs: Vec<Target> = (0..RESCUE_SPONGE_WIDTH)
+        let outs: Vec<Target<C::ScalarField>> = (0..RESCUE_SPONGE_WIDTH)
             .map(|i| right_wire_values[Self::wire_acc(i)])
             .collect();
 
@@ -93,7 +93,7 @@ impl<C: HaloCurve> Gate<C> for RescueStepBGate<C> {
 }
 
 impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for RescueStepBGate<C> {
-    fn dependencies(&self) -> Vec<Target> {
+    fn dependencies(&self) -> Vec<Target<C::ScalarField>> {
         (0..RESCUE_SPONGE_WIDTH)
             .map(|i| {
                 Target::Wire(Wire {

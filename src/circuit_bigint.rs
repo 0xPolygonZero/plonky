@@ -1,6 +1,6 @@
-use crate::{field_to_biguint, HaloCurve, CircuitBuilder, Target, OrderingTarget, util::pad_to_multiple_usize, Base4SumGate, Field, WitnessGenerator, PartialWitness, BoundedTarget, biguint_to_field};
-use num::{One, BigUint, Zero, Integer};
 use crate::util::ceil_div_usize;
+use crate::{biguint_to_field, field_to_biguint, util::pad_to_multiple_usize, Base4SumGate, BoundedTarget, CircuitBuilder, Field, HaloCurve, OrderingTarget, PartialWitness, Target, WitnessGenerator};
+use num::{BigUint, Integer, One, Zero};
 
 /// We use 86-bit limbs so that
 /// - Any ~256 bit field element can be encoded as three limbs
@@ -12,18 +12,18 @@ pub(crate) const LIMB_BITS: usize = LIMB_DIBITS * 2;
 
 /// Targets representing an unsigned big integer.
 #[derive(Clone)]
-pub struct BigIntTarget {
-    pub limbs: Vec<Target>,
+pub struct BigIntTarget<F: Field> {
+    pub limbs: Vec<Target<F>>,
     /// An inclusive upper bound on this number.
     pub max: BigUint,
 }
 
-impl BigIntTarget {
-    pub fn new_bounded(limbs: Vec<Target>, max: BigUint) -> Self {
+impl<F: Field> BigIntTarget<F> {
+    pub fn new_bounded(limbs: Vec<Target<F>>, max: BigUint) -> Self {
         Self { limbs, max }
     }
 
-    pub fn new_unbounded(limbs: Vec<Target>) -> Self {
+    pub fn new_unbounded(limbs: Vec<Target<F>>) -> Self {
         let bits = LIMB_BITS * limbs.len();
         let one = BigUint::one();
         let max = (&one << bits) - one;
@@ -41,19 +41,26 @@ impl BigIntTarget {
         self.limbs.len()
     }
 
-    pub fn get_limb(&self, index: usize) -> Target {
+    pub fn get_limb(&self, index: usize) -> Target<F> {
         self.limbs[index]
     }
 
-    pub fn get_bounded_limb(&self, index: usize) -> BoundedTarget {
+    pub fn get_bounded_limb(&self, index: usize) -> BoundedTarget<F> {
         // We shift self.max to get the max value of this limb AND any more significant limbs.
         let max_high_limbs = &self.max >> LIMB_BITS * index;
         let max_any_limb = (BigUint::one() << LIMB_BITS) - BigUint::one();
         let max_this_limb = max_high_limbs.min(max_any_limb);
-        BoundedTarget { target: self.get_limb(index), max: max_this_limb }
+        BoundedTarget {
+            target: self.get_limb(index),
+            max: max_this_limb,
+        }
     }
 
-    fn get_bounded_limb_or_default(&self, index: usize, default: BoundedTarget) -> BoundedTarget {
+    fn get_bounded_limb_or_default(
+        &self,
+        index: usize,
+        default: BoundedTarget<F>,
+    ) -> BoundedTarget<F> {
         if index < self.num_limbs() {
             self.get_bounded_limb(index)
         } else {
@@ -63,17 +70,20 @@ impl BigIntTarget {
 
     /// Return `(first, rest)`, where `first` is this bigint's least significant limb, and `rest` is
     /// a bigint consisting of the remaining limbs.
-    fn split_smallest_limb(&self) -> (Target, Self) {
+    fn split_smallest_limb(&self) -> (Target<F>, Self) {
         let first = self.get_limb(0);
         let rest_limbs = self.limbs[1..].to_vec();
         let rest_max = &self.max >> LIMB_BITS;
-        let rest = BigIntTarget { limbs: rest_limbs, max: rest_max };
+        let rest = BigIntTarget {
+            limbs: rest_limbs,
+            max: rest_max,
+        };
         (first, rest)
     }
 }
 
-impl From<BoundedTarget> for BigIntTarget {
-    fn from(bounded_target: BoundedTarget) -> Self {
+impl<F: Field> From<BoundedTarget<F>> for BigIntTarget<F> {
+    fn from(bounded_target: BoundedTarget<F>) -> Self {
         Self {
             limbs: vec![bounded_target.target],
             max: bounded_target.max,
@@ -90,7 +100,11 @@ pub(crate) fn biguint_to_limbs<F: Field>(biguint: &BigUint) -> Vec<F> {
 }
 
 impl<C: HaloCurve> CircuitBuilder<C> {
-    pub fn add_virtual_bigint_target(&mut self, max: &BigUint, validate: bool) -> BigIntTarget {
+    pub fn add_virtual_bigint_target(
+        &mut self,
+        max: &BigUint,
+        validate: bool,
+    ) -> BigIntTarget<C::ScalarField> {
         let num_limbs = ceil_div_usize(max.bits(), LIMB_BITS);
         let limbs = self.add_virtual_targets(num_limbs);
 
@@ -101,18 +115,28 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             }
         }
 
-        BigIntTarget { limbs, max: max.clone() }
+        BigIntTarget {
+            limbs,
+            max: max.clone(),
+        }
     }
 
-    pub fn constant_bigint(&mut self, value: &BigUint) -> BigIntTarget {
+    pub fn constant_bigint(&mut self, value: &BigUint) -> BigIntTarget<C::ScalarField> {
         let limbs = biguint_to_limbs(value)
             .into_iter()
             .map(|limb| self.constant_wire(limb))
             .collect();
-        BigIntTarget { limbs, max: value.clone() }
+        BigIntTarget {
+            limbs,
+            max: value.clone(),
+        }
     }
 
-    pub fn bigint_cmp(&mut self, x: &BigIntTarget, y: &BigIntTarget) -> OrderingTarget {
+    pub fn bigint_cmp(
+        &mut self,
+        x: &BigIntTarget<C::ScalarField>,
+        y: &BigIntTarget<C::ScalarField>,
+    ) -> OrderingTarget<C::ScalarField> {
         // We test each pair of limbs for equality. Then we find the most significant pair that
         // does not match, and compare those limbs. A roughly similar approach was described in
         // https://github.com/mir-protocol/r1cs-workshop/blob/master/workshop.pdf
@@ -137,7 +161,11 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         self.limb_cmp(x_diff, y_diff)
     }
 
-    fn limb_cmp(&mut self, x: Target, y: Target) -> OrderingTarget {
+    fn limb_cmp(
+        &mut self,
+        x: Target<C::ScalarField>,
+        y: Target<C::ScalarField>,
+    ) -> OrderingTarget<C::ScalarField> {
         let ordering = self.add_virtual_ordering_target(true);
         let OrderingTarget { gt, eq, lt } = ordering;
         self.add_ordering_generator(ordering, x, y);
@@ -168,16 +196,25 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         ordering
     }
 
-    pub fn bigint_add(&mut self, x: &BigIntTarget, y: &BigIntTarget) -> BigIntTarget {
+    pub fn bigint_add(
+        &mut self,
+        x: &BigIntTarget<C::ScalarField>,
+        y: &BigIntTarget<C::ScalarField>,
+    ) -> BigIntTarget<C::ScalarField> {
         self.bigint_add_many(&[x.clone(), y.clone()])
     }
 
-    pub fn bigint_add_many(&mut self, terms: &[BigIntTarget]) -> BigIntTarget {
-        let num_limbs = terms.iter()
+    pub fn bigint_add_many(
+        &mut self,
+        terms: &[BigIntTarget<C::ScalarField>],
+    ) -> BigIntTarget<C::ScalarField> {
+        let num_limbs = terms
+            .iter()
             .map(BigIntTarget::num_limbs)
-            .max().expect("No operands");
+            .max()
+            .expect("No operands");
 
-        let mut carry: BoundedTarget = self.zero_bounded_target();
+        let mut carry: BoundedTarget<C::ScalarField> = self.zero_bounded_target();
         let mut result_limbs = Vec::new();
         for i in 0..num_limbs {
             let mut bounded_limbs = vec![carry];
@@ -194,12 +231,15 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             // The first limb (or zero if there are no limbs) becomes a limb of the result.
             result_limbs.push(
-                sum_of_limbs.limbs.get(0).cloned()
-                    .unwrap_or(self.zero_wire()));
+                sum_of_limbs
+                    .limbs
+                    .get(0)
+                    .cloned()
+                    .unwrap_or(self.zero_wire()),
+            );
 
             // The second limb (or zero if there isn't one) becomes our carry.
-            carry = sum_of_limbs.get_bounded_limb_or_default(
-                1, self.zero_bounded_target());
+            carry = sum_of_limbs.get_bounded_limb_or_default(1, self.zero_bounded_target());
         }
 
         if !carry.max.is_zero() {
@@ -207,14 +247,18 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
 
         let max = terms.iter().map(|t| &t.max).sum();
-        BigIntTarget { limbs: result_limbs, max }
+        BigIntTarget {
+            limbs: result_limbs,
+            max,
+        }
     }
 
-    fn sum_limbs(&mut self, limbs: &[BoundedTarget]) -> BigIntTarget {
-        let nonzero_limbs: Vec<BoundedTarget> = limbs.iter()
-            .cloned()
-            .filter(|l| !l.max.is_zero())
-            .collect();
+    fn sum_limbs(
+        &mut self,
+        limbs: &[BoundedTarget<C::ScalarField>],
+    ) -> BigIntTarget<C::ScalarField> {
+        let nonzero_limbs: Vec<BoundedTarget<C::ScalarField>> =
+            limbs.iter().cloned().filter(|l| !l.max.is_zero()).collect();
 
         if nonzero_limbs.is_empty() {
             return BigIntTarget::zero();
@@ -225,7 +269,8 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
 
         // Convert to a Vec of unbounded limbs.
-        let nonzero_limbs: Vec<Target> = nonzero_limbs.iter()
+        let nonzero_limbs: Vec<Target<C::ScalarField>> = nonzero_limbs
+            .iter()
             .map(|bounded_limb| bounded_limb.target)
             .collect();
 
@@ -240,18 +285,25 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     /// Split the given bounded target into a `BigIntTarget`.
-    fn target_to_bigint(&mut self, input: &BoundedTarget) -> BigIntTarget {
-        struct SplitGenerator {
-            input: BoundedTarget,
-            output: BigIntTarget,
+    fn target_to_bigint(
+        &mut self,
+        input: &BoundedTarget<C::ScalarField>,
+    ) -> BigIntTarget<C::ScalarField> {
+        struct SplitGenerator<F: Field> {
+            input: BoundedTarget<F>,
+            output: BigIntTarget<F>,
         }
 
-        impl<F: Field> WitnessGenerator<F> for SplitGenerator {
-            fn dependencies(&self) -> Vec<Target> {
+        impl<F: Field> WitnessGenerator<F> for SplitGenerator<F> {
+            fn dependencies(&self) -> Vec<Target<F>> {
                 vec![self.input.target]
             }
 
-            fn generate(&self, _constants: &Vec<Vec<F>>, witness: &PartialWitness<F>) -> PartialWitness<F> {
+            fn generate(
+                &self,
+                _constants: &Vec<Vec<F>>,
+                witness: &PartialWitness<F>,
+            ) -> PartialWitness<F> {
                 let value = witness.get_target(self.input.target);
 
                 let mut result = PartialWitness::new();
@@ -261,7 +313,10 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
 
         let output = self.add_virtual_bigint_target(&input.max, true);
-        self.add_generator(SplitGenerator { input: input.clone(), output: output.clone() });
+        self.add_generator(SplitGenerator {
+            input: input.clone(),
+            output: output.clone(),
+        });
 
         // Check that a weighted sum of the limbs matches the original input.
         let joined = self.bigint_to_target(&output);
@@ -271,22 +326,31 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     /// Join a `BigIntTarget` into a `BoundedTarget`.
-    fn bigint_to_target(&mut self, bigint: &BigIntTarget) -> BoundedTarget {
+    fn bigint_to_target(
+        &mut self,
+        bigint: &BigIntTarget<C::ScalarField>,
+    ) -> BoundedTarget<C::ScalarField> {
         let mut sum = self.zero_wire();
-        let limb_multiplier = self.constant_wire(
-            C::ScalarField::TWO.exp_usize(LIMB_BITS));
+        let limb_multiplier = self.constant_wire(C::ScalarField::TWO.exp_usize(LIMB_BITS));
         for &limb in bigint.limbs.iter().rev() {
             sum = self.mul_add(sum, limb_multiplier, limb);
         }
-        BoundedTarget { target: sum, max: bigint.max.clone() }
+        BoundedTarget {
+            target: sum,
+            max: bigint.max.clone(),
+        }
     }
 
-    pub fn bigint_mul(&mut self, x: &BigIntTarget, y: &BigIntTarget) -> BigIntTarget {
+    pub fn bigint_mul(
+        &mut self,
+        x: &BigIntTarget<C::ScalarField>,
+        y: &BigIntTarget<C::ScalarField>,
+    ) -> BigIntTarget<C::ScalarField> {
         let x_n = x.num_limbs();
         let y_n = y.num_limbs();
 
         let mut result_digits = Vec::new();
-        let mut carry: BigIntTarget = BigIntTarget::zero();
+        let mut carry: BigIntTarget<C::ScalarField> = BigIntTarget::zero();
 
         // We want to enumerate the cartesian product of x's and y's limbs, ordered from least
         // significant to most significant. We will do so by enumerating the possible "shifts",
@@ -300,8 +364,8 @@ impl<C: HaloCurve> CircuitBuilder<C> {
                     if x_index + y_index == shift {
                         let x_limb = x.get_bounded_limb(x_index);
                         let y_limb = y.get_bounded_limb(y_index);
-                        sum_of_limb_products = self.bounded_mul_add(
-                            &x_limb, &y_limb, &sum_of_limb_products);
+                        sum_of_limb_products =
+                            self.bounded_mul_add(&x_limb, &y_limb, &sum_of_limb_products);
                     }
                 }
             }
@@ -318,15 +382,26 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
 
         let max = &x.max * &y.max;
-        BigIntTarget { limbs: result_digits, max }
+        BigIntTarget {
+            limbs: result_digits,
+            max,
+        }
     }
 
-    pub fn bigint_div(&mut self, x: &BigIntTarget, y: &BigIntTarget) -> BigIntTarget {
+    pub fn bigint_div(
+        &mut self,
+        x: &BigIntTarget<C::ScalarField>,
+        y: &BigIntTarget<C::ScalarField>,
+    ) -> BigIntTarget<C::ScalarField> {
         let (div, _rem) = self.bigint_div_rem(x, y);
         div
     }
 
-    pub fn bigint_rem(&mut self, x: &BigIntTarget, y: &BigIntTarget) -> BigIntTarget {
+    pub fn bigint_rem(
+        &mut self,
+        x: &BigIntTarget<C::ScalarField>,
+        y: &BigIntTarget<C::ScalarField>,
+    ) -> BigIntTarget<C::ScalarField> {
         let (_div, rem) = self.bigint_div_rem(x, y);
         rem
     }
@@ -334,22 +409,26 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     /// Returns `(x / y, x % y)`.
     pub fn bigint_div_rem(
         &mut self,
-        x: &BigIntTarget,
-        y: &BigIntTarget,
-    ) -> (BigIntTarget, BigIntTarget) {
-        struct DivRemGenerator {
-            x: BigIntTarget,
-            y: BigIntTarget,
-            div: BigIntTarget,
-            rem: BigIntTarget,
+        x: &BigIntTarget<C::ScalarField>,
+        y: &BigIntTarget<C::ScalarField>,
+    ) -> (BigIntTarget<C::ScalarField>, BigIntTarget<C::ScalarField>) {
+        struct DivRemGenerator<F: Field> {
+            x: BigIntTarget<F>,
+            y: BigIntTarget<F>,
+            div: BigIntTarget<F>,
+            rem: BigIntTarget<F>,
         }
 
-        impl<F: Field> WitnessGenerator<F> for DivRemGenerator {
-            fn dependencies(&self) -> Vec<Target> {
+        impl<F: Field> WitnessGenerator<F> for DivRemGenerator<F> {
+            fn dependencies(&self) -> Vec<Target<F>> {
                 [self.x.limbs.as_slice(), self.y.limbs.as_slice()].concat()
             }
 
-            fn generate(&self, _constants: &Vec<Vec<F>>, witness: &PartialWitness<F>) -> PartialWitness<F> {
+            fn generate(
+                &self,
+                _constants: &Vec<Vec<F>>,
+                witness: &PartialWitness<F>,
+            ) -> PartialWitness<F> {
                 let x = witness.get_bigint_target(&self.x);
                 let y = witness.get_bigint_target(&self.y);
                 let (div, rem) = x.div_rem(&y);
@@ -385,7 +464,11 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     /// Assert that the two given bigints encode the same integer.
-    pub fn copy_bigint(&mut self, lhs: &BigIntTarget, rhs: &BigIntTarget) {
+    pub fn copy_bigint(
+        &mut self,
+        lhs: &BigIntTarget<C::ScalarField>,
+        rhs: &BigIntTarget<C::ScalarField>,
+    ) {
         // The number of limbs may differ, in which case we assert equality for any limb indices
         // which are valid for both bigints, then assert that any "extra" limbs (present in one
         // bigint but not the other) are zero.
@@ -403,7 +486,11 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
     }
 
-    fn bigint_pad_limbs(&mut self, x: &BigIntTarget, num_limbs: usize) -> BigIntTarget {
+    fn bigint_pad_limbs(
+        &mut self,
+        x: &BigIntTarget<C::ScalarField>,
+        num_limbs: usize,
+    ) -> BigIntTarget<C::ScalarField> {
         assert!(x.limbs.len() <= num_limbs);
         let mut result = x.clone();
         result.limbs.resize(num_limbs, self.zero_wire());

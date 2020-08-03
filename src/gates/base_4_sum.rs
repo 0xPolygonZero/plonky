@@ -63,16 +63,16 @@ impl<C: HaloCurve> Gate<C> for Base4SumGate<C> {
 
     fn evaluate_unfiltered_recursively(
         builder: &mut CircuitBuilder<C>,
-        _local_constant_values: &[Target],
-        local_wire_values: &[Target],
-        _right_wire_values: &[Target],
-        _below_wire_values: &[Target],
-    ) -> Vec<Target> {
+        _local_constant_values: &[Target<C::ScalarField>],
+        local_wire_values: &[Target<C::ScalarField>],
+        _right_wire_values: &[Target<C::ScalarField>],
+        _below_wire_values: &[Target<C::ScalarField>],
+    ) -> Vec<Target<C::ScalarField>> {
         let four = builder.constant_wire_u32(4);
 
         let acc_old = local_wire_values[Self::WIRE_ACC_OLD];
         let acc_new = local_wire_values[Self::WIRE_ACC_NEW];
-        let limbs: Vec<Target> = (0..Self::NUM_LIMBS)
+        let limbs: Vec<Target<C::ScalarField>> = (0..Self::NUM_LIMBS)
             .map(|i| local_wire_values[Self::wire_limb(i)])
             .collect();
 
@@ -97,7 +97,7 @@ impl<C: HaloCurve> Gate<C> for Base4SumGate<C> {
 }
 
 impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for Base4SumGate<C> {
-    fn dependencies(&self) -> Vec<Target> {
+    fn dependencies(&self) -> Vec<Target<C::ScalarField>> {
         Vec::new()
     }
 

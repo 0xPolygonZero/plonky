@@ -37,17 +37,17 @@ impl<C: HaloCurve> Gate<C> for BufferGate<C> {
 
     fn evaluate_unfiltered_recursively(
         _builder: &mut CircuitBuilder<C>,
-        _local_constant_values: &[Target],
-        _local_wire_values: &[Target],
-        _right_wire_values: &[Target],
-        _below_wire_values: &[Target],
-    ) -> Vec<Target> {
+        _local_constant_values: &[Target<C::ScalarField>],
+        _local_wire_values: &[Target<C::ScalarField>],
+        _right_wire_values: &[Target<C::ScalarField>],
+        _below_wire_values: &[Target<C::ScalarField>],
+    ) -> Vec<Target<C::ScalarField>> {
         Vec::new()
     }
 }
 
 impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for BufferGate<C> {
-    fn dependencies(&self) -> Vec<Target> {
+    fn dependencies(&self) -> Vec<Target<C::ScalarField>> {
         Vec::new()
     }
 

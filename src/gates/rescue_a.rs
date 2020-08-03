@@ -66,20 +66,20 @@ impl<C: HaloCurve> Gate<C> for RescueStepAGate<C> {
 
     fn evaluate_unfiltered_recursively(
         builder: &mut CircuitBuilder<C>,
-        local_constant_values: &[Target],
-        local_wire_values: &[Target],
-        right_wire_values: &[Target],
-        _below_wire_values: &[Target],
-    ) -> Vec<Target> {
-        let ins: Vec<Target> = (0..RESCUE_SPONGE_WIDTH)
+        local_constant_values: &[Target<C::ScalarField>],
+        local_wire_values: &[Target<C::ScalarField>],
+        right_wire_values: &[Target<C::ScalarField>],
+        _below_wire_values: &[Target<C::ScalarField>],
+    ) -> Vec<Target<C::ScalarField>> {
+        let ins: Vec<Target<C::ScalarField>> = (0..RESCUE_SPONGE_WIDTH)
             .map(|i| local_wire_values[Self::wire_acc(i)])
             .collect();
 
-        let outs: Vec<Target> = (0..RESCUE_SPONGE_WIDTH)
+        let outs: Vec<Target<C::ScalarField>> = (0..RESCUE_SPONGE_WIDTH)
             .map(|i| right_wire_values[Self::wire_acc(i)])
             .collect();
 
-        let roots: Vec<Target> = (0..RESCUE_SPONGE_WIDTH)
+        let roots: Vec<Target<C::ScalarField>> = (0..RESCUE_SPONGE_WIDTH)
             .map(|i| local_wire_values[Self::wire_root(i)])
             .collect();
 
@@ -102,7 +102,7 @@ impl<C: HaloCurve> Gate<C> for RescueStepAGate<C> {
 }
 
 impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for RescueStepAGate<C> {
-    fn dependencies(&self) -> Vec<Target> {
+    fn dependencies(&self) -> Vec<Target<C::ScalarField>> {
         (0..RESCUE_SPONGE_WIDTH)
             .map(|i| {
                 Target::Wire(Wire {

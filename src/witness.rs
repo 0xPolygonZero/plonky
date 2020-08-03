@@ -4,7 +4,7 @@ use num::{BigUint, Zero};
 use std::{cmp::Ordering, collections::HashMap};
 
 pub struct PartialWitness<F: Field> {
-    wire_values: HashMap<Target, F>,
+    wire_values: HashMap<Target<F>, F>,
 }
 
 impl<F: Field> PartialWitness<F> {
@@ -18,7 +18,7 @@ impl<F: Field> PartialWitness<F> {
         self.wire_values.is_empty()
     }
 
-    pub fn contains_target(&self, target: Target) -> bool {
+    pub fn contains_target(&self, target: Target<F>) -> bool {
         self.wire_values.contains_key(&target)
     }
 
@@ -26,32 +26,32 @@ impl<F: Field> PartialWitness<F> {
         self.contains_target(Target::Wire(wire))
     }
 
-    pub fn contains_all_targets(&self, targets: &[Target]) -> bool {
+    pub fn contains_all_targets(&self, targets: &[Target<F>]) -> bool {
         targets.iter().all(|&t| self.contains_target(t))
     }
 
-    pub fn all_populated_targets(&self) -> Vec<Target> {
+    pub fn all_populated_targets(&self) -> Vec<Target<F>> {
         self.wire_values.keys().cloned().collect()
     }
 
-    pub fn get_target(&self, target: Target) -> F {
+    pub fn get_target(&self, target: Target<F>) -> F {
         self.wire_values[&target]
     }
 
-    pub fn get_targets(&self, targets: &[Target]) -> Vec<F> {
+    pub fn get_targets(&self, targets: &[Target<F>]) -> Vec<F> {
         targets.iter().map(|&t| self.get_target(t)).collect()
     }
 
     pub fn get_point_target<InnerC: Curve<BaseField = F>>(
         &self,
-        target: AffinePointTarget,
+        target: AffinePointTarget<InnerC>,
     ) -> AffinePoint<InnerC> {
         let x = self.get_target(target.x);
         let y = self.get_target(target.y);
         AffinePoint::nonzero(x, y)
     }
 
-    pub fn get_ordering_target(&self, target: OrderingTarget) -> Ordering {
+    pub fn get_ordering_target(&self, target: OrderingTarget<F>) -> Ordering {
         let OrderingTarget { lt, eq, gt } = target;
         let lt_eq_gt = &self.get_targets(&[lt, eq, gt]);
 
@@ -68,7 +68,7 @@ impl<F: Field> PartialWitness<F> {
         panic!("Invalid ordering values")
     }
 
-    pub fn set_ordering_target(&mut self, target: OrderingTarget, value: Ordering) {
+    pub fn set_ordering_target(&mut self, target: OrderingTarget<F>, value: Ordering) {
         let OrderingTarget { lt, eq, gt } = target;
         let values = match value {
             Ordering::Less => [F::ONE, F::ZERO, F::ZERO],
@@ -78,7 +78,7 @@ impl<F: Field> PartialWitness<F> {
         self.set_targets(&[lt, eq, gt], &values);
     }
 
-    pub fn get_bigint_target(&self, target: &BigIntTarget) -> BigUint {
+    pub fn get_bigint_target(&self, target: &BigIntTarget<F>) -> BigUint {
         let mut result = BigUint::zero();
         for (i, &limb) in target.limbs.iter().enumerate() {
             let limb_value = field_to_biguint(self.get_target(limb));
@@ -87,7 +87,7 @@ impl<F: Field> PartialWitness<F> {
         result
     }
 
-    pub fn set_bigint_target(&mut self, target: &BigIntTarget, value: &BigUint) {
+    pub fn set_bigint_target(&mut self, target: &BigIntTarget<F>, value: &BigUint) {
         let mut value_limbs = biguint_to_limbs(value);
 
         debug_assert!(
@@ -102,11 +102,15 @@ impl<F: Field> PartialWitness<F> {
         self.set_targets(&target.limbs, &value_limbs);
     }
 
-    pub fn get_foreign_field_target<FF: Field>(&self, target: &ForeignFieldTarget) -> FF {
+    pub fn get_foreign_field_target<FF: Field>(&self, target: &ForeignFieldTarget<F, FF>) -> FF {
         biguint_to_field(self.get_bigint_target(&target.value))
     }
 
-    pub fn set_foreign_field_target<FF: Field>(&mut self, target: &ForeignFieldTarget, value: FF) {
+    pub fn set_foreign_field_target<FF: Field>(
+        &mut self,
+        target: &ForeignFieldTarget<F, FF>,
+        value: FF,
+    ) {
         self.set_bigint_target(&target.value, &field_to_biguint(value))
     }
 
@@ -114,7 +118,7 @@ impl<F: Field> PartialWitness<F> {
         self.get_target(Target::Wire(wire))
     }
 
-    pub fn set_target(&mut self, target: Target, value: F) {
+    pub fn set_target(&mut self, target: Target<F>, value: F) {
         let opt_old_value = self.wire_values.insert(target, value);
         if let Some(old_value) = opt_old_value {
             debug_assert_eq!(
@@ -125,7 +129,7 @@ impl<F: Field> PartialWitness<F> {
         }
     }
 
-    pub fn set_targets(&mut self, targets: &[Target], values: &[F]) {
+    pub fn set_targets(&mut self, targets: &[Target<F>], values: &[F]) {
         debug_assert_eq!(targets.len(), values.len());
         targets
             .iter()
@@ -135,7 +139,7 @@ impl<F: Field> PartialWitness<F> {
 
     pub fn set_point_target<InnerC: Curve<BaseField = F>>(
         &mut self,
-        point_target: AffinePointTarget,
+        point_target: AffinePointTarget<InnerC>,
         point: AffinePoint<InnerC>,
     ) {
         self.set_target(point_target.x, point.x);
@@ -144,7 +148,7 @@ impl<F: Field> PartialWitness<F> {
 
     pub fn set_point_targets<InnerC: Curve<BaseField = F>>(
         &mut self,
-        point_targets: &[AffinePointTarget],
+        point_targets: &[AffinePointTarget<InnerC>],
         points: &[AffinePoint<InnerC>],
     ) {
         debug_assert_eq!(point_targets.len(), points.len());
@@ -158,7 +162,7 @@ impl<F: Field> PartialWitness<F> {
         self.set_target(Target::Wire(wire), value);
     }
 
-    pub fn set_public_input(&mut self, pi: PublicInput, value: F) {
+    pub fn set_public_input(&mut self, pi: PublicInput<F>, value: F) {
         self.set_wire(pi.original_wire(), value);
         self.set_target(pi.routable_target(), value);
     }
@@ -215,7 +219,7 @@ impl<F: Field> Witness<F> {
 }
 
 pub trait WitnessGenerator<F: Field>: 'static + Sync {
-    fn dependencies(&self) -> Vec<Target>;
+    fn dependencies(&self) -> Vec<Target<F>>;
 
     /// Given a partial witness, return any newly generated values. The caller will merge them in.
     fn generate(&self, constants: &Vec<Vec<F>>, witness: &PartialWitness<F>) -> PartialWitness<F>;
