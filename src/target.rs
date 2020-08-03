@@ -64,34 +64,3 @@ impl PublicInput {
         Target::Wire(Wire { gate, input })
     }
 }
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub struct AffinePointTarget {
-    pub x: Target,
-    pub y: Target,
-}
-
-impl AffinePointTarget {
-    pub fn to_vec(&self) -> Vec<Target> {
-        vec![self.x, self.y]
-    }
-}
-
-/// Represents a scalar * point multiplication operation.
-pub struct CurveMulOp {
-    pub scalar: Target,
-    pub point: AffinePointTarget,
-}
-
-pub struct CurveMulEndoResult {
-    pub mul_result: AffinePointTarget,
-    pub actual_scalar: Target,
-}
-
-pub struct CurveMsmEndoResult {
-    pub msm_result: AffinePointTarget,
-    /// While `msm` computes a sum of `[s] P` terms, `msm_endo` computes a sum of `[n(s)] P` terms
-    /// for some injective `n`. Here we return each `n(s)`, i.e., the scalar by which the point was
-    /// actually multiplied.
-    pub actual_scalars: Vec<Target>,
-}
