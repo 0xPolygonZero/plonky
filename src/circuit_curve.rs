@@ -14,7 +14,9 @@ impl<C: Curve> AffinePointTarget<C> {
     }
 }
 
-/// Represents a scalar * point multiplication operation.
+/// Represents a scalar * point multiplication operation on `InnerC`.
+/// `scalar` is modelled here in the "wrong" field `InnerC::BaseField = C::ScalarField` for coherence.
+/// Thus, all scalar operations should be done preemptively in the correct field `InnerC::ScalarField = C::BaseField".
 pub struct CurveMulOp<C: Curve, InnerC: Curve<BaseField = C::ScalarField>> {
     pub scalar: Target<C::ScalarField>,
     pub point: AffinePointTarget<InnerC>,

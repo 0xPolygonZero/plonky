@@ -26,7 +26,7 @@ impl Wire {
     }
 }
 
-/// A routing target.
+/// A routing target over a field `F`.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum Target<F: Field> {
     VirtualTarget(VirtualTarget),

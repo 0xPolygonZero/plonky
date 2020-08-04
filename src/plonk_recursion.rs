@@ -6,6 +6,7 @@ use crate::util::ceil_div_usize;
 use crate::{get_subgroup_shift, hash_usize_to_curve, AffinePointTarget, Circuit, CircuitBuilder, CurveMulEndoResult, CurveMulOp, Field, HaloCurve, OpeningSetTarget, ProofTarget, PublicInput, SchnorrProofTarget, Target, GRID_WIDTH, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER};
 
 /// Wraps a `Circuit` for recursive verification with inputs for the proof data.
+/// The circuit is over the field `C::ScalarField` and verifies a proof performed over the curve `InnerC`.
 pub struct RecursiveCircuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> {
     pub circuit: Circuit<C>,
     pub public_inputs: RecursionPublicInputs<C::ScalarField>,

@@ -10,7 +10,7 @@ use num::{BigUint, Integer, One, Zero};
 pub(crate) const LIMB_DIBITS: usize = 43;
 pub(crate) const LIMB_BITS: usize = LIMB_DIBITS * 2;
 
-/// Targets representing an unsigned big integer.
+/// Targets representing an unsigned big integer with limbs defined over a field `F`.
 #[derive(Clone)]
 pub struct BigIntTarget<F: Field> {
     pub limbs: Vec<Target<F>>,
