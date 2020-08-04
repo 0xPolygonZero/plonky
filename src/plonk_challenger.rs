@@ -257,7 +257,8 @@ mod tests {
 
         let mut builder = CircuitBuilder::<C>::new(128);
         let mut recursive_challenger = RecursiveChallenger::new(&mut builder);
-        let mut recursive_outputs_per_round: Vec<Vec<Target<C::BaseField>>> = Vec::new();
+        let mut recursive_outputs_per_round: Vec<Vec<Target<<C as Curve>::ScalarField>>> =
+            Vec::new();
         for (r, inputs) in inputs_per_round.iter().enumerate() {
             recursive_challenger.observe_elements(&builder.constant_wires(inputs));
             recursive_outputs_per_round.push(

@@ -59,7 +59,7 @@ pub struct BoundedTarget<F: Field> {
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct PublicInput<F: Field> {
     pub index: usize,
-    _field: PhantomData<F>,
+    pub _field: PhantomData<F>,
 }
 
 /// See `PublicInputGate` for an explanation of how we make public inputs routable.

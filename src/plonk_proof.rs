@@ -182,13 +182,13 @@ impl<C: HaloCurve> OldProofTarget<C> {
     }
 }
 
-pub struct ProofTarget<C: Curve> {
+pub struct ProofTarget<C: Curve, InnerC: Curve<BaseField = C::ScalarField>> {
     /// A commitment to each wire polynomial.
-    pub c_wires: Vec<AffinePointTarget<C>>,
+    pub c_wires: Vec<AffinePointTarget<InnerC>>,
     /// A commitment to Z, in the context of the permutation argument.
-    pub c_plonk_z: AffinePointTarget<C>,
+    pub c_plonk_z: AffinePointTarget<InnerC>,
     /// A commitment to the quotient polynomial.
-    pub c_plonk_t: Vec<AffinePointTarget<C>>,
+    pub c_plonk_t: Vec<AffinePointTarget<InnerC>>,
 
     /// The opening of each polynomial at each `PublicInputGate` index.
     pub o_public_inputs: Option<Vec<OpeningSetTarget<C>>>,
@@ -200,16 +200,18 @@ pub struct ProofTarget<C: Curve> {
     pub o_below: OpeningSetTarget<C>,
 
     /// L_i in the Halo reduction.
-    pub halo_l_i: Vec<AffinePointTarget<C>>,
+    pub halo_l_i: Vec<AffinePointTarget<InnerC>>,
     /// R_i in the Halo reduction.
-    pub halo_r_i: Vec<AffinePointTarget<C>>,
+    pub halo_r_i: Vec<AffinePointTarget<InnerC>>,
     /// The purported value of G, i.e. <s, G>, in the context of Halo.
-    pub halo_g: AffinePointTarget<C>,
+    pub halo_g: AffinePointTarget<InnerC>,
     /// The data used in the final Schnorr protocol of the Halo opening proof.
-    pub schnorr_proof: SchnorrProofTarget<C>,
+    pub schnorr_proof: SchnorrProofTarget<InnerC>,
 }
 
-impl<C: HaloCurve> ProofTarget<C> {
+impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField, ScalarField = C::BaseField>>
+    ProofTarget<C, InnerC>
+{
     /// `log_2(d)`, where `d` is the degree of the proof being verified.
     #[allow(dead_code)]
     fn degree_pow(&self) -> usize {
@@ -243,8 +245,8 @@ impl<C: HaloCurve> ProofTarget<C> {
 
     pub fn populate_witness(
         &self,
-        witness: &mut PartialWitness<C::BaseField>,
-        values: Proof<C>,
+        witness: &mut PartialWitness<C::ScalarField>,
+        values: Proof<InnerC>,
     ) -> Result<()> {
         witness.set_point_targets(&self.c_wires, &values.c_wires);
         witness.set_point_target(self.c_plonk_z, values.c_plonk_z);
@@ -261,11 +263,11 @@ impl<C: HaloCurve> ProofTarget<C> {
         witness.set_point_target(self.schnorr_proof.r, values.schnorr_proof.r);
         witness.set_target(
             self.schnorr_proof.z1.convert(),
-            C::ScalarField::try_convert(&values.schnorr_proof.z1)?,
+            C::try_convert_b2s(values.schnorr_proof.z1)?,
         );
         witness.set_target(
             self.schnorr_proof.z2.convert(),
-            C::ScalarField::try_convert(&values.schnorr_proof.z2)?,
+            C::try_convert_b2s(values.schnorr_proof.z2)?,
         );
 
         Ok(())
@@ -338,33 +340,33 @@ impl<C: Curve> OpeningSetTarget<C> {
 
     pub fn populate_witness(
         &self,
-        witness: &mut PartialWitness<C::BaseField>,
-        values: &OpeningSet<C::ScalarField>,
+        witness: &mut PartialWitness<C::ScalarField>,
+        values: &OpeningSet<C::BaseField>,
     ) -> Result<()> {
         // TODO: We temporarily assume that each opened value fits in both fields.
         witness.set_targets(
-            &Target::convert_slice(&self.o_constants),
-            &C::try_convert_s2b_slice(&values.o_constants)?,
+            &self.o_constants,
+            &C::try_convert_b2s_slice(&values.o_constants)?,
         );
         witness.set_targets(
             &Target::convert_slice(&self.o_plonk_sigmas),
-            &C::try_convert_s2b_slice(&values.o_plonk_sigmas)?,
+            &C::try_convert_b2s_slice(&values.o_plonk_sigmas)?,
         );
         witness.set_targets(
             &Target::convert_slice(&self.o_wires),
-            &C::try_convert_s2b_slice(&values.o_wires)?,
+            &C::try_convert_b2s_slice(&values.o_wires)?,
         );
         witness.set_target(
             self.o_plonk_z.convert(),
-            C::try_convert_s2b(values.o_plonk_z)?,
+            C::try_convert_b2s(values.o_plonk_z)?,
         );
         witness.set_targets(
             &Target::convert_slice(&self.o_plonk_t),
-            &C::try_convert_s2b_slice(&values.o_plonk_t)?,
+            &C::try_convert_b2s_slice(&values.o_plonk_t)?,
         );
         witness.set_targets(
             &Target::convert_slice(&self.o_old_proofs),
-            &C::try_convert_s2b_slice(&values.o_old_proofs)?,
+            &C::try_convert_b2s_slice(&values.o_old_proofs)?,
         );
         Ok(())
     }

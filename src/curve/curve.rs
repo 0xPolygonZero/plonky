@@ -45,6 +45,14 @@ pub trait Curve: 'static + Sync + Sized + Copy + Debug {
         }
         Ok(res)
     }
+
+    fn try_convert_b2s_slice(s: &[Self::BaseField]) -> Result<Vec<Self::ScalarField>> {
+        let mut res = Vec::with_capacity(s.len());
+        for &x in s {
+            res.push(Self::try_convert_b2s(x)?);
+        }
+        Ok(res)
+    }
 }
 
 /// A curve with the endomorphism described in the Halo paper, i.e. `phi((x, y)) = (zeta_p x, y)`,
