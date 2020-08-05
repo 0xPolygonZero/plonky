@@ -37,6 +37,22 @@ pub trait Curve: 'static + Sync + Sized + Copy + Debug {
     fn try_convert_s2b(x: Self::ScalarField) -> Result<Self::BaseField> {
         x.try_convert::<Self::BaseField>()
     }
+
+    fn try_convert_s2b_slice(s: &[Self::ScalarField]) -> Result<Vec<Self::BaseField>> {
+        let mut res = Vec::with_capacity(s.len());
+        for &x in s {
+            res.push(Self::try_convert_s2b(x)?);
+        }
+        Ok(res)
+    }
+
+    fn try_convert_b2s_slice(s: &[Self::BaseField]) -> Result<Vec<Self::ScalarField>> {
+        let mut res = Vec::with_capacity(s.len());
+        for &x in s {
+            res.push(Self::try_convert_b2s(x)?);
+        }
+        Ok(res)
+    }
 }
 
 /// A curve with the endomorphism described in the Halo paper, i.e. `phi((x, y)) = (zeta_p x, y)`,
@@ -44,7 +60,6 @@ pub trait Curve: 'static + Sync + Sized + Copy + Debug {
 pub trait HaloCurve: Curve {
     const ZETA: Self::BaseField;
     const ZETA_SCALAR: Self::ScalarField;
-
 }
 
 /// A point on a short Weierstrass curve, represented in affine coordinates.
@@ -229,7 +244,7 @@ impl<C: Curve> ProjectivePoint<C> {
             x: self.x,
             y: -self.y,
             z: self.z,
-            zero: self.zero
+            zero: self.zero,
         }
     }
 }

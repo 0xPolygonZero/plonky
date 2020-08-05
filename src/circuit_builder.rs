@@ -3,8 +3,9 @@ use std::collections::{BTreeMap, HashMap};
 use crate::gates::*;
 use crate::plonk_util::{commit_polynomials, polynomials_to_values_padded, sigma_polynomials, values_to_polynomials};
 use crate::util::{ceil_div_usize, log2_strict, transpose};
-use crate::{blake_hash_usize_to_curve, fft_precompute, generate_rescue_constants, msm_precompute, AffinePoint, AffinePointTarget, BoundedTarget, Circuit, Field, HaloCurve, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, NUM_CONSTANTS, NUM_WIRES};
+use crate::{blake_hash_usize_to_curve, fft_precompute, generate_rescue_constants, msm_precompute, AffinePoint, AffinePointTarget, BoundedTarget, Circuit, Curve, Field, HaloCurve, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, NUM_CONSTANTS, NUM_WIRES};
 use num::{BigUint, Zero};
+use std::marker::PhantomData;
 
 pub struct CircuitBuilder<C: HaloCurve> {
     pub(crate) security_bits: usize,
@@ -12,9 +13,9 @@ pub struct CircuitBuilder<C: HaloCurve> {
     virtual_target_index: usize,
     gate_counts: BTreeMap<&'static str, usize>,
     gate_constants: Vec<Vec<C::ScalarField>>,
-    copy_constraints: Vec<(Target, Target)>,
+    copy_constraints: Vec<(Target<C::ScalarField>, Target<C::ScalarField>)>,
     generators: Vec<Box<dyn WitnessGenerator<C::ScalarField>>>,
-    constant_wires: HashMap<C::ScalarField, Target>,
+    constant_wires: HashMap<C::ScalarField, Target<C::ScalarField>>,
 }
 
 impl<C: HaloCurve> CircuitBuilder<C> {
@@ -31,13 +32,16 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
     }
 
-    pub fn stage_public_input(&mut self) -> PublicInput {
+    pub fn stage_public_input(&mut self) -> PublicInput<C::ScalarField> {
         let index = self.public_input_index;
         self.public_input_index += 1;
-        PublicInput { index }
+        PublicInput {
+            index,
+            _field: PhantomData,
+        }
     }
 
-    pub fn stage_public_inputs(&mut self, n: usize) -> Vec<PublicInput> {
+    pub fn stage_public_inputs(&mut self, n: usize) -> Vec<PublicInput<C::ScalarField>> {
         (0..n).map(|_i| self.stage_public_input()).collect()
     }
 
@@ -56,31 +60,36 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
     }
 
-    pub fn add_virtual_target(&mut self) -> Target {
+    pub fn add_virtual_target(&mut self) -> Target<C::ScalarField> {
         let index = self.virtual_target_index;
         self.virtual_target_index += 1;
         Target::VirtualTarget(VirtualTarget { index })
     }
 
-    pub fn add_virtual_targets(&mut self, n: usize) -> Vec<Target> {
+    pub fn add_virtual_targets(&mut self, n: usize) -> Vec<Target<C::ScalarField>> {
         (0..n).map(|_i| self.add_virtual_target()).collect()
     }
 
-    pub fn add_virtual_point_target(&mut self) -> AffinePointTarget {
+    pub fn add_virtual_point_target<InnerC: Curve<BaseField = C::ScalarField>>(
+        &mut self,
+    ) -> AffinePointTarget<InnerC> {
         let x = self.add_virtual_target();
         let y = self.add_virtual_target();
         AffinePointTarget { x, y }
     }
 
-    pub fn add_virtual_point_targets(&mut self, n: usize) -> Vec<AffinePointTarget> {
+    pub fn add_virtual_point_targets<InnerC: Curve<BaseField = C::ScalarField>>(
+        &mut self,
+        n: usize,
+    ) -> Vec<AffinePointTarget<InnerC>> {
         (0..n).map(|_i| self.add_virtual_point_target()).collect()
     }
 
-    pub fn zero_wire(&mut self) -> Target {
+    pub fn zero_wire(&mut self) -> Target<C::ScalarField> {
         self.constant_wire(C::ScalarField::ZERO)
     }
 
-    pub fn zero_bounded_target(&mut self) -> BoundedTarget {
+    pub fn zero_bounded_target(&mut self) -> BoundedTarget<C::ScalarField> {
         let zero = self.zero_wire();
         BoundedTarget {
             target: zero,
@@ -88,19 +97,19 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
     }
 
-    pub fn one_wire(&mut self) -> Target {
+    pub fn one_wire(&mut self) -> Target<C::ScalarField> {
         self.constant_wire(C::ScalarField::ONE)
     }
 
-    pub fn two_wire(&mut self) -> Target {
+    pub fn two_wire(&mut self) -> Target<C::ScalarField> {
         self.constant_wire(C::ScalarField::TWO)
     }
 
-    pub fn neg_one_wire(&mut self) -> Target {
+    pub fn neg_one_wire(&mut self) -> Target<C::ScalarField> {
         self.constant_wire(C::ScalarField::NEG_ONE)
     }
 
-    pub fn constant_wire(&mut self, c: C::ScalarField) -> Target {
+    pub fn constant_wire(&mut self, c: C::ScalarField) -> Target<C::ScalarField> {
         if self.constant_wires.contains_key(&c) {
             self.constant_wires[&c]
         } else {
@@ -110,15 +119,15 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
     }
 
-    pub fn constant_wires(&mut self, constants: &[C::ScalarField]) -> Vec<Target> {
+    pub fn constant_wires(&mut self, constants: &[C::ScalarField]) -> Vec<Target<C::ScalarField>> {
         constants.iter().map(|&c| self.constant_wire(c)).collect()
     }
 
-    pub fn constant_wire_u32(&mut self, c: u32) -> Target {
+    pub fn constant_wire_u32(&mut self, c: u32) -> Target<C::ScalarField> {
         self.constant_wire(C::ScalarField::from_canonical_u32(c))
     }
 
-    fn create_constant_wire(&mut self, c: C::ScalarField) -> Target {
+    fn create_constant_wire(&mut self, c: C::ScalarField) -> Target<C::ScalarField> {
         // We will create a ConstantGate and pass c as its first (and only) constant, which will
         // cause it to populate its output wire with the same value c.
         let gate = self.num_gates();
@@ -130,14 +139,14 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     /// Adds a generator to populate the given target with the given constant.
-    pub fn generate_constant(&mut self, target: Target, c: C::ScalarField) {
+    pub fn generate_constant(&mut self, target: Target<C::ScalarField>, c: C::ScalarField) {
         struct ConstantGenerator<F: Field> {
-            target: Target,
+            target: Target<F>,
             c: F,
         }
 
         impl<F: Field> WitnessGenerator<F> for ConstantGenerator<F> {
-            fn dependencies(&self) -> Vec<Target> {
+            fn dependencies(&self) -> Vec<Target<F>> {
                 Vec::new()
             }
 
@@ -155,17 +164,17 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         self.add_generator(ConstantGenerator { target, c });
     }
 
-    pub fn assert_zero(&mut self, x: Target) {
+    pub fn assert_zero(&mut self, x: Target<C::ScalarField>) {
         let zero = self.zero_wire();
         self.copy(x, zero);
     }
 
-    pub fn assert_one(&mut self, x: Target) {
+    pub fn assert_one(&mut self, x: Target<C::ScalarField>) {
         let one = self.one_wire();
         self.copy(x, one);
     }
 
-    pub fn assert_binary(&mut self, x: Target) {
+    pub fn assert_binary(&mut self, x: Target<C::ScalarField>) {
         // This is typically implemented with a constraint like x * (x - 1) = 0.
         // We rewrite this as x * x - x = 0, which requires just one gate in our model.
         let lhs = self.mul_sub(x, x, x);
@@ -173,7 +182,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     /// Assert that each of the given targets is less than 4.
-    pub fn assert_all_base_4(&mut self, limbs: &[Target]) {
+    pub fn assert_all_base_4(&mut self, limbs: &[Target<C::ScalarField>]) {
         // We will leverage Base4SumGate, which checks that each of its limbs is base 4.
         for chunk in limbs.chunks(Base4SumGate::<C>::NUM_ROUTED_LIMBS) {
             let gate = self.num_gates();
@@ -202,29 +211,29 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
     }
 
-    pub fn assert_nonzero(&mut self, x: Target) {
+    pub fn assert_nonzero(&mut self, x: Target<C::ScalarField>) {
         // An element is nonzero iff it has an inverse.
         self.inv(x);
     }
 
     /// Returns `if x == 0 { 1 } else { 0 }`.
-    pub fn is_zero(&mut self, x: Target) -> Target {
+    pub fn is_zero(&mut self, x: Target<C::ScalarField>) -> Target<C::ScalarField> {
         // This is similar to the technique described in
         // https://github.com/mir-protocol/r1cs-workshop/blob/master/workshop.pdf
 
-        let is_zero: Target = self.add_virtual_target();
+        let is_zero: Target<C::ScalarField> = self.add_virtual_target();
 
         // m will hold if x != 0 { -1 / x } else { 1 }.
         let m = self.add_virtual_target();
 
-        struct IsZeroGenerator {
-            x: Target,
-            m: Target,
-            is_zero: Target,
+        struct IsZeroGenerator<F: Field> {
+            x: Target<F>,
+            m: Target<F>,
+            is_zero: Target<F>,
         }
 
-        impl<F: Field> WitnessGenerator<F> for IsZeroGenerator {
-            fn dependencies(&self) -> Vec<Target> {
+        impl<F: Field> WitnessGenerator<F> for IsZeroGenerator<F> {
+            fn dependencies(&self) -> Vec<Target<F>> {
                 vec![self.x]
             }
 
@@ -262,27 +271,40 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     /// Returns `if x != 0 { 1 } else { 0 }`.
-    pub fn is_nonzero(&mut self, x: Target) -> Target {
+    pub fn is_nonzero(&mut self, x: Target<C::ScalarField>) -> Target<C::ScalarField> {
         let one = self.one_wire();
         let is_zero = self.is_zero(x);
         self.sub(one, is_zero)
     }
 
     /// Returns `if x == y { 1 } else { 0 }`.
-    pub fn is_equal(&mut self, x: Target, y: Target) -> Target {
+    pub fn is_equal(
+        &mut self,
+        x: Target<C::ScalarField>,
+        y: Target<C::ScalarField>,
+    ) -> Target<C::ScalarField> {
         let diff = self.sub(x, y);
         self.is_zero(diff)
     }
 
     /// Returns `if x != y { 1 } else { 0 }`.
-    pub fn is_not_equal(&mut self, x: Target, y: Target) -> Target {
+    pub fn is_not_equal(
+        &mut self,
+        x: Target<C::ScalarField>,
+        y: Target<C::ScalarField>,
+    ) -> Target<C::ScalarField> {
         let diff = self.sub(x, y);
         self.is_nonzero(diff)
     }
 
     /// Selects `x` or `y` based on `b`, which is assumed to be binary.
     /// In particular, this returns `if b { x } else { y }`.
-    pub fn select(&mut self, b: Target, x: Target, y: Target) -> Target {
+    pub fn select(
+        &mut self,
+        b: Target<C::ScalarField>,
+        x: Target<C::ScalarField>,
+        y: Target<C::ScalarField>,
+    ) -> Target<C::ScalarField> {
         // This can be computed various ways, e.g.
         //     b x + (1 - b) y
         //     b x + y - b y
@@ -296,12 +318,16 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     /// Returns the negation of a bit `b`, which is assumed to be in `{0, 1}`.
-    pub fn not(&mut self, b: Target) -> Target {
+    pub fn not(&mut self, b: Target<C::ScalarField>) -> Target<C::ScalarField> {
         let one = self.one_wire();
         self.sub(one, b)
     }
 
-    pub fn add(&mut self, x: Target, y: Target) -> Target {
+    pub fn add(
+        &mut self,
+        x: Target<C::ScalarField>,
+        y: Target<C::ScalarField>,
+    ) -> Target<C::ScalarField> {
         let zero = self.zero_wire();
         if x == zero {
             return y;
@@ -343,7 +369,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         })
     }
 
-    pub fn add_many(&mut self, terms: &[Target]) -> Target {
+    pub fn add_many(&mut self, terms: &[Target<C::ScalarField>]) -> Target<C::ScalarField> {
         let mut sum = self.zero_wire();
         for term in terms {
             sum = self.add(sum, *term);
@@ -351,11 +377,15 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         sum
     }
 
-    pub fn double(&mut self, x: Target) -> Target {
+    pub fn double(&mut self, x: Target<C::ScalarField>) -> Target<C::ScalarField> {
         self.add(x, x)
     }
 
-    pub fn sub(&mut self, x: Target, y: Target) -> Target {
+    pub fn sub(
+        &mut self,
+        x: Target<C::ScalarField>,
+        y: Target<C::ScalarField>,
+    ) -> Target<C::ScalarField> {
         let zero = self.zero_wire();
         if y == zero {
             return x;
@@ -394,7 +424,11 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         })
     }
 
-    pub fn mul(&mut self, x: Target, y: Target) -> Target {
+    pub fn mul(
+        &mut self,
+        x: Target<C::ScalarField>,
+        y: Target<C::ScalarField>,
+    ) -> Target<C::ScalarField> {
         let one = self.one_wire();
         if x == one {
             return y;
@@ -436,7 +470,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         })
     }
 
-    pub fn mul_many(&mut self, terms: &[Target]) -> Target {
+    pub fn mul_many(&mut self, terms: &[Target<C::ScalarField>]) -> Target<C::ScalarField> {
         let mut product = self.one_wire();
         for term in terms {
             product = self.mul(product, *term);
@@ -444,25 +478,28 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         product
     }
 
-    pub fn square(&mut self, x: Target) -> Target {
+    pub fn square(&mut self, x: Target<C::ScalarField>) -> Target<C::ScalarField> {
         self.mul(x, x)
     }
 
     /// Note: This assumes the most significant bit of each scalar is unset. This occurs with high
     /// probability if the field size is slightly larger than a power of two and the inputs are
     /// uniformly random.
-    pub fn deterministic_square_root(&mut self, x: Target) -> Target {
+    pub fn deterministic_square_root(
+        &mut self,
+        x: Target<C::ScalarField>,
+    ) -> Target<C::ScalarField> {
         // Assume x != 0. Let y, z be the square roots of x. Since y + z = |F|, and |F| is odd, the
         // parity of y and z must differ, so we can enforce determinism by checking for a certain
         // parity bit state. We chose a parity bit of 0 since this also works for the x = 0 case.
 
-        struct SqrtGenerator {
-            x: Target,
-            x_sqrt: Target,
+        struct SqrtGenerator<F: Field> {
+            x: Target<F>,
+            x_sqrt: Target<F>,
         }
 
-        impl<F: Field> WitnessGenerator<F> for SqrtGenerator {
-            fn dependencies(&self) -> Vec<Target> {
+        impl<F: Field> WitnessGenerator<F> for SqrtGenerator<F> {
+            fn dependencies(&self) -> Vec<Target<F>> {
                 vec![self.x]
             }
 
@@ -545,7 +582,11 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     /// Compute `x^power`, where `power` is a constant.
-    pub fn exp_constant(&mut self, x: Target, power: C::ScalarField) -> Target {
+    pub fn exp_constant(
+        &mut self,
+        x: Target<C::ScalarField>,
+        power: C::ScalarField,
+    ) -> Target<C::ScalarField> {
         let power_bits = power.num_bits();
         let mut current = x;
         let mut product = self.one_wire();
@@ -569,18 +610,22 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     /// Compute `x^power`, where `power` is a constant `usize`.
-    pub fn exp_constant_usize(&mut self, x: Target, power: usize) -> Target {
+    pub fn exp_constant_usize(
+        &mut self,
+        x: Target<C::ScalarField>,
+        power: usize,
+    ) -> Target<C::ScalarField> {
         self.exp_constant(x, C::ScalarField::from_canonical_usize(power))
     }
 
-    pub fn inv(&mut self, x: Target) -> Target {
-        struct InverseGenerator {
-            x: Target,
-            x_inv: Target,
+    pub fn inv(&mut self, x: Target<C::ScalarField>) -> Target<C::ScalarField> {
+        struct InverseGenerator<F: Field> {
+            x: Target<F>,
+            x_inv: Target<F>,
         }
 
-        impl<F: Field> WitnessGenerator<F> for InverseGenerator {
-            fn dependencies(&self) -> Vec<Target> {
+        impl<F: Field> WitnessGenerator<F> for InverseGenerator<F> {
+            fn dependencies(&self) -> Vec<Target<F>> {
                 vec![self.x]
             }
 
@@ -609,13 +654,22 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         x_inv
     }
 
-    pub fn div(&mut self, x: Target, y: Target) -> Target {
+    pub fn div(
+        &mut self,
+        x: Target<C::ScalarField>,
+        y: Target<C::ScalarField>,
+    ) -> Target<C::ScalarField> {
         let y_inv = self.inv(y);
         self.mul(x, y_inv)
     }
 
     /// Multiply and add; i.e. computes `x * y + z`.
-    pub fn mul_add(&mut self, x: Target, y: Target, z: Target) -> Target {
+    pub fn mul_add(
+        &mut self,
+        x: Target<C::ScalarField>,
+        y: Target<C::ScalarField>,
+        z: Target<C::ScalarField>,
+    ) -> Target<C::ScalarField> {
         let index = self.num_gates();
         self.add_gate(
             ArithmeticGate::new(index),
@@ -650,17 +704,22 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
     pub(crate) fn bounded_mul_add(
         &mut self,
-        x: &BoundedTarget,
-        y: &BoundedTarget,
-        z: &BoundedTarget,
-    ) -> BoundedTarget {
+        x: &BoundedTarget<C::ScalarField>,
+        y: &BoundedTarget<C::ScalarField>,
+        z: &BoundedTarget<C::ScalarField>,
+    ) -> BoundedTarget<C::ScalarField> {
         let target = self.mul_add(x.target, y.target, z.target);
         let max = &x.max * &y.max + &z.max;
         BoundedTarget { target, max }
     }
 
     /// Multiply and subtract; i.e. computes `x * y - z`.
-    pub fn mul_sub(&mut self, x: Target, y: Target, z: Target) -> Target {
+    pub fn mul_sub(
+        &mut self,
+        x: Target<C::ScalarField>,
+        y: Target<C::ScalarField>,
+        z: Target<C::ScalarField>,
+    ) -> Target<C::ScalarField> {
         let index = self.num_gates();
         self.add_gate(
             ArithmeticGate::new(index),
@@ -694,21 +753,29 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     /// Computes `-x`.
-    pub fn neg(&mut self, x: Target) -> Target {
+    pub fn neg(&mut self, x: Target<C::ScalarField>) -> Target<C::ScalarField> {
         let neg_one = self.neg_one_wire();
         self.mul(x, neg_one)
     }
 
     /// Splits `x` into its binary representation. Note that this method merely adds a generator to
     /// populate the bit wires; it does not enforce constraints to verify the decomposition.
-    pub(crate) fn split_binary(&mut self, x: Target, num_bits: usize) -> Vec<Target> {
+    pub(crate) fn split_binary(
+        &mut self,
+        x: Target<C::ScalarField>,
+        num_bits: usize,
+    ) -> Vec<Target<C::ScalarField>> {
         let (bits, _dibits) = self.split_binary_and_base_4(x, num_bits, 0);
         bits
     }
 
     /// Splits `x` into its base 4 representation. Note that this method merely adds a generator to
     /// populate the bit wires; it does not enforce constraints to verify the decomposition.
-    pub(crate) fn split_base_4(&mut self, x: Target, num_dibits: usize) -> Vec<Target> {
+    pub(crate) fn split_base_4(
+        &mut self,
+        x: Target<C::ScalarField>,
+        num_dibits: usize,
+    ) -> Vec<Target<C::ScalarField>> {
         let (_bits, dibits) = self.split_binary_and_base_4(x, 0, num_dibits);
         dibits
     }
@@ -718,18 +785,18 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     /// decomposition.
     pub(crate) fn split_binary_and_base_4(
         &mut self,
-        x: Target,
+        x: Target<C::ScalarField>,
         num_bits: usize,
         num_dibits: usize,
-    ) -> (Vec<Target>, Vec<Target>) {
-        struct SplitGenerator {
-            x: Target,
-            bits: Vec<Target>,
-            dibits: Vec<Target>,
+    ) -> (Vec<Target<C::ScalarField>>, Vec<Target<C::ScalarField>>) {
+        struct SplitGenerator<F: Field> {
+            x: Target<F>,
+            bits: Vec<Target<F>>,
+            dibits: Vec<Target<F>>,
         }
 
-        impl<F: Field> WitnessGenerator<F> for SplitGenerator {
-            fn dependencies(&self) -> Vec<Target> {
+        impl<F: Field> WitnessGenerator<F> for SplitGenerator<F> {
+            fn dependencies(&self) -> Vec<Target<F>> {
                 vec![self.x]
             }
 
@@ -769,7 +836,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     /// Asserts that the given target's value is small enough to fit in the given number of dibits.
     ///
     /// Note: This is most efficient when `num_dibits` is a multiple of `Base4SumGate::NUM_LIMBS`.
-    pub(crate) fn assert_dibit_length(&mut self, x: Target, num_dibits: usize) {
+    pub(crate) fn assert_dibit_length(&mut self, x: Target<C::ScalarField>, num_dibits: usize) {
         // Get the purported base 4 decomposition of x.
         let dibits = self.split_base_4(x, num_dibits);
 
@@ -821,21 +888,38 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         self.copy(sum, x);
     }
 
-    pub fn rescue_hash_n_to_1(&mut self, inputs: &[Target]) -> Target {
+    pub fn rescue_hash_n_to_1(
+        &mut self,
+        inputs: &[Target<C::ScalarField>],
+    ) -> Target<C::ScalarField> {
         self.rescue_sponge(inputs, 1)[0]
     }
 
-    pub fn rescue_hash_n_to_2(&mut self, inputs: &[Target]) -> (Target, Target) {
+    pub fn rescue_hash_n_to_2(
+        &mut self,
+        inputs: &[Target<C::ScalarField>],
+    ) -> (Target<C::ScalarField>, Target<C::ScalarField>) {
         let outputs = self.rescue_sponge(inputs, 2);
         (outputs[0], outputs[1])
     }
 
-    pub fn rescue_hash_n_to_3(&mut self, inputs: &[Target]) -> (Target, Target, Target) {
+    pub fn rescue_hash_n_to_3(
+        &mut self,
+        inputs: &[Target<C::ScalarField>],
+    ) -> (
+        Target<C::ScalarField>,
+        Target<C::ScalarField>,
+        Target<C::ScalarField>,
+    ) {
         let outputs = self.rescue_sponge(inputs, 3);
         (outputs[0], outputs[1], outputs[2])
     }
 
-    pub fn rescue_sponge(&mut self, inputs: &[Target], num_outputs: usize) -> Vec<Target> {
+    pub fn rescue_sponge(
+        &mut self,
+        inputs: &[Target<C::ScalarField>],
+        num_outputs: usize,
+    ) -> Vec<Target<C::ScalarField>> {
         let zero = self.zero_wire();
         let mut state = vec![zero; RESCUE_SPONGE_WIDTH];
 
@@ -860,7 +944,10 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
     }
 
-    pub fn rescue_permutation(&mut self, inputs: &[Target]) -> Vec<Target> {
+    pub fn rescue_permutation(
+        &mut self,
+        inputs: &[Target<C::ScalarField>],
+    ) -> Vec<Target<C::ScalarField>> {
         assert_eq!(inputs.len(), RESCUE_SPONGE_WIDTH);
 
         // Route the input wires.
@@ -933,12 +1020,17 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     /// Add a copy constraint between two routing targets.
-    pub fn copy(&mut self, target_1: Target, target_2: Target) {
+    pub fn copy(&mut self, target_1: Target<C::ScalarField>, target_2: Target<C::ScalarField>) {
         self.copy_constraints.push((target_1, target_2));
     }
 
     /// Enforces a copy constraint between the two targets if the condition is non-zero.
-    pub fn conditional_copy(&mut self, condition: Target, target_1: Target, target_2: Target) {
+    pub fn conditional_copy(
+        &mut self,
+        condition: Target<C::ScalarField>,
+        target_1: Target<C::ScalarField>,
+        target_2: Target<C::ScalarField>,
+    ) {
         let conditional_target_1 = self.mul(condition, target_1);
         let conditional_target_2 = self.mul(condition, target_2);
         self.copy(conditional_target_1, conditional_target_2);
@@ -955,12 +1047,12 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             });
         }
 
-        struct RandomGenerator {
-            target: Target,
+        struct RandomGenerator<F: Field> {
+            target: Target<F>,
         }
 
-        impl<F: Field> WitnessGenerator<F> for RandomGenerator {
-            fn dependencies(&self) -> Vec<Target> {
+        impl<F: Field> WitnessGenerator<F> for RandomGenerator<F> {
+            fn dependencies(&self) -> Vec<Target<F>> {
                 vec![]
             }
 
@@ -1081,7 +1173,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
     }
 
-    fn get_routing_partitions(&self) -> TargetPartitions {
+    fn get_routing_partitions(&self) -> TargetPartitions<C::ScalarField> {
         let mut partitions = TargetPartitions::new();
 
         for i in 0..self.virtual_target_index {

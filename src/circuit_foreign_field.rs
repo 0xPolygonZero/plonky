@@ -1,30 +1,39 @@
 use crate::{field_to_biguint, BigIntTarget, CircuitBuilder, Field, HaloCurve};
 use num::{BigUint, One};
+use std::marker::PhantomData;
 
-/// Represents an element of a field other than the native field.
+/// Represents an element of a field `Fq` other than the native field `Fp`.
 #[derive(Clone)]
-pub struct ForeignFieldTarget {
-    pub value: BigIntTarget,
+pub struct ForeignFieldTarget<Fp: Field, Fq: Field> {
+    pub value: BigIntTarget<Fp>,
+    _foreign_field: PhantomData<Fq>,
 }
 
-impl ForeignFieldTarget {
+impl<Fp: Field, Fq: Field> ForeignFieldTarget<Fp, Fq> {
     pub fn zero() -> Self {
         ForeignFieldTarget {
             value: BigIntTarget::zero(),
+            _foreign_field: PhantomData,
         }
     }
 }
 
 impl<C: HaloCurve> CircuitBuilder<C> {
-    pub fn constant_foreign_field<FF: Field>(&mut self, constant: FF) -> ForeignFieldTarget {
+    pub fn constant_foreign_field<FF: Field>(
+        &mut self,
+        constant: FF,
+    ) -> ForeignFieldTarget<C::ScalarField, FF> {
         let value = self.constant_bigint(&field_to_biguint(constant));
-        ForeignFieldTarget { value }
+        ForeignFieldTarget {
+            value,
+            _foreign_field: PhantomData,
+        }
     }
 
     pub fn foreign_field_add_many<FF: Field>(
         &mut self,
-        terms: &[ForeignFieldTarget],
-    ) -> ForeignFieldTarget {
+        terms: &[ForeignFieldTarget<C::ScalarField, FF>],
+    ) -> ForeignFieldTarget<C::ScalarField, FF> {
         let term_values = terms.iter().map(|ff| ff.value.clone()).collect::<Vec<_>>();
         let sum = self.bigint_add_many(&term_values);
         self.reduce::<FF>(&sum)
@@ -32,27 +41,33 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
     pub fn foreign_field_add<FF: Field>(
         &mut self,
-        x: &ForeignFieldTarget,
-        y: &ForeignFieldTarget,
-    ) -> ForeignFieldTarget {
+        x: &ForeignFieldTarget<C::ScalarField, FF>,
+        y: &ForeignFieldTarget<C::ScalarField, FF>,
+    ) -> ForeignFieldTarget<C::ScalarField, FF> {
         self.foreign_field_add_many::<FF>(&[x.clone(), y.clone()])
     }
 
     pub fn foreign_field_mul<FF: Field>(
         &mut self,
-        lhs: &ForeignFieldTarget,
-        rhs: &ForeignFieldTarget,
-    ) -> ForeignFieldTarget {
+        lhs: &ForeignFieldTarget<C::ScalarField, FF>,
+        rhs: &ForeignFieldTarget<C::ScalarField, FF>,
+    ) -> ForeignFieldTarget<C::ScalarField, FF> {
         let product = self.bigint_mul(&lhs.value, &rhs.value);
         self.reduce::<FF>(&product)
     }
 
     /// Returns `x % |FF|` as a `ForeignFieldTarget`.
-    fn reduce<FF: Field>(&mut self, x: &BigIntTarget) -> ForeignFieldTarget {
+    fn reduce<FF: Field>(
+        &mut self,
+        x: &BigIntTarget<C::ScalarField>,
+    ) -> ForeignFieldTarget<C::ScalarField, FF> {
         let order = field_to_biguint(FF::NEG_ONE) + BigUint::one();
         let order_target = self.constant_bigint(&order);
         let value = self.bigint_rem(&x, &order_target);
-        ForeignFieldTarget { value }
+        ForeignFieldTarget {
+            value,
+            _foreign_field: PhantomData,
+        }
     }
 }
 

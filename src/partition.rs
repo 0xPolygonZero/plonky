@@ -4,12 +4,12 @@ use rand_chacha::ChaCha8Rng;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
-pub struct TargetPartitions {
-    partitions: Vec<Vec<Target>>,
-    indices: HashMap<Target, usize>,
+pub struct TargetPartitions<F: Field> {
+    partitions: Vec<Vec<Target<F>>>,
+    indices: HashMap<Target<F>, usize>,
 }
 
-impl TargetPartitions {
+impl<F: Field> TargetPartitions<F> {
     pub fn new() -> Self {
         Self {
             partitions: Vec::new(),
@@ -17,12 +17,12 @@ impl TargetPartitions {
         }
     }
 
-    pub fn get_partition(&self, target: Target) -> &[Target] {
+    pub fn get_partition(&self, target: Target<F>) -> &[Target<F>] {
         &self.partitions[self.indices[&target]]
     }
 
     /// Add a new partition with a single member.
-    pub fn add_partition(&mut self, target: Target) {
+    pub fn add_partition(&mut self, target: Target<F>) {
         let index = self.partitions.len();
         self.partitions.push(vec![target]);
         self.indices.insert(target, index);
@@ -30,7 +30,7 @@ impl TargetPartitions {
 
     /// Merge the two partitions containing the two given targets. Does nothing if the targets are
     /// already members of the same partition.
-    pub fn merge(&mut self, a: Target, b: Target) {
+    pub fn merge(&mut self, a: Target<F>, b: Target<F>) {
         let a_index = self.indices[&a];
         let b_index = self.indices[&b];
         if a_index != b_index {

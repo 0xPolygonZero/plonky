@@ -1,43 +1,45 @@
-use crate::{HaloCurve, CircuitBuilder, Target, Curve, AffinePoint, CurveAddGate, BufferGate, Wire, WitnessGenerator, PartialWitness, Field, blake_hash_base_field_to_curve, CurveDblGate, CurveEndoGate, Base4SumGate};
-use std::marker::PhantomData;
 use crate::plonk_util::halo_n;
+use crate::{blake_hash_base_field_to_curve, AffinePoint, Base4SumGate, BufferGate, CircuitBuilder, Curve, CurveAddGate, CurveDblGate, CurveEndoGate, Field, HaloCurve, PartialWitness, Target, Wire, WitnessGenerator};
+use std::marker::PhantomData;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub struct AffinePointTarget {
-    pub x: Target,
-    pub y: Target,
+pub struct AffinePointTarget<C: Curve> {
+    pub x: Target<C::BaseField>,
+    pub y: Target<C::BaseField>,
 }
 
-impl AffinePointTarget {
-    pub fn to_vec(&self) -> Vec<Target> {
+impl<C: Curve> AffinePointTarget<C> {
+    pub fn to_vec(&self) -> Vec<Target<C::BaseField>> {
         vec![self.x, self.y]
     }
 }
 
-/// Represents a scalar * point multiplication operation.
-pub struct CurveMulOp {
-    pub scalar: Target,
-    pub point: AffinePointTarget,
+/// Represents a scalar * point multiplication operation on `InnerC`.
+/// `scalar` is modelled here in the "wrong" field `InnerC::BaseField = C::ScalarField` for coherence.
+/// Thus, all scalar operations should be done preemptively in the correct field `InnerC::ScalarField = C::BaseField".
+pub struct CurveMulOp<C: Curve, InnerC: Curve<BaseField = C::ScalarField>> {
+    pub scalar: Target<C::ScalarField>,
+    pub point: AffinePointTarget<InnerC>,
 }
 
-pub struct CurveMulEndoResult {
-    pub mul_result: AffinePointTarget,
-    pub actual_scalar: Target,
+pub struct CurveMulEndoResult<C: Curve, InnerC: Curve<BaseField = C::ScalarField>> {
+    pub mul_result: AffinePointTarget<InnerC>,
+    pub actual_scalar: Target<C::ScalarField>,
 }
 
-pub struct CurveMsmEndoResult {
-    pub msm_result: AffinePointTarget,
+pub struct CurveMsmEndoResult<C: Curve, InnerC: Curve<BaseField = C::ScalarField>> {
+    pub msm_result: AffinePointTarget<InnerC>,
     /// While `msm` computes a sum of `[s] P` terms, `msm_endo` computes a sum of `[n(s)] P` terms
     /// for some injective `n`. Here we return each `n(s)`, i.e., the scalar by which the point was
     /// actually multiplied.
-    pub actual_scalars: Vec<Target>,
+    pub actual_scalars: Vec<Target<C::ScalarField>>,
 }
 
 impl<C: HaloCurve> CircuitBuilder<C> {
     pub fn constant_affine_point<InnerC: Curve<BaseField = C::ScalarField>>(
         &mut self,
         point: AffinePoint<InnerC>,
-    ) -> AffinePointTarget {
+    ) -> AffinePointTarget<InnerC> {
         assert!(!point.zero);
         AffinePointTarget {
             x: self.constant_wire(point.x),
@@ -46,10 +48,10 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     }
 
     /// Add a copy constraint between two affine targets.
-    pub fn copy_curve(
+    pub fn copy_curve<InnerC: Curve<BaseField = C::ScalarField>>(
         &mut self,
-        affine_target_1: AffinePointTarget,
-        affine_target_2: AffinePointTarget,
+        affine_target_1: AffinePointTarget<InnerC>,
+        affine_target_2: AffinePointTarget<InnerC>,
     ) {
         self.copy(affine_target_1.x, affine_target_2.x);
         self.copy(affine_target_1.y, affine_target_2.y);
@@ -58,7 +60,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     /// Assert that a given coordinate pair is on the curve `C`.
     pub fn curve_assert_valid<InnerC: Curve<BaseField = C::ScalarField>>(
         &mut self,
-        p: AffinePointTarget,
+        p: AffinePointTarget<InnerC>,
     ) {
         // Recall the short Weierstrass equation: y^2 = x^3 + a*x + b.
         let a = self.constant_wire(InnerC::A);
@@ -72,17 +74,17 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
     pub fn curve_neg<InnerC: Curve<BaseField = C::ScalarField>>(
         &mut self,
-        p: AffinePointTarget,
-    ) -> AffinePointTarget {
+        p: AffinePointTarget<InnerC>,
+    ) -> AffinePointTarget<InnerC> {
         let neg_y = self.neg(p.y);
         AffinePointTarget { x: p.x, y: neg_y }
     }
 
     pub fn curve_add<InnerC: Curve<BaseField = C::ScalarField>>(
         &mut self,
-        p_1: AffinePointTarget,
-        p_2: AffinePointTarget,
-    ) -> AffinePointTarget {
+        p_1: AffinePointTarget<InnerC>,
+        p_2: AffinePointTarget<InnerC>,
+    ) -> AffinePointTarget<InnerC> {
         // Add a CurveAddGate, then add a BufferGate to receive the updated accumulator state.
         let add_index = self.num_gates();
         self.add_gate_no_constants(CurveAddGate::<C, InnerC>::new(add_index));
@@ -149,8 +151,8 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
     pub fn curve_double<InnerC: Curve<BaseField = C::ScalarField>>(
         &mut self,
-        p: AffinePointTarget,
-    ) -> AffinePointTarget {
+        p: AffinePointTarget<InnerC>,
+    ) -> AffinePointTarget<InnerC> {
         let idx_dbl = self.num_gates();
         self.add_gate_no_constants(CurveDblGate::<C, InnerC>::new(idx_dbl));
         self.copy(
@@ -181,25 +183,25 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
     pub fn curve_sub<InnerC: Curve<BaseField = C::ScalarField>>(
         &mut self,
-        p_1: AffinePointTarget,
-        p_2: AffinePointTarget,
-    ) -> AffinePointTarget {
+        p_1: AffinePointTarget<InnerC>,
+        p_2: AffinePointTarget<InnerC>,
+    ) -> AffinePointTarget<InnerC> {
         let neg_p_2 = self.curve_neg::<InnerC>(p_2);
         self.curve_add::<InnerC>(p_1, neg_p_2)
     }
 
     pub fn curve_mul<InnerC: Curve<BaseField = C::ScalarField>>(
         &mut self,
-        mul: CurveMulOp,
-    ) -> AffinePointTarget {
+        mul: CurveMulOp<C, InnerC>,
+    ) -> AffinePointTarget<InnerC> {
         self.curve_msm::<InnerC>(&[mul])
     }
 
     /// Computes `[n(s)] p`.
     pub fn curve_mul_endo<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &mut self,
-        mul: CurveMulOp,
-    ) -> CurveMulEndoResult {
+        mul: CurveMulOp<C, InnerC>,
+    ) -> CurveMulEndoResult<C, InnerC> {
         let result = self.curve_msm_endo::<InnerC>(&[mul]);
         CurveMulEndoResult {
             mul_result: result.msm_result,
@@ -210,21 +212,27 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     /// Computes `[1 / n(s)] p`.
     pub fn curve_mul_inv_endo<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &mut self,
-        mul: CurveMulOp,
-    ) -> CurveMulEndoResult {
+        mul: CurveMulOp<C, InnerC>,
+    ) -> CurveMulEndoResult<C, InnerC> {
         // We witness r = [1 / n(s)] p, then verify that [n(s)] r = p, and return r.
         let CurveMulOp { scalar, point } = mul;
 
-        struct ResultGenerator<InnerC: HaloCurve> {
-            mul: CurveMulOp,
-            result: AffinePointTarget,
+        struct ResultGenerator<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> {
+            mul: CurveMulOp<C, InnerC>,
+            result: AffinePointTarget<InnerC>,
             security_bits: usize,
-            _phantom: PhantomData<InnerC>,
+            _phantom: PhantomData<C>,
         }
 
-        impl<InnerC: HaloCurve> WitnessGenerator<InnerC::BaseField> for ResultGenerator<InnerC> {
-            fn dependencies(&self) -> Vec<Target> {
-                vec![self.mul.scalar, self.mul.point.x, self.mul.point.y]
+        impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
+            WitnessGenerator<InnerC::BaseField> for ResultGenerator<C, InnerC>
+        {
+            fn dependencies(&self) -> Vec<Target<InnerC::BaseField>> {
+                vec![
+                    self.mul.scalar.convert::<InnerC::BaseField>(),
+                    self.mul.point.x,
+                    self.mul.point.y,
+                ]
             }
 
             fn generate(
@@ -233,7 +241,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
                 witness: &PartialWitness<InnerC::BaseField>,
             ) -> PartialWitness<InnerC::BaseField> {
                 let scalar = witness
-                    .get_target(self.mul.scalar)
+                    .get_target(self.mul.scalar.convert())
                     .try_convert::<InnerC::ScalarField>()
                     .expect("Improbable");
                 let scalar_bits = &scalar.to_canonical_bool_vec()[..self.security_bits];
@@ -252,7 +260,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
 
         let result = self.add_virtual_point_target();
-        self.add_generator(ResultGenerator::<InnerC> {
+        self.add_generator(ResultGenerator::<C, InnerC> {
             mul,
             result,
             security_bits: self.security_bits,
@@ -277,14 +285,14 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     /// uniformly random.
     pub fn curve_msm<InnerC: Curve<BaseField = C::ScalarField>>(
         &mut self,
-        parts: &[CurveMulOp],
-    ) -> AffinePointTarget {
+        parts: &[CurveMulOp<C, InnerC>],
+    ) -> AffinePointTarget<InnerC> {
         // We assume each most significant bit is unset; see the note in the method doc.
         let f_bits = C::ScalarField::BITS - 1;
 
-        let all_bits: Vec<Vec<Target>> = parts
+        let all_bits: Vec<Vec<Target<C::ScalarField>>> = parts
             .iter()
-            .map(|part| self.split_binary(part.scalar, f_bits))
+            .map(|part| self.split_binary(part.scalar.convert(), f_bits))
             .collect();
 
         // Normally we would start with zero, but to avoid exceptional cases, we start with some
@@ -394,7 +402,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
         // Assert that each accumulation of scalar bits matches the original scalar.
         for (j, part) in parts.iter().enumerate() {
-            self.copy(scalar_accs[j], part.scalar);
+            self.copy(scalar_accs[j], part.scalar.convert());
         }
 
         acc
@@ -403,8 +411,8 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     /// Like `curve_msm`, but uses the endomorphism described in the Halo paper.
     pub fn curve_msm_endo<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &mut self,
-        parts: &[CurveMulOp],
-    ) -> CurveMsmEndoResult {
+        parts: &[CurveMulOp<C, InnerC>],
+    ) -> CurveMsmEndoResult<C, InnerC> {
         let zero = self.zero_wire();
 
         // We assume each most significant bit is unset; see the note in curve_msm's method doc.
@@ -420,9 +428,14 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         // We split each scalar into 128 bits and 63 dibits. The bits are used in the MSM, while the
         // dibits are ignored, except that we need to include them in our sum-of-limbs computation
         // in order to verify that the decomposition was correct.
-        let (all_bits, all_dibits): (Vec<Vec<Target>>, Vec<Vec<Target>>) = parts
+        let (all_bits, all_dibits): (
+            Vec<Vec<Target<C::ScalarField>>>,
+            Vec<Vec<Target<C::ScalarField>>>,
+        ) = parts
             .iter()
-            .map(|part| self.split_binary_and_base_4(part.scalar, scalar_bits, scalar_dibits))
+            .map(|part| {
+                self.split_binary_and_base_4(part.scalar.convert(), scalar_bits, scalar_dibits)
+            })
             .unzip();
 
         // Normally we would start with zero, but to avoid exceptional cases, we start with some
@@ -604,7 +617,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
         // Finally, assert that each unsigned accumulator matches the original scalar.
         for (j, part) in parts.iter().enumerate() {
-            self.copy(scalar_acc_unsigned[j], part.scalar);
+            self.copy(scalar_acc_unsigned[j], part.scalar.convert());
         }
 
         CurveMsmEndoResult {

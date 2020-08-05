@@ -35,9 +35,9 @@ pub fn reduce_with_powers<F: Field>(terms: &[F], alpha: F) -> F {
 /// Computes a sum of terms weighted by powers of alpha.
 pub(crate) fn reduce_with_powers_recursive<C: HaloCurve>(
     builder: &mut CircuitBuilder<C>,
-    terms: &[Target],
-    alpha: Target,
-) -> Target {
+    terms: &[Target<C::ScalarField>],
+    alpha: Target<C::ScalarField>,
+) -> Target<C::ScalarField> {
     let mut sum = builder.zero_wire();
     for &term in terms.iter().rev() {
         sum = builder.mul_add(sum, alpha, term);
@@ -137,9 +137,9 @@ pub fn powers<F: Field>(x: F, n: usize) -> Vec<F> {
 /// Compute `[x^0, x^1, ..., x^(n - 1)]`.
 pub(crate) fn powers_recursive<C: HaloCurve>(
     builder: &mut CircuitBuilder<C>,
-    x: Target,
+    x: Target<C::ScalarField>,
     n: usize,
-) -> Vec<Target> {
+) -> Vec<Target<C::ScalarField>> {
     let mut powers = Vec::new();
     let mut current = builder.one_wire();
     for i in 0..n {

@@ -86,11 +86,11 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveA
 
     fn evaluate_unfiltered_recursively(
         builder: &mut CircuitBuilder<C>,
-        _local_constant_values: &[Target],
-        local_wire_values: &[Target],
-        right_wire_values: &[Target],
-        _below_wire_values: &[Target],
-    ) -> Vec<Target> {
+        _local_constant_values: &[Target<C::ScalarField>],
+        local_wire_values: &[Target<C::ScalarField>],
+        right_wire_values: &[Target<C::ScalarField>],
+        _below_wire_values: &[Target<C::ScalarField>],
+    ) -> Vec<Target<C::ScalarField>> {
         // Notation:
         // - p1 is the accumulator;
         // - p2 is the addend;
@@ -145,7 +145,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveA
 impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> WitnessGenerator<C::ScalarField>
     for CurveAddGate<C, InnerC>
 {
-    fn dependencies(&self) -> Vec<Target> {
+    fn dependencies(&self) -> Vec<Target<C::ScalarField>> {
         vec![
             Target::Wire(Wire {
                 gate: self.index,

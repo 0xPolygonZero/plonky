@@ -44,11 +44,11 @@ impl<C: HaloCurve> Gate<C> for PublicInputGate<C> {
 
     fn evaluate_unfiltered_recursively(
         builder: &mut CircuitBuilder<C>,
-        _local_constant_values: &[Target],
-        local_wire_values: &[Target],
-        right_wire_values: &[Target],
-        _below_wire_values: &[Target],
-    ) -> Vec<Target> {
+        _local_constant_values: &[Target<C::ScalarField>],
+        local_wire_values: &[Target<C::ScalarField>],
+        right_wire_values: &[Target<C::ScalarField>],
+        _below_wire_values: &[Target<C::ScalarField>],
+    ) -> Vec<Target<C::ScalarField>> {
         // This ensures that advice wires' values are copied to the following buffer gate.
         // TODO: Consider enforcing this via copy constraints, in which case there would be nothing to do here.
         (0..NUM_ADVICE_WIRES)
@@ -63,7 +63,7 @@ impl<C: HaloCurve> Gate<C> for PublicInputGate<C> {
 }
 
 impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for PublicInputGate<C> {
-    fn dependencies(&self) -> Vec<Target> {
+    fn dependencies(&self) -> Vec<Target<C::ScalarField>> {
         (0..NUM_WIRES)
             .map(|i| {
                 Target::Wire(Wire {
@@ -80,7 +80,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for PublicInputGate<C> {
         witness: &PartialWitness<C::ScalarField>,
     ) -> PartialWitness<C::ScalarField> {
         let self_as_generator: &dyn WitnessGenerator<C::ScalarField> = self;
-        let targets: Vec<Target> = self_as_generator.dependencies();
+        let targets: Vec<Target<C::ScalarField>> = self_as_generator.dependencies();
 
         let mut result = PartialWitness::new();
         for i_advice in 0..NUM_ADVICE_WIRES {

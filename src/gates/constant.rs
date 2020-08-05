@@ -38,11 +38,11 @@ impl<C: HaloCurve> Gate<C> for ConstantGate<C> {
 
     fn evaluate_unfiltered_recursively(
         builder: &mut CircuitBuilder<C>,
-        local_constant_values: &[Target],
-        local_wire_values: &[Target],
-        _right_wire_values: &[Target],
-        _below_wire_values: &[Target],
-    ) -> Vec<Target> {
+        local_constant_values: &[Target<C::ScalarField>],
+        local_wire_values: &[Target<C::ScalarField>],
+        _right_wire_values: &[Target<C::ScalarField>],
+        _below_wire_values: &[Target<C::ScalarField>],
+    ) -> Vec<Target<C::ScalarField>> {
         let c = local_constant_values[Self::PREFIX.len()];
         let out = local_wire_values[Self::WIRE_OUTPUT];
         vec![builder.sub(c, out)]
@@ -50,7 +50,7 @@ impl<C: HaloCurve> Gate<C> for ConstantGate<C> {
 }
 
 impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for ConstantGate<C> {
-    fn dependencies(&self) -> Vec<Target> {
+    fn dependencies(&self) -> Vec<Target<C::ScalarField>> {
         Vec::new()
     }
 
