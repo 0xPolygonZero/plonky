@@ -227,7 +227,6 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
             WitnessGenerator<InnerC::BaseField> for ResultGenerator<C, InnerC>
         {
-            // fn dependencies(&self) -> Vec<Target<C::ScalarField>> {
             fn dependencies(&self) -> Vec<Target<InnerC::BaseField>> {
                 vec![
                     self.mul.scalar.convert::<InnerC::BaseField>(),

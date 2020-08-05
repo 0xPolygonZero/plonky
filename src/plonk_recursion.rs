@@ -40,7 +40,7 @@ fn num_public_input_gates(num_public_inputs: usize) -> usize {
 
 pub fn recursive_verification_circuit<
     C: HaloCurve,
-    InnerC: HaloCurve<BaseField = C::ScalarField, ScalarField = C::BaseField>,
+    InnerC: HaloCurve<BaseField = C::ScalarField>,
 >(
     degree_pow: usize,
     security_bits: usize,
@@ -220,10 +220,7 @@ pub fn recursive_verification_circuit<
 }
 
 /// Verify all IPAs in the given proof, and return IPA challenges.
-fn verify_all_ipas<
-    C: HaloCurve,
-    InnerC: HaloCurve<BaseField = C::ScalarField, ScalarField = C::BaseField>,
->(
+fn verify_all_ipas<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     builder: &mut CircuitBuilder<C>,
     proof: &ProofTarget<C, InnerC>,
     zeta: Target<C::ScalarField>,
