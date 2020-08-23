@@ -71,7 +71,7 @@ def sub_mod(x, y, modulus):
     return [(x - y) % modulus]
 
 def neg_mod(x, modulus):
-    return [modulus - x]
+    return [(modulus - x) % modulus]
 
 def mul_mod(x, y, modulus):
     return [(x * y) % modulus]
