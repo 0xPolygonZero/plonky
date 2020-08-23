@@ -3,6 +3,17 @@
 #
 # Based on: https://github.com/unzvfu/cuda-fixnum/blob/master/tests/gentests.py
 #
+# The file format is as follows (sizes are in bytes, all values are
+# little endian encoded):
+#
+#   bytes per element: 4
+#   #elements in input vector: 4
+#   #outputs per operation: 4
+#   vector of inputs: (bytes per element) x (#elements in input vector)
+#   for i = 0 .. #elements in input vector:
+#       // Each output comes from applying the operation pointwise to the input
+#       // vector and a shift of the input vector by i places
+#       vector of outputs: (bytes per element) x (#outputs per operations) x (#elements in inputvector)
 
 from itertools import chain, product
 from collections import deque
