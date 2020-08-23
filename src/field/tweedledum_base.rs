@@ -303,6 +303,10 @@ impl Debug for TweedledumBase {
 mod tests {
     use crate::test_square_root;
     use crate::{Field, TweedledumBase};
+    use std::io::{Result, Read, BufReader};
+    use std::fs::File;
+    use crate::serialization::FromBytes;
+    use std::ops::{Add,Sub,Mul,Div,Neg};
 
     #[test]
     fn primitive_root_order() {
@@ -314,4 +318,82 @@ mod tests {
     }
 
     test_square_root!(TweedledumBase);
+
+    /* Read 4 bytes from f and interpret little endian as i32. */
+    fn read_i32<R: Read>(f: &mut R) -> Result<i32> {
+        let mut i32_buf = [0; 4];
+        f.read_exact(&mut i32_buf)?;
+        Ok(i32::from_le_bytes(i32_buf))
+    }
+
+    // TODO: There is probably a cleaner way to express this.
+    // TODO: I don't understand the signature for parameter f.
+    fn read_vec<R: Read>(mut f: &mut R, nelts: usize) -> Result<Vec<TweedledumBase>> {
+        let mut res = Vec::new();
+        for _i in 0 .. nelts {
+            res.push(TweedledumBase::read(&mut f)?);
+        }
+        Ok(res)
+    }
+
+    fn run_test_cases<F>(op_str: &str, op: BinFn) -> Result<()>
+        where BinFn: Fn(TweedledumBase, TweedledumBase) -> TweedledumBase
+    {
+        let file_prefix = "src/field/test-data/tweedledum_";
+        let input_file = File::open([file_prefix, op_str].concat())?;
+        let mut reader = BufReader::new(input_file);
+
+        // TODO: Check whether I can just pass a mut here rather than &mut.
+        let bytes_per_elt = read_i32(&mut reader)?;
+        assert_eq!(bytes_per_elt as usize, TweedledumBase::BYTES,
+                   "mismatch in expected size");
+        let n_input_elts = read_i32(&mut reader)? as usize;
+        let n_outputs_per_op = read_i32(&mut reader)?;
+        assert_eq!(n_outputs_per_op, 1, "unexpected value for #outputs/op");
+
+        let inputs = read_vec(&mut reader, n_input_elts)?;
+
+        for i in 0 .. n_input_elts {
+            // Iterator over inputs rotated right by i places. Since
+            // cycle().skip(i) rotates left by i, we need to rotate by
+            // n_input_elts - i.
+            let shifted_inputs = inputs.iter().cycle().skip(n_input_elts - i);
+            // Calculate pointwise operation
+            let output = inputs.iter().zip(shifted_inputs).map(
+                |(&x, &y)| op(x, y));
+            // Read expected outputs
+            let expected_output = read_vec(&mut reader, n_input_elts)?;
+            // Compare expected outputs with actual outputs
+            assert!(output.zip(expected_output.iter()).all(|(x, &y)| x == y),
+                    "output differs from expected at rotation {}", i);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn addition() -> Result<()> {
+        run_test_cases("add", TweedledumBase::add)
+    }
+
+    #[test]
+    fn subtraction() -> Result<()> {
+        run_test_cases("sub", TweedledumBase::sub)
+    }
+
+        //run_test_cases("neg", TweedledumBase::neg);
+
+    #[test]
+    fn multiplication() -> Result<()> {
+        run_test_cases("mul", TweedledumBase::mul)
+    }
+
+    #[test]
+    fn square() -> Result<()> {
+        run_test_cases("sqr", TweedledumBase::mul)
+    }
+
+    #[test]
+    fn division() -> Result<()> {
+        run_test_cases("div", TweedledumBase::div)
+    }
 }
