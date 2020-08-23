@@ -336,11 +336,39 @@ mod tests {
         Ok(res)
     }
 
-    fn run_test_cases<F>(op_str: &str, op: BinFn) -> Result<()>
-        where BinFn: Fn(TweedledumBase, TweedledumBase) -> TweedledumBase
+    fn run_unaryop_test_cases<UnaryOp>(fld_str: &str, op_str: &str, op: UnaryOp) -> Result<()>
+        where UnaryOp: Fn(TweedledumBase) -> TweedledumBase
     {
-        let file_prefix = "src/field/test-data/tweedledum_";
-        let input_file = File::open([file_prefix, op_str].concat())?;
+        let file_prefix = "src/field/test-data/";
+        let input_file = File::open([file_prefix, fld_str, "_", op_str].concat())?;
+        let mut reader = BufReader::new(input_file);
+
+        // TODO: Check whether I can just pass a mut here rather than &mut.
+        let bytes_per_elt = read_i32(&mut reader)?;
+        assert_eq!(bytes_per_elt as usize, TweedledumBase::BYTES,
+                   "mismatch in expected size");
+        let n_input_elts = read_i32(&mut reader)? as usize;
+        let n_outputs_per_op = read_i32(&mut reader)?;
+        assert_eq!(n_outputs_per_op, 1, "unexpected value for #outputs/op");
+
+        let inputs = read_vec(&mut reader, n_input_elts)?;
+
+        // Calculate pointwise operation
+        let output = inputs.iter().map(|&x| op(x));
+        // Read expected outputs
+        let expected_output = read_vec(&mut reader, n_input_elts)?;
+        // Compare expected outputs with actual outputs
+        assert!(output.zip(expected_output.iter()).all(|(x, &y)| x == y),
+                "output differs from expected");
+
+        Ok(())
+    }
+
+    fn run_binaryop_test_cases<BinaryOp>(fld_str: &str, op_str: &str, op: BinaryOp) -> Result<()>
+        where BinaryOp: Fn(TweedledumBase, TweedledumBase) -> TweedledumBase
+    {
+        let file_prefix = "src/field/test-data/";
+        let input_file = File::open([file_prefix, fld_str, "_", op_str].concat())?;
         let mut reader = BufReader::new(input_file);
 
         // TODO: Check whether I can just pass a mut here rather than &mut.
@@ -372,28 +400,31 @@ mod tests {
 
     #[test]
     fn addition() -> Result<()> {
-        run_test_cases("add", TweedledumBase::add)
+        run_binaryop_test_cases("tweedledum", "add", TweedledumBase::add)
     }
 
     #[test]
     fn subtraction() -> Result<()> {
-        run_test_cases("sub", TweedledumBase::sub)
+        run_binaryop_test_cases("tweedledum", "sub", TweedledumBase::sub)
     }
 
-        //run_test_cases("neg", TweedledumBase::neg);
+    #[test]
+    fn negation() -> Result<()> {
+        run_unaryop_test_cases("tweedledum", "neg", TweedledumBase::neg)
+    }
 
     #[test]
     fn multiplication() -> Result<()> {
-        run_test_cases("mul", TweedledumBase::mul)
+        run_binaryop_test_cases("tweedledum", "mul", TweedledumBase::mul)
     }
 
     #[test]
     fn square() -> Result<()> {
-        run_test_cases("sqr", TweedledumBase::mul)
+        run_unaryop_test_cases("tweedledum", "sqr", |x| TweedledumBase::mul(x, x))
     }
 
     #[test]
     fn division() -> Result<()> {
-        run_test_cases("div", TweedledumBase::div)
+        run_binaryop_test_cases("tweedledum", "div", TweedledumBase::div)
     }
 }
