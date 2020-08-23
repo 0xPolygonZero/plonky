@@ -82,9 +82,10 @@ def sqr_mod(x, modulus):
 def div_mod(x, y, modulus):
     if y == 0:
         # Minor hack: Indicate that we were given a zero divisor by
-        # returning modulus. (Don't return 0, as that's a valid answer
-        # for 0/y.)
-        return [modulus]
+        # returning 0. (Would rather return modulus, since zero a
+        # valid answer for 0/y, but modulus can't be read by the
+        # FromBytes input method.)
+        return [0]
     g, yinv, _ = gcdext(y, modulus)
     assert g == 1, 'bad modulus'
     yinv = int(yinv) # convert mpz -> int
