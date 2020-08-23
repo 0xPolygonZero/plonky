@@ -127,7 +127,7 @@ def generate_tests(modulusname, modulus, tests):
         'div': (div_mod, xs, 2, 1, modulus)
     }
     test_names = ops.keys() & tests if len(tests) > 0 else ops.keys()
-    fnames = map(lambda fn: fn + '_' + modulusname, test_names)
+    fnames = map(lambda fn: modulusname + '_' + fn, test_names)
     return list(map(write_tests, fnames, [ops[fn] for fn in test_names]))
 
 
