@@ -307,6 +307,7 @@ mod tests {
     use std::fs::File;
     use crate::serialization::FromBytes;
     use std::ops::{Add,Sub,Mul,Div,Neg};
+    use std::cmp::PartialEq;
 
     #[test]
     fn primitive_root_order() {
@@ -328,10 +329,12 @@ mod tests {
 
     // TODO: There must be a cleaner way to express this.
     // TODO: Work out why I need 'mut f' instead of just 'f'.
-    fn read_vec<R: Read>(mut f: &mut R, nelts: usize) -> Result<Vec<TweedledumBase>> {
+    fn read_vec<R: Read, T>(mut f: &mut R, nelts: usize) -> Result<Vec<T>>
+        where T: FromBytes
+    {
         let mut res = Vec::new();
         for _i in 0 .. nelts {
-            res.push(TweedledumBase::read(&mut f)?);
+            res.push(T::read(&mut f)?);
         }
         Ok(res)
     }
@@ -342,8 +345,9 @@ mod tests {
         One, Many
     }
 
-    fn read_test_cases(fld_str: &str, op_str: &str, n_expected_output_vecs: ExpectedOutputVecs)
-                       -> Result<(Vec<TweedledumBase>, Vec<Vec<TweedledumBase>>)>
+    fn read_test_cases<T>(fld_str: &str, op_str: &str, n_expected_output_vecs: ExpectedOutputVecs)
+                       -> Result<(Vec<T>, Vec<Vec<T>>)>
+        where T: FromBytes
     {
         let file_prefix = "src/field/test-data/";
         let input_file = File::open([file_prefix, fld_str, "_", op_str].concat())?;
@@ -351,7 +355,7 @@ mod tests {
 
         // TODO: Check whether I can just pass a mut here rather than &mut.
         let bytes_per_elt = read_i32(&mut reader)?;
-        assert_eq!(bytes_per_elt as usize, TweedledumBase::BYTES,
+        assert_eq!(bytes_per_elt as usize, 32, // FIXME: should be "T::BYTES",
                    "mismatch in expected size");
         let n_input_elts = read_i32(&mut reader)? as usize;
         let n_outputs_per_op = read_i32(&mut reader)?;
@@ -370,8 +374,9 @@ mod tests {
         Ok((inputs, expected_outputs))
     }
 
-    fn run_unaryop_test_cases<UnaryOp>(fld_str: &str, op_str: &str, op: UnaryOp) -> Result<()>
-        where UnaryOp: Fn(TweedledumBase) -> TweedledumBase
+    fn run_unaryop_test_cases<UnaryOp, T>(fld_str: &str, op_str: &str, op: UnaryOp) -> Result<()>
+        where UnaryOp: Fn(T) -> T,
+              T: FromBytes + Copy + PartialEq
     {
         let (inputs, expected_outputs) = read_test_cases(fld_str, op_str, ExpectedOutputVecs::One)?;
         // Calculate pointwise operation
@@ -382,8 +387,9 @@ mod tests {
         Ok(())
     }
 
-    fn run_binaryop_test_cases<BinaryOp>(fld_str: &str, op_str: &str, op: BinaryOp) -> Result<()>
-        where BinaryOp: Fn(TweedledumBase, TweedledumBase) -> TweedledumBase
+    fn run_binaryop_test_cases<BinaryOp, T>(fld_str: &str, op_str: &str, op: BinaryOp) -> Result<()>
+        where BinaryOp: Fn(T, T) -> T,
+              T: FromBytes + Copy + PartialEq
     {
         let (inputs, expected_outputs) = read_test_cases(fld_str, op_str, ExpectedOutputVecs::Many)?;
 
@@ -431,7 +437,8 @@ mod tests {
     fn division() -> Result<()> {
         run_binaryop_test_cases(
             "tweedledum", "div",
-            |x, y| {
+            // Need to help the compiler infer the type of y here
+            |x: TweedledumBase, y: TweedledumBase| {
                 // TODO: Work out how to check that div() panics
                 // appropriately when given a zero divisor.
                 if ! y.is_zero() {
