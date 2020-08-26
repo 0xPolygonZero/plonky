@@ -299,15 +299,15 @@ impl Debug for TweedledumBase {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use crate::test_square_root;
     use crate::{Field, TweedledumBase};
-    use std::io::{Result, Read, BufReader};
-    use std::fs::File;
-    use crate::serialization::FromBytes;
     use std::ops::{Add,Sub,Mul,Div,Neg};
-    use std::cmp::PartialEq;
+    use std::io::Result;
+
+    use crate::field_tests;
 
     #[test]
     fn primitive_root_order() {
@@ -320,122 +320,34 @@ mod tests {
 
     test_square_root!(TweedledumBase);
 
-    /* Read 4 bytes from f and interpret little endian as i32. */
-    fn read_i32<R: Read>(f: &mut R) -> Result<i32> {
-        let mut i32_buf = [0; 4];
-        f.read_exact(&mut i32_buf)?;
-        Ok(i32::from_le_bytes(i32_buf))
-    }
-
-    // TODO: There must be a cleaner way to express this.
-    // TODO: Work out why I need 'mut f' instead of just 'f'.
-    fn read_vec<R: Read, T>(mut f: &mut R, nelts: usize) -> Result<Vec<T>>
-        where T: FromBytes
-    {
-        let mut res = Vec::new();
-        for _i in 0 .. nelts {
-            res.push(T::read(&mut f)?);
-        }
-        Ok(res)
-    }
-
-    // TODO: Should be able to get rid of this once I work out how to
-    // test for EOF
-    enum ExpectedOutputVecs {
-        One, Many
-    }
-
-    fn read_test_cases<T>(fld_str: &str, op_str: &str, n_expected_output_vecs: ExpectedOutputVecs)
-                       -> Result<(Vec<T>, Vec<Vec<T>>)>
-        where T: FromBytes
-    {
-        let file_prefix = "src/field/test-data/";
-        let input_file = File::open([file_prefix, fld_str, "_", op_str].concat())?;
-        let mut reader = BufReader::new(input_file);
-
-        // TODO: Check whether I can just pass a mut here rather than &mut.
-        let bytes_per_elt = read_i32(&mut reader)?;
-        assert_eq!(bytes_per_elt as usize, 32, // FIXME: should be "T::BYTES",
-                   "mismatch in expected size");
-        let n_input_elts = read_i32(&mut reader)? as usize;
-        let n_outputs_per_op = read_i32(&mut reader)?;
-        assert_eq!(n_outputs_per_op, 1, "unexpected value for #outputs/op");
-
-        let inputs = read_vec(&mut reader, n_input_elts)?;
-        let mut expected_outputs = Vec::new();
-        let n_output_vecs = match n_expected_output_vecs {
-            ExpectedOutputVecs::One => 1,
-            ExpectedOutputVecs::Many => n_input_elts
-        };
-        // TODO: work out how to test for EOF
-        for _i in 0 .. n_output_vecs {
-            expected_outputs.push(read_vec(&mut reader, n_input_elts)?);
-        }
-        Ok((inputs, expected_outputs))
-    }
-
-    fn run_unaryop_test_cases<UnaryOp, T>(fld_str: &str, op_str: &str, op: UnaryOp) -> Result<()>
-        where UnaryOp: Fn(T) -> T,
-              T: FromBytes + Copy + PartialEq
-    {
-        let (inputs, expected_outputs) = read_test_cases(fld_str, op_str, ExpectedOutputVecs::One)?;
-        // Calculate pointwise operation
-        let output = inputs.iter().map(|&x| op(x));
-        // Compare expected outputs with actual outputs
-        assert!(output.zip(expected_outputs[0].iter()).all(|(x, &y)| x == y),
-                "output differs from expected");
-        Ok(())
-    }
-
-    fn run_binaryop_test_cases<BinaryOp, T>(fld_str: &str, op_str: &str, op: BinaryOp) -> Result<()>
-        where BinaryOp: Fn(T, T) -> T,
-              T: FromBytes + Copy + PartialEq
-    {
-        let (inputs, expected_outputs) = read_test_cases(fld_str, op_str, ExpectedOutputVecs::Many)?;
-
-        for (i, expected) in expected_outputs.iter().enumerate() {
-            // Iterator over inputs rotated right by i places. Since
-            // cycle().skip(i) rotates left by i, we need to rotate by
-            // n_input_elts - i.
-            let shifted_inputs = inputs.iter().cycle().skip(inputs.len() - i);
-            // Calculate pointwise operation
-            let output = inputs.iter().zip(shifted_inputs).map(
-                |(&x, &y)| op(x, y));
-            // Compare expected outputs with actual outputs
-            assert!(output.zip(expected.iter()).all(|(x, &y)| x == y),
-                    "output differs from expected at rotation {}", i);
-        }
-        Ok(())
-    }
-
     #[test]
     fn addition() -> Result<()> {
-        run_binaryop_test_cases("tweedledum", "add", TweedledumBase::add)
+        field_tests::run_binaryop_test_cases("tweedledum", "add", TweedledumBase::add)
     }
 
     #[test]
     fn subtraction() -> Result<()> {
-        run_binaryop_test_cases("tweedledum", "sub", TweedledumBase::sub)
+        field_tests::run_binaryop_test_cases("tweedledum", "sub", TweedledumBase::sub)
     }
 
     #[test]
     fn negation() -> Result<()> {
-        run_unaryop_test_cases("tweedledum", "neg", TweedledumBase::neg)
+        field_tests::run_unaryop_test_cases("tweedledum", "neg", TweedledumBase::neg)
     }
 
     #[test]
     fn multiplication() -> Result<()> {
-        run_binaryop_test_cases("tweedledum", "mul", TweedledumBase::mul)
+        field_tests::run_binaryop_test_cases("tweedledum", "mul", TweedledumBase::mul)
     }
 
     #[test]
     fn square() -> Result<()> {
-        run_unaryop_test_cases("tweedledum", "sqr", |x| TweedledumBase::mul(x, x))
+        field_tests::run_unaryop_test_cases("tweedledum", "sqr", |x| TweedledumBase::mul(x, x))
     }
 
     #[test]
     fn division() -> Result<()> {
-        run_binaryop_test_cases(
+        field_tests::run_binaryop_test_cases(
             "tweedledum", "div",
             // Need to help the compiler infer the type of y here
             |x: TweedledumBase, y: TweedledumBase| {
