@@ -492,6 +492,7 @@ pub mod field_tests {
     use std::io::{Result, Read, BufReader};
     use std::cmp::PartialEq;
     use crate::serialization::FromBytes;
+    use crate::Field;
 
     /* Read 4 bytes from f and interpret little endian as i32. */
     fn read_i32<R: Read>(f: &mut R) -> Result<i32> {
@@ -522,7 +523,7 @@ pub mod field_tests {
     fn read_test_cases<T>(fld_str: &str, op_str: &str, n_expected_output_vecs: ExpectedOutputVecs)
                           -> Result<(Vec<T>, Vec<Vec<T>>)>
     where
-        T: FromBytes
+        T: Field + FromBytes
     {
         let file_prefix = "src/field/test-data/";
         let input_file = File::open([file_prefix, fld_str, "_", op_str].concat())?;
@@ -530,7 +531,7 @@ pub mod field_tests {
 
         // TODO: Check whether I can just pass a mut here rather than &mut.
         let bytes_per_elt = read_i32(&mut reader)?;
-        assert_eq!(bytes_per_elt as usize, 32, // FIXME: should be "T::BYTES",
+        assert_eq!(bytes_per_elt as usize, T::BYTES,
                    "mismatch in expected size");
         let n_input_elts = read_i32(&mut reader)? as usize;
         let n_outputs_per_op = read_i32(&mut reader)?;
@@ -552,7 +553,7 @@ pub mod field_tests {
     pub fn run_unaryop_test_cases<UnaryOp, T>(fld_str: &str, op_str: &str, op: UnaryOp) -> Result<()>
     where
         UnaryOp: Fn(T) -> T,
-        T: FromBytes + Copy + PartialEq
+        T: FromBytes + Copy + PartialEq + Field
     {
         let (inputs, expected_outputs) = read_test_cases(fld_str, op_str, ExpectedOutputVecs::One)?;
         // Calculate pointwise operation
@@ -566,7 +567,7 @@ pub mod field_tests {
     pub fn run_binaryop_test_cases<BinaryOp, T>(fld_str: &str, op_str: &str, op: BinaryOp) -> Result<()>
     where
         BinaryOp: Fn(T, T) -> T,
-        T: FromBytes + Copy + PartialEq
+        T: FromBytes + Copy + PartialEq + Field
     {
         let (inputs, expected_outputs) = read_test_cases(fld_str, op_str, ExpectedOutputVecs::Many)?;
 
