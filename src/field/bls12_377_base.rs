@@ -283,7 +283,7 @@ impl Display for Bls12377Base {
 mod tests {
     use crate::{Bls12377Base, Field};
     use crate::conversions::u64_slice_to_biguint;
-    use crate::test_square_root;
+    use crate::{test_square_root, test_arithmetic};
 
     #[test]
     fn bls12base_to_and_from_canonical() {
@@ -384,4 +384,5 @@ mod tests {
     }
 
     test_square_root!(Bls12377Base);
+    test_arithmetic!(Bls12377Base, "bls12-377");
 }

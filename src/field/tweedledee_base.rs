@@ -301,7 +301,7 @@ impl Debug for TweedledeeBase {
 
 #[cfg(test)]
 mod tests {
-    use crate::test_square_root;
+    use crate::{test_square_root, test_arithmetic};
     use crate::{Field, TweedledeeBase};
 
     #[test]
@@ -326,4 +326,5 @@ mod tests {
     }
 
     test_square_root!(TweedledeeBase);
+    test_arithmetic!(TweedledeeBase, "tweedledee");
 }

@@ -585,3 +585,58 @@ pub mod field_tests {
         Ok(())
     }
 }
+
+#[macro_export]
+macro_rules! test_arithmetic {
+    ($field:ty, $name:expr) => {
+        use crate::field_tests;
+        use std::io::Result;
+        use std::ops::{Add,Sub,Mul,Div,Neg};
+
+        // TODO: I've given these unreasonably long names to avoid
+        // name conflicts (notably with the 'negation()' test for
+        // Bls12377Base. It would be better that these tests were
+        // simply in their own module.
+        #[test]
+        fn arithmetic_addition() -> Result<()> {
+            field_tests::run_binaryop_test_cases($name, "add", <$field>::add)
+        }
+
+        #[test]
+        fn arithmetic_subtraction() -> Result<()> {
+            field_tests::run_binaryop_test_cases($name, "sub", <$field>::sub)
+        }
+
+        #[test]
+        fn arithmetic_negation() -> Result<()> {
+            field_tests::run_unaryop_test_cases($name, "neg", <$field>::neg)
+        }
+
+        #[test]
+        fn arithmetic_multiplication() -> Result<()> {
+            field_tests::run_binaryop_test_cases($name, "mul", <$field>::mul)
+        }
+
+        #[test]
+        fn arithmetic_square() -> Result<()> {
+            field_tests::run_unaryop_test_cases($name, "sqr", |x| <$field>::mul(x, x))
+        }
+
+        #[test]
+        fn arithmetic_division() -> Result<()> {
+            field_tests::run_binaryop_test_cases(
+                $name, "div",
+                // Need to help the compiler infer the type of y here
+                |x: $field, y: $field| {
+                    // TODO: Work out how to check that div() panics
+                    // appropriately when given a zero divisor.
+                    if ! y.is_zero() {
+                        <$field>::div(x, y)
+                    } else {
+                        // gentest sets result to zero when divisor is zero
+                        <$field>::ZERO
+                    }
+                })
+        }
+    }
+}

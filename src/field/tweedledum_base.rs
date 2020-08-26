@@ -302,12 +302,8 @@ impl Debug for TweedledumBase {
 
 #[cfg(test)]
 mod tests {
-    use crate::test_square_root;
+    use crate::{test_square_root, test_arithmetic};
     use crate::{Field, TweedledumBase};
-    use std::ops::{Add,Sub,Mul,Div,Neg};
-    use std::io::Result;
-
-    use crate::field_tests;
 
     #[test]
     fn primitive_root_order() {
@@ -319,46 +315,5 @@ mod tests {
     }
 
     test_square_root!(TweedledumBase);
-
-    #[test]
-    fn addition() -> Result<()> {
-        field_tests::run_binaryop_test_cases("tweedledum", "add", TweedledumBase::add)
-    }
-
-    #[test]
-    fn subtraction() -> Result<()> {
-        field_tests::run_binaryop_test_cases("tweedledum", "sub", TweedledumBase::sub)
-    }
-
-    #[test]
-    fn negation() -> Result<()> {
-        field_tests::run_unaryop_test_cases("tweedledum", "neg", TweedledumBase::neg)
-    }
-
-    #[test]
-    fn multiplication() -> Result<()> {
-        field_tests::run_binaryop_test_cases("tweedledum", "mul", TweedledumBase::mul)
-    }
-
-    #[test]
-    fn square() -> Result<()> {
-        field_tests::run_unaryop_test_cases("tweedledum", "sqr", |x| TweedledumBase::mul(x, x))
-    }
-
-    #[test]
-    fn division() -> Result<()> {
-        field_tests::run_binaryop_test_cases(
-            "tweedledum", "div",
-            // Need to help the compiler infer the type of y here
-            |x: TweedledumBase, y: TweedledumBase| {
-                // TODO: Work out how to check that div() panics
-                // appropriately when given a zero divisor.
-                if ! y.is_zero() {
-                    TweedledumBase::div(x, y)
-                } else {
-                    // gentest sets result to zero when divisor is zero
-                    TweedledumBase::ZERO
-                }
-            })
-    }
+    test_arithmetic!(TweedledumBase, "tweedledum");
 }
