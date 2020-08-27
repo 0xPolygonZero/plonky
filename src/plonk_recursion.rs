@@ -49,25 +49,23 @@ pub fn recursive_verification_circuit<
 ) -> RecursiveCircuit<C, InnerC> {
     let mut builder = CircuitBuilder::<C>::new(security_bits);
     let public_inputs = RecursionPublicInputs {
-        beta: builder.stage_public_input(),
-        gamma: builder.stage_public_input(),
-        alpha: builder.stage_public_input(),
-        zeta: builder.stage_public_input(),
-        o_constants: builder.stage_public_inputs(NUM_CONSTANTS),
-        o_plonk_sigmas: builder.stage_public_inputs(NUM_ROUTED_WIRES),
-        o_local_wires: builder.stage_public_inputs(NUM_WIRES),
-        o_right_wires: builder.stage_public_inputs(NUM_WIRES),
-        o_below_wires: builder.stage_public_inputs(NUM_WIRES),
-        o_plonk_z_local: builder.stage_public_input(),
-        o_plonk_z_right: builder.stage_public_input(),
-        o_plonk_t: builder.stage_public_inputs(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
-        halo_us: builder.stage_public_inputs(degree_pow),
-        old_proofs: builder.stage_public_inputs((2 + degree_pow) * num_old_proofs),
+        beta: builder.add_public_input(),
+        gamma: builder.add_public_input(),
+        alpha: builder.add_public_input(),
+        zeta: builder.add_public_input(),
+        o_constants: builder.add_public_inputs(NUM_CONSTANTS),
+        o_plonk_sigmas: builder.add_public_inputs(NUM_ROUTED_WIRES),
+        o_local_wires: builder.add_public_inputs(NUM_WIRES),
+        o_right_wires: builder.add_public_inputs(NUM_WIRES),
+        o_below_wires: builder.add_public_inputs(NUM_WIRES),
+        o_plonk_z_local: builder.add_public_input(),
+        o_plonk_z_right: builder.add_public_input(),
+        o_plonk_t: builder.add_public_inputs(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER),
+        halo_us: builder.add_public_inputs(degree_pow),
+        old_proofs: builder.add_public_inputs((2 + degree_pow) * num_old_proofs),
     };
 
     let num_public_input_gates = num_public_input_gates(num_public_inputs);
-
-    builder.route_public_inputs();
 
     let proof = ProofTarget::<C, InnerC> {
         c_wires: builder.add_virtual_point_targets(NUM_WIRES),
@@ -151,61 +149,61 @@ pub fn recursive_verification_circuit<
     );
 
     // "Outputs" data relating to assumption which still need to be verified by the next proof.
-    builder.copy(public_inputs.beta.routable_target(), beta);
-    builder.copy(public_inputs.gamma.routable_target(), gamma);
-    builder.copy(public_inputs.alpha.routable_target(), alpha);
-    builder.copy(public_inputs.zeta.routable_target(), zeta);
+    builder.copy(Target::PublicInput(public_inputs.beta), beta);
+    builder.copy(Target::PublicInput(public_inputs.gamma), gamma);
+    builder.copy(Target::PublicInput(public_inputs.alpha), alpha);
+    builder.copy(Target::PublicInput(public_inputs.zeta), zeta);
     for i in 0..NUM_CONSTANTS {
         builder.copy(
-            public_inputs.o_constants[i].routable_target(),
+            Target::PublicInput(public_inputs.o_constants[i]),
             proof.o_local.o_constants[i],
         );
     }
     for i in 0..NUM_ROUTED_WIRES {
         builder.copy(
-            public_inputs.o_plonk_sigmas[i].routable_target(),
+            Target::PublicInput(public_inputs.o_plonk_sigmas[i]),
             proof.o_local.o_plonk_sigmas[i],
         );
     }
     for i in 0..NUM_WIRES {
         builder.copy(
-            public_inputs.o_local_wires[i].routable_target(),
+            Target::PublicInput(public_inputs.o_local_wires[i]),
             proof.o_local.o_wires[i],
         );
         builder.copy(
-            public_inputs.o_right_wires[i].routable_target(),
+            Target::PublicInput(public_inputs.o_right_wires[i]),
             proof.o_right.o_wires[i],
         );
         builder.copy(
-            public_inputs.o_below_wires[i].routable_target(),
+            Target::PublicInput(public_inputs.o_below_wires[i]),
             proof.o_below.o_wires[i],
         );
     }
     builder.copy(
-        public_inputs.o_plonk_z_local.routable_target(),
+        Target::PublicInput(public_inputs.o_plonk_z_local),
         proof.o_local.o_plonk_z,
     );
     builder.copy(
-        public_inputs.o_plonk_z_right.routable_target(),
+        Target::PublicInput(public_inputs.o_plonk_z_right),
         proof.o_right.o_plonk_z,
     );
     for i in 0..degree_pow {
-        builder.copy(public_inputs.halo_us[i].routable_target(), halo_us[i]);
+        builder.copy(Target::PublicInput(public_inputs.halo_us[i]), halo_us[i]);
     }
     let shift = 2 + degree_pow;
     for i in 0..num_old_proofs {
         builder.copy(
             old_proofs[i].halo_g.x,
-            public_inputs.old_proofs[shift * i].routable_target(),
+            Target::PublicInput(public_inputs.old_proofs[shift * i]),
         );
         builder.copy(
             old_proofs[i].halo_g.y,
-            public_inputs.old_proofs[shift * i + 1].routable_target(),
+            Target::PublicInput(public_inputs.old_proofs[shift * i + 1]),
         );
         for j in 0..degree_pow {
             builder.copy(
                 old_proofs[i].halo_us[j].convert(),
-                public_inputs.old_proofs[shift * i + j + 2].routable_target(),
+                Target::PublicInput(public_inputs.old_proofs[shift * i + j + 2]),
             );
         }
     }

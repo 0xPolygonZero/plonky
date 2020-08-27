@@ -2,10 +2,9 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::gates::*;
 use crate::plonk_util::{commit_polynomials, polynomials_to_values_padded, sigma_polynomials, values_to_polynomials};
-use crate::util::{ceil_div_usize, log2_strict, transpose};
+use crate::util::{log2_strict, transpose, ceil_div_usize};
 use crate::{blake_hash_usize_to_curve, fft_precompute, generate_rescue_constants, msm_precompute, AffinePoint, AffinePointTarget, BoundedTarget, Circuit, Curve, Field, HaloCurve, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, NUM_CONSTANTS, NUM_WIRES};
 use num::{BigUint, Zero};
-use std::marker::PhantomData;
 
 pub struct CircuitBuilder<C: HaloCurve> {
     pub(crate) security_bits: usize,
@@ -32,32 +31,14 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
     }
 
-    pub fn stage_public_input(&mut self) -> PublicInput<C::ScalarField> {
+    pub fn add_public_input(&mut self) -> PublicInput<C::ScalarField> {
         let index = self.public_input_index;
         self.public_input_index += 1;
-        PublicInput {
-            index,
-            _field: PhantomData,
-        }
+        PublicInput::new(index)
     }
 
-    pub fn stage_public_inputs(&mut self, n: usize) -> Vec<PublicInput<C::ScalarField>> {
-        (0..n).map(|_i| self.stage_public_input()).collect()
-    }
-
-    /// Add `PublicInputGate`s which enable public inputs to be routed. Should be called after all
-    /// `stage_public_input[s]` calls, but before any gates are added.
-    pub fn route_public_inputs(&mut self) {
-        debug_assert_eq!(
-            self.num_gates(),
-            0,
-            "Must be called before any gates are added"
-        );
-        let num_pi_gates = ceil_div_usize(self.public_input_index, NUM_WIRES);
-        for i in 0..num_pi_gates {
-            self.add_gate_no_constants(PublicInputGate::new(i * 2));
-            self.add_gate_no_constants(BufferGate::new(i * 2 + 1));
-        }
+    pub fn add_public_inputs(&mut self, n: usize) -> Vec<PublicInput<C::ScalarField>> {
+        (0..n).map(|_i| self.add_public_input()).collect()
     }
 
     pub fn add_virtual_target(&mut self) -> Target<C::ScalarField> {
@@ -1068,7 +1049,26 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
     }
 
+    fn prepend_pi_gates(&mut self) {
+        // Temporarily remove all gates, saving them in a buffer.
+        let mut gate_constants_buffer = Vec::with_capacity(self.num_gates());
+        gate_constants_buffer.append(&mut self.gate_constants);
+
+        // Add `PublicInputGate`s alog with their associated `BufferGate`s.
+        let num_pi_gates = ceil_div_usize(self.public_input_index, NUM_WIRES);
+        for i in 0..num_pi_gates {
+            self.add_gate_no_constants(PublicInputGate::new(i * 2));
+            self.add_gate_no_constants(BufferGate::new(i * 2 + 1));
+        }
+
+        // Add back the buffered gates.
+        self.gate_constants.extend(gate_constants_buffer);
+    }
+
     pub fn build(mut self) -> Circuit<C> {
+        // TODO: After get_routing_partitions?
+        self.prepend_pi_gates();
+
         // Since we will open each polynomial at three points outside of H, we need three random
         // values to ensure nothing is learned from the out-of-H openings.
         for _i in 0..3 {
@@ -1175,6 +1175,12 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
     fn get_routing_partitions(&self) -> TargetPartitions<C::ScalarField> {
         let mut partitions = TargetPartitions::new();
+
+        for i in 0..self.public_input_index {
+            partitions.add_partition(Target::PublicInput(
+                PublicInput::new(i)
+            ));
+        }
 
         for i in 0..self.virtual_target_index {
             partitions.add_partition(Target::VirtualTarget(VirtualTarget { index: i }));

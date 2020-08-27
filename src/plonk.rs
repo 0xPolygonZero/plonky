@@ -577,7 +577,7 @@ impl<C: HaloCurve> Circuit<C> {
         inputs: PartialWitness<C::ScalarField>,
     ) -> Witness<C::ScalarField> {
         let partial_witness = self.generate_partial_witness(inputs);
-        Witness::from_partial(&partial_witness, self.degree())
+        Witness::from_partial(&partial_witness, self.degree(), self.num_public_inputs)
     }
 
     /// For the given set of targets, find any copy constraints involving those targets and populate

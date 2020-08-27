@@ -1,5 +1,5 @@
-use crate::util::transpose;
-use crate::{biguint_to_field, biguint_to_limbs, field_to_biguint, AffinePoint, AffinePointTarget, BigIntTarget, Curve, Field, ForeignFieldTarget, OrderingTarget, PublicInput, Target, Wire, LIMB_BITS, NUM_WIRES};
+use crate::util::{transpose, ceil_div_usize};
+use crate::{biguint_to_field, biguint_to_limbs, field_to_biguint, AffinePoint, AffinePointTarget, BigIntTarget, Curve, Field, ForeignFieldTarget, OrderingTarget, PublicInput, Target, Wire, LIMB_BITS, NUM_WIRES, NUM_ROUTED_WIRES};
 use num::{BigUint, Zero};
 use std::{cmp::Ordering, collections::HashMap};
 
@@ -162,9 +162,9 @@ impl<F: Field> PartialWitness<F> {
         self.set_target(Target::Wire(wire), value);
     }
 
+    // TODO: Delete?
     pub fn set_public_input(&mut self, pi: PublicInput<F>, value: F) {
-        self.set_wire(pi.original_wire(), value);
-        self.set_target(pi.routable_target(), value);
+        self.set_target(Target::PublicInput(pi), value);
     }
 
     pub fn extend(&mut self, other: PartialWitness<F>) {
@@ -196,11 +196,41 @@ impl<F: Field> Witness<F> {
         transpose(&self.wire_values)
     }
 
-    /// Converts a `PartialWitness` to a a `Witness`.
-    /// The partial witness should be sufficiently preprocessed, e.g., it should contain copy constraints.
-    pub fn from_partial(pw: &PartialWitness<F>, degree: usize) -> Self {
+    /// Converts a `PartialWitness` to a `Witness`.
+    /// The partial witness should be sufficiently preprocessed, e.g., any copies should have been
+    /// performed already.
+    pub fn from_partial(
+        pw: &PartialWitness<F>,
+        degree: usize,
+        num_public_inputs: usize,
+    ) -> Self {
         let mut wire_values: Vec<Vec<F>> = Vec::new();
-        for i in 0..degree {
+
+        // First, we will populate PublicInputGates and their associated BufferGates with public
+        // input values.
+        let num_pi_gates = ceil_div_usize(num_public_inputs, NUM_WIRES);
+        let num_pi_and_buffer_gates = 2 * num_pi_gates;
+        for gate in 0..num_pi_gates {
+            let mut pi_gate_wires = vec![F::ZERO; NUM_WIRES];
+            let mut buffer_gate_wires = vec![F::ZERO; NUM_WIRES];
+            for wire in 0..NUM_WIRES {
+                let pi_index = gate * NUM_WIRES + wire;
+                if pi_index < num_public_inputs {
+                    let pi_value = pw.get_target(Target::PublicInput(PublicInput::new(pi_index)));
+                    pi_gate_wires[wire] = pi_value;
+                    if wire >= NUM_ROUTED_WIRES {
+                        buffer_gate_wires[wire - NUM_ROUTED_WIRES] = pi_value;
+                    }
+                }
+            }
+            wire_values.push(pi_gate_wires);
+            wire_values.push(buffer_gate_wires);
+        }
+
+        // Note that `i` here is the gate index of a Target::Wire, not the gate index of a wire in
+        // the final witness. The difference is due to public input gates, which effectively "shift"
+        // other gates forward.
+        for i in 0..(degree - num_pi_and_buffer_gates) {
             let mut gate_i_wires = Vec::new();
             for j in 0..NUM_WIRES {
                 let wire = Wire { gate: i, input: j };
@@ -214,6 +244,7 @@ impl<F: Field> Witness<F> {
             }
             wire_values.push(gate_i_wires);
         }
+
         Witness::new(wire_values)
     }
 }
