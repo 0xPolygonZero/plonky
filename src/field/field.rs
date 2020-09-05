@@ -520,6 +520,39 @@ pub mod field_tests {
         One, Many
     }
 
+    use num::BigUint;
+
+    fn test_inputs(modulus: &num::BigUint, word_bits: u64) -> Vec<num::BigUint>
+    {
+        assert!(word_bits == 32 || word_bits == 64);
+        let modwords = (modulus.bits() + word_bits - 1) / word_bits;
+        // Start with basic set close to zero: 0 .. 10
+        const BIGGEST_SMALL: u32 = 10;
+        let smalls: Vec<_> = (0..BIGGEST_SMALL).map(|x| BigUint::from(x)).collect();
+        // ... and close to MAX: MAX - x
+        let word_max = (BigUint::from(1u32) << word_bits) - 1u32;
+        let bigs = smalls.iter().map(|x| &word_max - x).collect();
+        let one_words = [smalls, bigs].concat();
+        // For each of the one word inputs above, create a new one at word i.
+        // TODO: Create all possible `modwords` combinations of those
+        let multiple_words = (1..modwords).flat_map(|i| {
+            one_words.iter().map(|x| x << (word_bits * i)).collect::<Vec<BigUint>>()
+        }).collect();
+        let basic_inputs = [one_words, multiple_words].concat();
+
+        // Biggest value that will fit in `modwords` words
+        let maxval = (BigUint::from(1u32) << (modwords * word_bits)) - 1u32;
+        // Inputs 'difference from' maximum value
+        let diff_max = basic_inputs.iter().map(|x| &maxval - x).collect();
+        // Inputs 'difference from' modulus value
+        let diff_mod = basic_inputs.iter().map(|x| modulus - x).collect();
+        let all_inputs = [basic_inputs, diff_max, diff_mod].concat();
+
+        // filtered_inputs
+        //all_inputs.into_iter().filter(|x| x < &modulus).collect::<Vec<BigUint>>();
+        all_inputs.into_iter().filter(|x| x < &modulus).collect()
+    }
+
     fn read_test_cases<T>(fld_str: &str, op_str: &str, n_expected_output_vecs: ExpectedOutputVecs)
                           -> Result<(Vec<T>, Vec<Vec<T>>)>
     where
