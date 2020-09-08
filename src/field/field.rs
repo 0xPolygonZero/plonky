@@ -492,6 +492,10 @@ pub mod field_tests {
     use crate::{Field, biguint_to_field, field_to_biguint};
     use num::{BigUint, Zero, One};
 
+    /// Generates a series of non-negative integers less than
+    /// `modulus` which cover a range of values and which will
+    /// generate lots of carries, especially at `word_bits` word
+    /// boundaries.
     fn test_inputs(modulus: &num::BigUint, word_bits: usize) -> Vec<num::BigUint>
     {
         assert!(word_bits == 32 || word_bits == 64);
@@ -534,6 +538,10 @@ pub mod field_tests {
         //     .collect()
     }
 
+
+    /// Apply the unary functions `op` and `expected_op`
+    /// coordinate-wise to the inputs from `test_inputs(modulus,
+    /// word_bits)` and panic if the two resulting vectors differ.
     pub fn run_unaryop_test_cases<T, UnaryOp, ExpectedOp>(
         modulus: &BigUint, word_bits: usize,
         op: UnaryOp, expected_op: ExpectedOp)
@@ -552,6 +560,12 @@ pub mod field_tests {
         Ok(())
     }
 
+
+    /// Apply the binary functions `op` and `expected_op` to each pair
+    /// in `zip(inputs, rotate_right(inputs, i))` where `inputs` is
+    /// `test_inputs(modulus, word_bits)` and `i` ranges from 0 to
+    /// `inputs.len()`.  Panic if the two functions ever give
+    /// different answers.
     pub fn run_binaryop_test_cases<T, BinaryOp, ExpectedOp>(
         modulus: &BigUint, word_bits: usize,
         op: BinaryOp, expected_op: ExpectedOp)
@@ -591,6 +605,8 @@ macro_rules! test_arithmetic {
         use std::ops::{Add,Sub,Mul,Neg,Div};
         use num::{BigUint, Zero, One};
 
+
+        /// Return the modulus of the type `Fld`.
         fn field_modulus<Fld>() -> BigUint
         where Fld: Field {
             field_to_biguint(Fld::T) * (BigUint::one() << Fld::TWO_ADICITY) + 1u32
@@ -622,9 +638,7 @@ macro_rules! test_arithmetic {
             field_tests::run_binaryop_test_cases(
                 &modulus, WORD_BITS,
                 <$field>::sub,
-                |x, y| {
-                    if x >= y { x - y } else { &modulus - y + x }
-                })
+                |x, y| if x >= y { x - y } else { &modulus - y + x })
         }
 
         #[test]
