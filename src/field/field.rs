@@ -488,41 +488,11 @@ macro_rules! test_square_root {
 }
 
 pub mod field_tests {
-    use std::fs::File;
-    use std::io::{Result, Read, BufReader};
-    use std::cmp::PartialEq;
-    use crate::serialization::FromBytes;
-    use crate::Field;
+    use std::io::Result;
+    use crate::{Field, biguint_to_field, field_to_biguint};
+    use num::{BigUint, Zero, One};
 
-    /* Read 4 bytes from f and interpret little endian as i32. */
-    fn read_i32<R: Read>(f: &mut R) -> Result<i32> {
-        let mut i32_buf = [0; 4];
-        f.read_exact(&mut i32_buf)?;
-        Ok(i32::from_le_bytes(i32_buf))
-    }
-
-    // TODO: There must be a cleaner way to express this.
-    // TODO: Work out why I need 'mut f' instead of just 'f'.
-    fn read_vec<R: Read, T>(mut f: &mut R, nelts: usize) -> Result<Vec<T>>
-    where
-        T: FromBytes
-    {
-        let mut res = Vec::new();
-        for _i in 0 .. nelts {
-            res.push(T::read(&mut f)?);
-        }
-        Ok(res)
-    }
-
-    // TODO: Should be able to get rid of this once I work out how to
-    // test for EOF
-    enum ExpectedOutputVecs {
-        One, Many
-    }
-
-    use num::BigUint;
-
-    fn test_inputs(modulus: &num::BigUint, word_bits: u64) -> Vec<num::BigUint>
+    fn test_inputs(modulus: &num::BigUint, word_bits: usize) -> Vec<num::BigUint>
     {
         assert!(word_bits == 32 || word_bits == 64);
         let modwords = (modulus.bits() + word_bits - 1) / word_bits;
@@ -530,7 +500,7 @@ pub mod field_tests {
         const BIGGEST_SMALL: u32 = 10;
         let smalls: Vec<_> = (0..BIGGEST_SMALL).map(|x| BigUint::from(x)).collect();
         // ... and close to MAX: MAX - x
-        let word_max = (BigUint::from(1u32) << word_bits) - 1u32;
+        let word_max = (BigUint::one() << word_bits) - 1u32;
         let bigs = smalls.iter().map(|x| &word_max - x).collect();
         let one_words = [smalls, bigs].concat();
         // For each of the one word inputs above, create a new one at word i.
@@ -541,79 +511,71 @@ pub mod field_tests {
         let basic_inputs = [one_words, multiple_words].concat();
 
         // Biggest value that will fit in `modwords` words
-        let maxval = (BigUint::from(1u32) << (modwords * word_bits)) - 1u32;
+        let maxval = (BigUint::one() << (modwords * word_bits)) - 1u32;
         // Inputs 'difference from' maximum value
-        let diff_max = basic_inputs.iter().map(|x| &maxval - x).collect();
+        let diff_max = basic_inputs.iter()
+            .map(|x| &maxval - x)
+            .filter(|x| x < &modulus)
+            .collect();
         // Inputs 'difference from' modulus value
-        let diff_mod = basic_inputs.iter().map(|x| modulus - x).collect();
-        let all_inputs = [basic_inputs, diff_max, diff_mod].concat();
+        let diff_mod = basic_inputs.iter()
+            .filter(|x| *x < &modulus && !x.is_zero())
+            .map(|x| modulus - x)
+            .collect();
+        let basics = basic_inputs.into_iter().filter(|x| x < &modulus).collect::<Vec<BigUint>>();
+        [basics, diff_max, diff_mod].concat()
 
-        // filtered_inputs
-        //all_inputs.into_iter().filter(|x| x < &modulus).collect::<Vec<BigUint>>();
-        all_inputs.into_iter().filter(|x| x < &modulus).collect()
+        // // There should be a nicer way to express the code above; something
+        // // like this (and removing collect() calls from diff_max and diff_mod):
+        // basic_inputs.into_iter()
+        //     .chain(diff_max)
+        //     .chain(diff_mod)
+        //     .filter(|x| x < &modulus)
+        //     .collect()
     }
 
-    fn read_test_cases<T>(fld_str: &str, op_str: &str, n_expected_output_vecs: ExpectedOutputVecs)
-                          -> Result<(Vec<T>, Vec<Vec<T>>)>
+    pub fn run_unaryop_test_cases<T, UnaryOp, ExpectedOp>(
+        modulus: &BigUint, word_bits: usize,
+        op: UnaryOp, expected_op: ExpectedOp)
+        -> Result<()>
     where
-        T: Field + FromBytes
-    {
-        let file_prefix = "src/field/test-data/";
-        let input_file = File::open([file_prefix, fld_str, "_", op_str].concat())?;
-        let mut reader = BufReader::new(input_file);
-
-        // TODO: Check whether I can just pass a mut here rather than &mut.
-        let bytes_per_elt = read_i32(&mut reader)?;
-        assert_eq!(bytes_per_elt as usize, T::BYTES,
-                   "mismatch in expected size");
-        let n_input_elts = read_i32(&mut reader)? as usize;
-        let n_outputs_per_op = read_i32(&mut reader)?;
-        assert_eq!(n_outputs_per_op, 1, "unexpected value for #outputs/op");
-
-        let inputs = read_vec(&mut reader, n_input_elts)?;
-        let mut expected_outputs = Vec::new();
-        let n_output_vecs = match n_expected_output_vecs {
-            ExpectedOutputVecs::One => 1,
-            ExpectedOutputVecs::Many => n_input_elts
-        };
-        // TODO: work out how to test for EOF
-        for _i in 0 .. n_output_vecs {
-            expected_outputs.push(read_vec(&mut reader, n_input_elts)?);
-        }
-        Ok((inputs, expected_outputs))
-    }
-
-    pub fn run_unaryop_test_cases<UnaryOp, T>(fld_str: &str, op_str: &str, op: UnaryOp) -> Result<()>
-    where
+        T: Field,
         UnaryOp: Fn(T) -> T,
-        T: FromBytes + Copy + PartialEq + Field
+        ExpectedOp: Fn(BigUint) -> BigUint
     {
-        let (inputs, expected_outputs) = read_test_cases(fld_str, op_str, ExpectedOutputVecs::One)?;
-        // Calculate pointwise operation
-        let output = inputs.iter().map(|&x| op(x));
+        let inputs = test_inputs(modulus, word_bits);
+        let expected = inputs.iter().map(|x| expected_op(x.clone()));
+        let output = inputs.iter().map(|x| field_to_biguint(op(biguint_to_field(x.clone()))));
         // Compare expected outputs with actual outputs
-        assert!(output.zip(expected_outputs[0].iter()).all(|(x, &y)| x == y),
+        assert!(output.zip(expected).all(|(x, y)| x == y),
                 "output differs from expected");
         Ok(())
     }
 
-    pub fn run_binaryop_test_cases<BinaryOp, T>(fld_str: &str, op_str: &str, op: BinaryOp) -> Result<()>
+    pub fn run_binaryop_test_cases<T, BinaryOp, ExpectedOp>(
+        modulus: &BigUint, word_bits: usize,
+        op: BinaryOp, expected_op: ExpectedOp)
+        -> Result<()>
     where
+        T: Field,
         BinaryOp: Fn(T, T) -> T,
-        T: FromBytes + Copy + PartialEq + Field
+        ExpectedOp: Fn(BigUint, BigUint) -> BigUint
     {
-        let (inputs, expected_outputs) = read_test_cases(fld_str, op_str, ExpectedOutputVecs::Many)?;
+        let inputs = test_inputs(modulus, word_bits);
 
-        for (i, expected) in expected_outputs.iter().enumerate() {
+        for i in 0 .. inputs.len() {
             // Iterator over inputs rotated right by i places. Since
             // cycle().skip(i) rotates left by i, we need to rotate by
             // n_input_elts - i.
             let shifted_inputs = inputs.iter().cycle().skip(inputs.len() - i);
-            // Calculate pointwise operation
+            // Calculate pointwise operations
+            let expected = inputs.iter().zip(shifted_inputs.clone()).map(
+                |(x, y)| expected_op(x.clone(), y.clone()));
             let output = inputs.iter().zip(shifted_inputs).map(
-                |(&x, &y)| op(x, y));
+                |(x, y)| field_to_biguint(op(biguint_to_field(x.clone()),
+                                             biguint_to_field(y.clone()))));
             // Compare expected outputs with actual outputs
-            assert!(output.zip(expected.iter()).all(|(x, &y)| x == y),
+            assert!(output.zip(expected).all(|(x, y)| x == y),
                     "output differs from expected at rotation {}", i);
         }
         Ok(())
@@ -622,10 +584,21 @@ pub mod field_tests {
 
 #[macro_export]
 macro_rules! test_arithmetic {
-    ($field:ty, $name:expr) => {
+    ($field:ty) => {
         use crate::field_tests;
+        use crate::field_to_biguint;
         use std::io::Result;
-        use std::ops::{Add,Sub,Mul,Div,Neg};
+        use std::ops::{Add,Sub,Mul,Neg,Div};
+        use num::{BigUint, Zero, One};
+
+        fn field_modulus<Fld>() -> BigUint
+        where Fld: Field {
+            field_to_biguint(Fld::T) * (BigUint::one() << Fld::TWO_ADICITY) + 1u32
+        }
+
+        // Can be 32 or 64; doesn't have to be computer's actual word
+        // bits. Choosing 32 gives more tests...
+        const WORD_BITS: usize = 32;
 
         // TODO: I've given these unreasonably long names to avoid
         // name conflicts (notably with the 'negation()' test for
@@ -633,33 +606,61 @@ macro_rules! test_arithmetic {
         // simply in their own module.
         #[test]
         fn arithmetic_addition() -> Result<()> {
-            field_tests::run_binaryop_test_cases($name, "add", <$field>::add)
+            let modulus = field_modulus::<$field>();
+            field_tests::run_binaryop_test_cases(
+                &modulus, WORD_BITS,
+                <$field>::add,
+                |x, y| {
+                    let z = x + y;
+                    if z < modulus { z } else { z - &modulus }
+                })
         }
 
         #[test]
         fn arithmetic_subtraction() -> Result<()> {
-            field_tests::run_binaryop_test_cases($name, "sub", <$field>::sub)
+            let modulus = field_modulus::<$field>();
+            field_tests::run_binaryop_test_cases(
+                &modulus, WORD_BITS,
+                <$field>::sub,
+                |x, y| {
+                    if x >= y { x - y } else { &modulus - y + x }
+                })
         }
 
         #[test]
         fn arithmetic_negation() -> Result<()> {
-            field_tests::run_unaryop_test_cases($name, "neg", <$field>::neg)
+            let modulus = field_modulus::<$field>();
+            field_tests::run_unaryop_test_cases(
+                &modulus, WORD_BITS,
+                <$field>::neg,
+                |x| if x.is_zero() { BigUint::zero() } else { &modulus - x })
         }
 
         #[test]
         fn arithmetic_multiplication() -> Result<()> {
-            field_tests::run_binaryop_test_cases($name, "mul", <$field>::mul)
+            let modulus = field_modulus::<$field>();
+            field_tests::run_binaryop_test_cases(
+                &modulus, WORD_BITS,
+                <$field>::mul,
+                |x, y| x * y % &modulus)
         }
 
         #[test]
         fn arithmetic_square() -> Result<()> {
-            field_tests::run_unaryop_test_cases($name, "sqr", |x| <$field>::mul(x, x))
+            let modulus = field_modulus::<$field>();
+            field_tests::run_unaryop_test_cases(
+                &modulus, WORD_BITS,
+                |x| <$field>::mul(x, x),
+                |x| x.clone() * x % &modulus)
         }
 
         #[test]
+        #[ignore]
         fn arithmetic_division() -> Result<()> {
+            // This test takes ages to finish so is #[ignore]d by default.
+            let modulus = field_modulus::<$field>();
             field_tests::run_binaryop_test_cases(
-                $name, "div",
+                &modulus, WORD_BITS,
                 // Need to help the compiler infer the type of y here
                 |x: $field, y: $field| {
                     // TODO: Work out how to check that div() panics
@@ -667,9 +668,15 @@ macro_rules! test_arithmetic {
                     if ! y.is_zero() {
                         <$field>::div(x, y)
                     } else {
-                        // gentest sets result to zero when divisor is zero
                         <$field>::ZERO
                     }
+                },
+                |x, y| {
+                    // yinv = y^-1 (mod modulus)
+                    let exp = &modulus - BigUint::from(2u32);
+                    let yinv = y.modpow(&exp, &modulus);
+                    // returns 0 if y was 0
+                    x * yinv % &modulus
                 })
         }
     }

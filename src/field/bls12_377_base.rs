@@ -384,5 +384,5 @@ mod tests {
     }
 
     test_square_root!(Bls12377Base);
-    test_arithmetic!(Bls12377Base, "bls12-377");
+    test_arithmetic!(Bls12377Base);
 }

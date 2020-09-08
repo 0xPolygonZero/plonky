@@ -315,5 +315,5 @@ mod tests {
     }
 
     test_square_root!(TweedledumBase);
-    test_arithmetic!(TweedledumBase, "tweedledum");
+    test_arithmetic!(TweedledumBase);
 }

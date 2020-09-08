@@ -326,5 +326,5 @@ mod tests {
     }
 
     test_square_root!(TweedledeeBase);
-    test_arithmetic!(TweedledeeBase, "tweedledee");
+    test_arithmetic!(TweedledeeBase);
 }
