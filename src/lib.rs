@@ -4,6 +4,12 @@
 // We have tons of bigint literals in Montgomery form, which won't be readable with or without underscores.
 #![allow(clippy::unreadable_literal)]
 
+// Required for generic low-level functions on small arrays.
+#![feature(const_generics)]
+// Unfortunatly it makes rustc complain, so we include
+#![allow(incomplete_features)]
+
+
 pub use bigint::*;
 pub use circuit_bigint::*;
 pub use circuit_builder::*;
