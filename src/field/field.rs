@@ -487,9 +487,11 @@ macro_rules! test_square_root {
     };
 }
 
+#[cfg(test)]
 pub mod field_tests {
     use std::io::Result;
     use crate::{Field, biguint_to_field, field_to_biguint};
+    use crate::util::ceil_div_usize;
     use num::{BigUint, Zero, One};
 
     /// Generates a series of non-negative integers less than
@@ -499,7 +501,7 @@ pub mod field_tests {
     fn test_inputs(modulus: &num::BigUint, word_bits: usize) -> Vec<num::BigUint>
     {
         assert!(word_bits == 32 || word_bits == 64);
-        let modwords = (modulus.bits() + word_bits - 1) / word_bits;
+        let modwords = ceil_div_usize(modulus.bits(), word_bits);
         // Start with basic set close to zero: 0 .. 10
         const BIGGEST_SMALL: u32 = 10;
         let smalls: Vec<_> = (0..BIGGEST_SMALL).map(|x| BigUint::from(x)).collect();
@@ -542,13 +544,13 @@ pub mod field_tests {
     /// Apply the unary functions `op` and `expected_op`
     /// coordinate-wise to the inputs from `test_inputs(modulus,
     /// word_bits)` and panic if the two resulting vectors differ.
-    pub fn run_unaryop_test_cases<T, UnaryOp, ExpectedOp>(
+    pub fn run_unaryop_test_cases<F, UnaryOp, ExpectedOp>(
         modulus: &BigUint, word_bits: usize,
         op: UnaryOp, expected_op: ExpectedOp)
         -> Result<()>
     where
-        T: Field,
-        UnaryOp: Fn(T) -> T,
+        F: Field,
+        UnaryOp: Fn(F) -> F,
         ExpectedOp: Fn(BigUint) -> BigUint
     {
         let inputs = test_inputs(modulus, word_bits);
@@ -566,13 +568,13 @@ pub mod field_tests {
     /// `test_inputs(modulus, word_bits)` and `i` ranges from 0 to
     /// `inputs.len()`.  Panic if the two functions ever give
     /// different answers.
-    pub fn run_binaryop_test_cases<T, BinaryOp, ExpectedOp>(
+    pub fn run_binaryop_test_cases<F, BinaryOp, ExpectedOp>(
         modulus: &BigUint, word_bits: usize,
         op: BinaryOp, expected_op: ExpectedOp)
         -> Result<()>
     where
-        T: Field,
-        BinaryOp: Fn(T, T) -> T,
+        F: Field,
+        BinaryOp: Fn(F, F) -> F,
         ExpectedOp: Fn(BigUint, BigUint) -> BigUint
     {
         let inputs = test_inputs(modulus, word_bits);
@@ -599,27 +601,20 @@ pub mod field_tests {
 #[macro_export]
 macro_rules! test_arithmetic {
     ($field:ty) => {
-        use crate::field_tests;
-        use crate::field_to_biguint;
+        use crate::{Field, field_to_biguint, field_tests};
         use std::io::Result;
         use std::ops::{Add,Sub,Mul,Neg,Div};
-        use num::{BigUint, Zero, One};
-
+        use num::{BigUint, Zero};
 
         /// Return the modulus of the type `Fld`.
-        fn field_modulus<Fld>() -> BigUint
-        where Fld: Field {
-            field_to_biguint(Fld::T) * (BigUint::one() << Fld::TWO_ADICITY) + 1u32
+        fn field_modulus<F: Field>() -> BigUint {
+            field_to_biguint(F::NEG_ONE) + 1u32
         }
 
         // Can be 32 or 64; doesn't have to be computer's actual word
         // bits. Choosing 32 gives more tests...
         const WORD_BITS: usize = 32;
 
-        // TODO: I've given these unreasonably long names to avoid
-        // name conflicts (notably with the 'negation()' test for
-        // Bls12377Base. It would be better that these tests were
-        // simply in their own module.
         #[test]
         fn arithmetic_addition() -> Result<()> {
             let modulus = field_modulus::<$field>();
@@ -665,13 +660,15 @@ macro_rules! test_arithmetic {
             field_tests::run_unaryop_test_cases(
                 &modulus, WORD_BITS,
                 |x| <$field>::mul(x, x),
-                |x| x.clone() * x % &modulus)
+                |x| &x * &x % &modulus)
         }
 
         #[test]
         #[ignore]
         fn arithmetic_division() -> Result<()> {
             // This test takes ages to finish so is #[ignore]d by default.
+            // TODO: Re-enable and reimplement when
+            // https://github.com/rust-num/num-bigint/issues/60 is finally resolved.
             let modulus = field_modulus::<$field>();
             field_tests::run_binaryop_test_cases(
                 &modulus, WORD_BITS,

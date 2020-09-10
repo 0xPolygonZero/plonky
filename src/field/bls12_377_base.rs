@@ -281,7 +281,7 @@ impl Display for Bls12377Base {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12377Base, Field};
+    use crate::Bls12377Base;
     use crate::conversions::u64_slice_to_biguint;
     use crate::{test_square_root, test_arithmetic};
 
