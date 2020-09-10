@@ -479,6 +479,8 @@ macro_rules! test_square_root {
     ($field:ty) => {
         #[test]
         fn test_square_root() {
+            use crate::Field;
+
             let x = <$field>::rand();
             let y = x.square();
             let y_sq = y.square_root().unwrap();
@@ -601,94 +603,96 @@ pub mod field_tests {
 #[macro_export]
 macro_rules! test_arithmetic {
     ($field:ty) => {
-        use crate::{Field, field_to_biguint, field_tests};
-        use std::io::Result;
-        use std::ops::{Add,Sub,Mul,Neg,Div};
-        use num::{BigUint, Zero};
+        mod arithmetic {
+            use crate::{Field, field_to_biguint, field_tests};
+            use std::io::Result;
+            use std::ops::{Add,Sub,Mul,Neg,Div};
+            use num::{BigUint, Zero};
 
-        /// Return the modulus of the type `Fld`.
-        fn field_modulus<F: Field>() -> BigUint {
-            field_to_biguint(F::NEG_ONE) + 1u32
-        }
+            /// Return the modulus of the type `Fld`.
+            fn field_modulus<F: Field>() -> BigUint {
+                field_to_biguint(F::NEG_ONE) + 1u32
+            }
 
-        // Can be 32 or 64; doesn't have to be computer's actual word
-        // bits. Choosing 32 gives more tests...
-        const WORD_BITS: usize = 32;
+            // Can be 32 or 64; doesn't have to be computer's actual word
+            // bits. Choosing 32 gives more tests...
+            const WORD_BITS: usize = 32;
 
-        #[test]
-        fn arithmetic_addition() -> Result<()> {
-            let modulus = field_modulus::<$field>();
-            field_tests::run_binaryop_test_cases(
-                &modulus, WORD_BITS,
-                <$field>::add,
-                |x, y| {
-                    let z = x + y;
-                    if z < modulus { z } else { z - &modulus }
-                })
-        }
+            #[test]
+            fn arithmetic_addition() -> Result<()> {
+                let modulus = field_modulus::<$field>();
+                field_tests::run_binaryop_test_cases(
+                    &modulus, WORD_BITS,
+                    <$field>::add,
+                    |x, y| {
+                        let z = x + y;
+                        if z < modulus { z } else { z - &modulus }
+                    })
+            }
 
-        #[test]
-        fn arithmetic_subtraction() -> Result<()> {
-            let modulus = field_modulus::<$field>();
-            field_tests::run_binaryop_test_cases(
-                &modulus, WORD_BITS,
-                <$field>::sub,
-                |x, y| if x >= y { x - y } else { &modulus - y + x })
-        }
+            #[test]
+            fn arithmetic_subtraction() -> Result<()> {
+                let modulus = field_modulus::<$field>();
+                field_tests::run_binaryop_test_cases(
+                    &modulus, WORD_BITS,
+                    <$field>::sub,
+                    |x, y| if x >= y { x - y } else { &modulus - y + x })
+            }
 
-        #[test]
-        fn arithmetic_negation() -> Result<()> {
-            let modulus = field_modulus::<$field>();
-            field_tests::run_unaryop_test_cases(
-                &modulus, WORD_BITS,
-                <$field>::neg,
-                |x| if x.is_zero() { BigUint::zero() } else { &modulus - x })
-        }
+            #[test]
+            fn arithmetic_negation() -> Result<()> {
+                let modulus = field_modulus::<$field>();
+                field_tests::run_unaryop_test_cases(
+                    &modulus, WORD_BITS,
+                    <$field>::neg,
+                    |x| if x.is_zero() { BigUint::zero() } else { &modulus - x })
+            }
 
-        #[test]
-        fn arithmetic_multiplication() -> Result<()> {
-            let modulus = field_modulus::<$field>();
-            field_tests::run_binaryop_test_cases(
-                &modulus, WORD_BITS,
-                <$field>::mul,
-                |x, y| x * y % &modulus)
-        }
+            #[test]
+            fn arithmetic_multiplication() -> Result<()> {
+                let modulus = field_modulus::<$field>();
+                field_tests::run_binaryop_test_cases(
+                    &modulus, WORD_BITS,
+                    <$field>::mul,
+                    |x, y| x * y % &modulus)
+            }
 
-        #[test]
-        fn arithmetic_square() -> Result<()> {
-            let modulus = field_modulus::<$field>();
-            field_tests::run_unaryop_test_cases(
-                &modulus, WORD_BITS,
-                |x| <$field>::mul(x, x),
-                |x| &x * &x % &modulus)
-        }
+            #[test]
+            fn arithmetic_square() -> Result<()> {
+                let modulus = field_modulus::<$field>();
+                field_tests::run_unaryop_test_cases(
+                    &modulus, WORD_BITS,
+                    |x| <$field>::mul(x, x),
+                    |x| &x * &x % &modulus)
+            }
 
-        #[test]
-        #[ignore]
-        fn arithmetic_division() -> Result<()> {
-            // This test takes ages to finish so is #[ignore]d by default.
-            // TODO: Re-enable and reimplement when
-            // https://github.com/rust-num/num-bigint/issues/60 is finally resolved.
-            let modulus = field_modulus::<$field>();
-            field_tests::run_binaryop_test_cases(
-                &modulus, WORD_BITS,
-                // Need to help the compiler infer the type of y here
-                |x: $field, y: $field| {
-                    // TODO: Work out how to check that div() panics
-                    // appropriately when given a zero divisor.
-                    if ! y.is_zero() {
-                        <$field>::div(x, y)
-                    } else {
-                        <$field>::ZERO
-                    }
-                },
-                |x, y| {
-                    // yinv = y^-1 (mod modulus)
-                    let exp = &modulus - BigUint::from(2u32);
-                    let yinv = y.modpow(&exp, &modulus);
-                    // returns 0 if y was 0
-                    x * yinv % &modulus
-                })
+            #[test]
+            #[ignore]
+            fn arithmetic_division() -> Result<()> {
+                // This test takes ages to finish so is #[ignore]d by default.
+                // TODO: Re-enable and reimplement when
+                // https://github.com/rust-num/num-bigint/issues/60 is finally resolved.
+                let modulus = field_modulus::<$field>();
+                field_tests::run_binaryop_test_cases(
+                    &modulus, WORD_BITS,
+                    // Need to help the compiler infer the type of y here
+                    |x: $field, y: $field| {
+                        // TODO: Work out how to check that div() panics
+                        // appropriately when given a zero divisor.
+                        if ! y.is_zero() {
+                            <$field>::div(x, y)
+                        } else {
+                            <$field>::ZERO
+                        }
+                    },
+                    |x, y| {
+                        // yinv = y^-1 (mod modulus)
+                        let exp = &modulus - BigUint::from(2u32);
+                        let yinv = y.modpow(&exp, &modulus);
+                        // returns 0 if y was 0
+                        x * yinv % &modulus
+                    })
+            }
         }
     }
 }
