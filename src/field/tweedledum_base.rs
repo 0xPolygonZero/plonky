@@ -304,6 +304,7 @@ impl Debug for TweedledumBase {
 mod tests {
     use crate::{test_square_root, test_arithmetic};
     use crate::TweedledumBase;
+    use crate::Field;
 
     #[test]
     fn primitive_root_order() {
@@ -314,6 +315,6 @@ mod tests {
         }
     }
 
-    test_square_root!(TweedledumBase);
-    test_arithmetic!(TweedledumBase);
+    test_square_root!(crate::TweedledumBase);
+    test_arithmetic!(crate::TweedledumBase);
 }
