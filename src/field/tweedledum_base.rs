@@ -302,7 +302,7 @@ impl Debug for TweedledumBase {
 
 #[cfg(test)]
 mod tests {
-    use crate::{test_square_root, test_arithmetic};
+    use crate::test_arithmetic;
     use crate::TweedledumBase;
     use crate::Field;
 
@@ -315,6 +315,5 @@ mod tests {
         }
     }
 
-    test_square_root!(crate::TweedledumBase);
     test_arithmetic!(crate::TweedledumBase);
 }

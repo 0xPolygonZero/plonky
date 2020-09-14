@@ -283,7 +283,7 @@ impl Display for Bls12377Base {
 mod tests {
     use crate::Bls12377Base;
     use crate::conversions::u64_slice_to_biguint;
-    use crate::{test_square_root, test_arithmetic};
+    use crate::test_arithmetic;
     use crate::Field;
 
     #[test]
@@ -384,6 +384,5 @@ mod tests {
         assert_eq!(Bls12377Base::FIVE.kth_root_u32(11).exp_u32(11), Bls12377Base::FIVE);
     }
 
-    test_square_root!(crate::Bls12377Base);
     test_arithmetic!(crate::Bls12377Base);
 }

@@ -474,21 +474,6 @@ pub trait Field:
     }
 }
 
-#[macro_export]
-macro_rules! test_square_root {
-    ($field:ty) => {
-        #[test]
-        fn test_square_root() {
-            use crate::Field;
-
-            let x = <$field>::rand();
-            let y = x.square();
-            let y_sq = y.square_root().unwrap();
-            assert!((x == y_sq) || (x == -y_sq));
-        }
-    };
-}
-
 #[cfg(test)]
 pub mod field_tests {
     use std::io::Result;
@@ -500,7 +485,7 @@ pub mod field_tests {
     /// `modulus` which cover a range of values and which will
     /// generate lots of carries, especially at `word_bits` word
     /// boundaries.
-    fn test_inputs(modulus: &num::BigUint, word_bits: usize) -> Vec<num::BigUint>
+    pub fn test_inputs(modulus: &num::BigUint, word_bits: usize) -> Vec<num::BigUint>
     {
         assert!(word_bits == 32 || word_bits == 64);
         let modwords = ceil_div_usize(modulus.bits(), word_bits);
@@ -604,7 +589,7 @@ pub mod field_tests {
 macro_rules! test_arithmetic {
     ($field:ty) => {
         mod arithmetic {
-            use crate::{Field, field_to_biguint, field_tests};
+            use crate::{Field, field_to_biguint, biguint_to_field, field_tests};
             use std::io::Result;
             use std::ops::{Add,Sub,Mul,Neg,Div};
             use num::{BigUint, Zero};
@@ -692,6 +677,30 @@ macro_rules! test_arithmetic {
                         // returns 0 if y was 0
                         x * yinv % &modulus
                     })
+            }
+
+            #[test]
+            fn square_root() -> Result<()> {
+                // We don't use run_{unary,binary}op_test_cases here because
+                // we're just testing 'internal consistency'.
+                // TODO: Test that it fails appropriately for non-quadratic
+                // residues.
+                // NB: Could calculate modular sqrt with BigUint with
+                // x^{(p+1)/2} (mod p) but this will be slow as with modular
+                // inverse above.
+                let modulus = field_modulus::<$field>();
+                const WORD_BITS: usize = 32;
+                let inputs = field_tests::test_inputs(&modulus, WORD_BITS).iter()
+                    .map(|x| biguint_to_field::<$field>(x.clone()))
+                    .collect::<Vec<_>>();
+                let squares = inputs.iter()
+                    .map(|&x| x.square())
+                    .collect::<Vec<_>>();
+                let roots = squares.iter()
+                    .map(|xx| xx.square_root().unwrap())
+                    .collect::<Vec<_>>();
+                assert!(roots.iter().zip(inputs).all(|(&x, y)| x == y || x == -y));
+                Ok(())
             }
         }
     }
