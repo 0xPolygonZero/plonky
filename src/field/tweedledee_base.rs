@@ -301,8 +301,9 @@ impl Debug for TweedledeeBase {
 
 #[cfg(test)]
 mod tests {
-    use crate::test_square_root;
-    use crate::{Field, TweedledeeBase};
+    use crate::test_arithmetic;
+    use crate::TweedledeeBase;
+    use crate::Field;
 
     #[test]
     fn primitive_root_order() {
@@ -325,5 +326,5 @@ mod tests {
         assert_eq!(TweedledeeBase::is_valid_canonical_u64(&limbs), false);
     }
 
-    test_square_root!(TweedledeeBase);
+    test_arithmetic!(crate::TweedledeeBase);
 }
