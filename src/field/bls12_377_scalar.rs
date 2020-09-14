@@ -234,7 +234,7 @@ impl Display for Bls12377Scalar {
 mod tests {
     use crate::{Bls12377Scalar, Field};
     use crate::conversions::u64_slice_to_biguint;
-    use crate::test_square_root;
+    use crate::test_arithmetic;
 
     #[test]
     fn bls12scalar_to_and_from_canonical() {
@@ -351,5 +351,5 @@ mod tests {
         }
     }
 
-    test_square_root!(Bls12377Scalar);
+    test_arithmetic!(crate::Bls12377Scalar);
 }
