@@ -311,6 +311,9 @@ impl<F: Field> Polynomial<F> {
 
     // Divides a polynomial `a` by `Z_H = X^n - 1`. Assumes `Z_H | a`, otherwise result is meaningless.
     pub fn divide_by_z_h(&self, n: usize) -> Self {
+        if self.is_zero() {
+            return self.clone();
+        }
         let mut a_trim = self.clone();
         a_trim.trim();
         let g = F::MULTIPLICATIVE_SUBGROUP_GENERATOR;
