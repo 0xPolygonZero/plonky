@@ -8,7 +8,7 @@ use unroll::unroll_for_loops;
 /// This module provides functions for big integer arithmetic using little-endian encoded u64
 /// arrays.
 #[unroll_for_loops]
-pub(crate) fn cmp<const N: usize>(a: [u64; N], b: [u64; N]) -> Ordering {
+pub fn cmp<const N: usize>(a: [u64; N], b: [u64; N]) -> Ordering {
     for i in (0..N).rev() {
         if a[i] < b[i] {
             return Less;

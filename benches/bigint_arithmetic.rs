@@ -2,7 +2,7 @@ use criterion::{black_box, Criterion};
 use criterion::criterion_group;
 use criterion::criterion_main;
 
-use plonky::{cmp, mul};
+use plonky::cmp;
 
 fn criterion_benchmark(c: &mut Criterion) {
     let x = [11111111, 22222222, 33333333, 44444444, 55555555, 66666666];
