@@ -117,6 +117,84 @@ impl TweedledeeBase {
         }
         result
     }
+
+    #[inline]
+    fn mul_add_cy_in(a: u64, b: u64, c: u64, cy_in: u64) -> (u64, u64) {
+        let t = (a as u128) * (b as u128) + (c as u128) + (cy_in as u128);
+        ((t >> 64) as u64, t as u64)
+    }
+
+    #[inline]
+    fn mul_add(a: u64, b: u64, c: u64) -> (u64, u64) {
+        let t = (a as u128) * (b as u128) + (c as u128);
+        ((t >> 64) as u64, t as u64)
+    }
+
+    #[inline]
+    #[unroll_for_loops]
+    fn mul2<const N: usize>(u: &mut [u64; N]) {
+        let mut cy_in = false;
+        for i in 0 .. N {
+            let (v, cy_out) = u[i].overflowing_shl(1);
+            u[i] = v + (cy_in as u64);
+            cy_in = cy_out;
+        }
+        debug_assert_eq!(cy_in, false);
+    }
+
+    #[unroll_for_loops]
+    fn monty_sqr<const N: usize>(a: [u64; N]) -> [u64; N] {
+        let mut c = [0u64; N];
+        let mut hi = 0u64;
+
+        // u holds the diagonal part of the square calculation. Only the first N - i
+        // elements are used.
+        let mut u = [0u64; N];
+        for i in 0 .. N {
+            let mut Cin = 0u64;
+            for j in i+1 .. N {
+                let (Cout, S) = Self::mul_add(a[j], a[i], Cin);
+                u[j - (i+1)] = S;
+                Cin = Cout;
+            }
+            u[N - (i+1)] = Cin;
+            Self::mul2(&mut u);
+            let (mut C, S) = Self::mul_add(a[i], a[i], c[i]);
+            c[i] = S;
+            for j in i+1 .. N {
+                // c[j] = c[j] + u[j] + C
+                let (t, cy1) = c[j].overflowing_add(C);
+                let (t, cy2) = u[j - (i+1)].overflowing_add(t);
+                c[j] = t;
+                C = (cy1 as u64) + (cy2 as u64);
+            }
+
+            let (t, cy1) = hi.overflowing_add(u[N - (i+1)]);
+            let (t, cy2) = t.overflowing_add(C);
+            hi = t;
+            debug_assert_eq!(cy1 | cy2, false);
+
+            let m = c[0].wrapping_mul(Self::MU);
+            let (mut Cin, S) = Self::mul_add(Self::ORDER[0], m, c[0]);
+            debug_assert_eq!(S, 0u64);
+            for j in 1 .. N {
+                let (Cout, S) = Self::mul_add_cy_in(Self::ORDER[j], m, c[j], Cin);
+                c[j - 1] = S;
+                Cin = Cout;
+            }
+            let (t, cy) = hi.overflowing_add(C);
+            c[N - 1] = t;
+            hi = cy as u64;
+        }
+        debug_assert_eq!(hi, 0u64);
+        /*
+        // Final conditional subtraction.
+        if cmp_4_4(c, Self::ORDER) != Less {
+            c = sub_4_4(c, Self::ORDER);
+        }
+        */
+        c
+    }
 }
 
 impl Add<TweedledeeBase> for TweedledeeBase {
@@ -271,6 +349,13 @@ impl Field for TweedledeeBase {
     fn rand_from_rng<R: Rng>(rng: &mut R) -> Self {
         Self {
             limbs: rand_range_4_from_rng(Self::ORDER, rng),
+        }
+    }
+
+    #[inline(always)]
+    fn square(&self) -> Self {
+        Self {
+            limbs: Self::monty_sqr(self.limbs),
         }
     }
 }
