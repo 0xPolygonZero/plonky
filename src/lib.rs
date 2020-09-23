@@ -4,6 +4,8 @@
 // We have tons of bigint literals in Montgomery form, which won't be readable with or without underscores.
 #![allow(clippy::unreadable_literal)]
 
+#![feature(const_generics)]
+
 pub use bigint::*;
 pub use circuit_bigint::*;
 pub use circuit_builder::*;

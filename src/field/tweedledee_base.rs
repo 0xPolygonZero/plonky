@@ -132,67 +132,66 @@ impl TweedledeeBase {
 
     #[inline]
     #[unroll_for_loops]
-    fn mul2<const N: usize>(u: &mut [u64; N]) {
-        let mut cy_in = false;
-        for i in 0 .. N {
-            let (v, cy_out) = u[i].overflowing_shl(1);
-            u[i] = v + (cy_in as u64);
+    fn mul2(u: &mut [u64; 4]) {
+        let mut cy_in = 0u64;
+        for i in 0 .. 4 {
+            let v = u[i].wrapping_shl(1);
+            let cy_out = u[i].wrapping_shr(63);
+            u[i] = v + cy_in;
             cy_in = cy_out;
         }
-        debug_assert_eq!(cy_in, false);
+        debug_assert_eq!(cy_in, 0u64);
     }
 
     #[unroll_for_loops]
-    fn monty_sqr<const N: usize>(a: [u64; N]) -> [u64; N] {
-        let mut c = [0u64; N];
+    fn monty_sqr(a: [u64; 4]) -> [u64; 4] {
+        let mut c = [0u64; 4];
         let mut hi = 0u64;
 
-        // u holds the diagonal part of the square calculation. Only the first N - i
-        // elements are used.
-        let mut u = [0u64; N];
-        for i in 0 .. N {
-            let mut Cin = 0u64;
-            for j in i+1 .. N {
-                let (Cout, S) = Self::mul_add(a[j], a[i], Cin);
-                u[j - (i+1)] = S;
-                Cin = Cout;
+        for i in 0 .. 4 {
+            // u holds the diagonal part of the square calculation. Only the first N - i
+            // elements are used.
+            let mut u = [0u64; 4];
+            let mut hi_in = 0u64;
+            for j in i+1 .. 4 {
+                let (hi_out, lo) = Self::mul_add(a[j], a[i], hi_in);
+                u[j - (i+1)] = lo;
+                hi_in = hi_out;
             }
-            u[N - (i+1)] = Cin;
+            u[4 - (i+1)] = hi_in;
             Self::mul2(&mut u);
-            let (mut C, S) = Self::mul_add(a[i], a[i], c[i]);
-            c[i] = S;
-            for j in i+1 .. N {
-                // c[j] = c[j] + u[j] + C
-                let (t, cy1) = c[j].overflowing_add(C);
+            let (mut hi_in, lo) = Self::mul_add(a[i], a[i], c[i]);
+            c[i] = lo;
+            for j in i+1 .. 4 {
+                // c[j] = c[j] + u[j] + hi_in
+                let (t, cy1) = c[j].overflowing_add(hi_in);
                 let (t, cy2) = u[j - (i+1)].overflowing_add(t);
                 c[j] = t;
-                C = (cy1 as u64) + (cy2 as u64);
+                hi_in = (cy1 as u64) + (cy2 as u64);
             }
 
-            let (t, cy1) = hi.overflowing_add(u[N - (i+1)]);
-            let (t, cy2) = t.overflowing_add(C);
+            let (t, cy1) = hi.overflowing_add(hi_in);
+            let (t, cy2) = u[4 - (i+1)].overflowing_add(t);
             hi = t;
             debug_assert_eq!(cy1 | cy2, false);
 
             let m = c[0].wrapping_mul(Self::MU);
-            let (mut Cin, S) = Self::mul_add(Self::ORDER[0], m, c[0]);
-            debug_assert_eq!(S, 0u64);
-            for j in 1 .. N {
-                let (Cout, S) = Self::mul_add_cy_in(Self::ORDER[j], m, c[j], Cin);
-                c[j - 1] = S;
-                Cin = Cout;
+            let (mut hi_in, lo) = Self::mul_add(Self::ORDER[0], m, c[0]);
+            debug_assert_eq!(lo, 0u64);
+            for j in 1 .. 4 {
+                let (hi_out, lo) = Self::mul_add_cy_in(Self::ORDER[j], m, c[j], hi_in);
+                c[j - 1] = lo;
+                hi_in = hi_out;
             }
-            let (t, cy) = hi.overflowing_add(C);
-            c[N - 1] = t;
+            let (t, cy) = hi.overflowing_add(hi_in);
+            c[4 - 1] = t;
             hi = cy as u64;
         }
         debug_assert_eq!(hi, 0u64);
-        /*
         // Final conditional subtraction.
         if cmp_4_4(c, Self::ORDER) != Less {
             c = sub_4_4(c, Self::ORDER);
         }
-        */
         c
     }
 }

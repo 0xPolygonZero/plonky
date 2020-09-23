@@ -647,7 +647,7 @@ macro_rules! test_arithmetic {
                 let modulus = field_modulus::<$field>();
                 field_tests::run_unaryop_test_cases(
                     &modulus, WORD_BITS,
-                    |x| <$field>::mul(x, x),
+                    |x| <$field>::square(&x),
                     |x| &x * &x % &modulus)
             }
 
