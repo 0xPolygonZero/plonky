@@ -92,7 +92,7 @@ impl<F: Field> From<BoundedTarget<F>> for BigIntTarget<F> {
 }
 
 pub(crate) fn biguint_to_limbs<F: Field>(biguint: &BigUint) -> Vec<F> {
-    let num_limbs = ceil_div_usize(biguint.bits(), LIMB_BITS);
+    let num_limbs = ceil_div_usize(biguint.bits() as usize, LIMB_BITS);
     let base = BigUint::one() << LIMB_BITS;
     (0..num_limbs)
         .map(|i| biguint_to_field((biguint >> i * LIMB_BITS) % &base))
@@ -105,7 +105,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         max: &BigUint,
         validate: bool,
     ) -> BigIntTarget<C::ScalarField> {
-        let num_limbs = ceil_div_usize(max.bits(), LIMB_BITS);
+        let num_limbs = ceil_div_usize(max.bits() as usize, LIMB_BITS);
         let limbs = self.add_virtual_targets(num_limbs);
 
         if validate {

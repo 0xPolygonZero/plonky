@@ -476,19 +476,18 @@ pub trait Field:
 
 #[cfg(test)]
 pub mod field_tests {
-    use std::io::Result;
-    use crate::{Field, biguint_to_field, field_to_biguint};
     use crate::util::ceil_div_usize;
-    use num::{BigUint, Zero, One};
+    use crate::{biguint_to_field, field_to_biguint, Field};
+    use num::{BigUint, One, Zero};
+    use std::io::Result;
 
     /// Generates a series of non-negative integers less than
     /// `modulus` which cover a range of values and which will
     /// generate lots of carries, especially at `word_bits` word
     /// boundaries.
-    pub fn test_inputs(modulus: &num::BigUint, word_bits: usize) -> Vec<num::BigUint>
-    {
+    pub fn test_inputs(modulus: &num::BigUint, word_bits: usize) -> Vec<num::BigUint> {
         assert!(word_bits == 32 || word_bits == 64);
-        let modwords = ceil_div_usize(modulus.bits(), word_bits);
+        let modwords = ceil_div_usize(modulus.bits() as usize, word_bits);
         // Start with basic set close to zero: 0 .. 10
         const BIGGEST_SMALL: u32 = 10;
         let smalls: Vec<_> = (0..BIGGEST_SMALL).map(|x| BigUint::from(x)).collect();
@@ -498,24 +497,34 @@ pub mod field_tests {
         let one_words = [smalls, bigs].concat();
         // For each of the one word inputs above, create a new one at word i.
         // TODO: Create all possible `modwords` combinations of those
-        let multiple_words = (1..modwords).flat_map(|i| {
-            one_words.iter().map(|x| x << (word_bits * i)).collect::<Vec<BigUint>>()
-        }).collect();
+        let multiple_words = (1..modwords)
+            .flat_map(|i| {
+                one_words
+                    .iter()
+                    .map(|x| x << (word_bits * i))
+                    .collect::<Vec<BigUint>>()
+            })
+            .collect();
         let basic_inputs = [one_words, multiple_words].concat();
 
         // Biggest value that will fit in `modwords` words
         let maxval = (BigUint::one() << (modwords * word_bits)) - 1u32;
         // Inputs 'difference from' maximum value
-        let diff_max = basic_inputs.iter()
+        let diff_max = basic_inputs
+            .iter()
             .map(|x| &maxval - x)
             .filter(|x| x < &modulus)
             .collect();
         // Inputs 'difference from' modulus value
-        let diff_mod = basic_inputs.iter()
+        let diff_mod = basic_inputs
+            .iter()
             .filter(|x| *x < &modulus && !x.is_zero())
             .map(|x| modulus - x)
             .collect();
-        let basics = basic_inputs.into_iter().filter(|x| x < &modulus).collect::<Vec<BigUint>>();
+        let basics = basic_inputs
+            .into_iter()
+            .filter(|x| x < &modulus)
+            .collect::<Vec<BigUint>>();
         [basics, diff_max, diff_mod].concat()
 
         // // There should be a nicer way to express the code above; something
@@ -527,28 +536,32 @@ pub mod field_tests {
         //     .collect()
     }
 
-
     /// Apply the unary functions `op` and `expected_op`
     /// coordinate-wise to the inputs from `test_inputs(modulus,
     /// word_bits)` and panic if the two resulting vectors differ.
     pub fn run_unaryop_test_cases<F, UnaryOp, ExpectedOp>(
-        modulus: &BigUint, word_bits: usize,
-        op: UnaryOp, expected_op: ExpectedOp)
-        -> Result<()>
+        modulus: &BigUint,
+        word_bits: usize,
+        op: UnaryOp,
+        expected_op: ExpectedOp,
+    ) -> Result<()>
     where
         F: Field,
         UnaryOp: Fn(F) -> F,
-        ExpectedOp: Fn(BigUint) -> BigUint
+        ExpectedOp: Fn(BigUint) -> BigUint,
     {
         let inputs = test_inputs(modulus, word_bits);
         let expected = inputs.iter().map(|x| expected_op(x.clone()));
-        let output = inputs.iter().map(|x| field_to_biguint(op(biguint_to_field(x.clone()))));
+        let output = inputs
+            .iter()
+            .map(|x| field_to_biguint(op(biguint_to_field(x.clone()))));
         // Compare expected outputs with actual outputs
-        assert!(output.zip(expected).all(|(x, y)| x == y),
-                "output differs from expected");
+        assert!(
+            output.zip(expected).all(|(x, y)| x == y),
+            "output differs from expected"
+        );
         Ok(())
     }
-
 
     /// Apply the binary functions `op` and `expected_op` to each pair
     /// in `zip(inputs, rotate_right(inputs, i))` where `inputs` is
@@ -556,30 +569,37 @@ pub mod field_tests {
     /// `inputs.len()`.  Panic if the two functions ever give
     /// different answers.
     pub fn run_binaryop_test_cases<F, BinaryOp, ExpectedOp>(
-        modulus: &BigUint, word_bits: usize,
-        op: BinaryOp, expected_op: ExpectedOp)
-        -> Result<()>
+        modulus: &BigUint,
+        word_bits: usize,
+        op: BinaryOp,
+        expected_op: ExpectedOp,
+    ) -> Result<()>
     where
         F: Field,
         BinaryOp: Fn(F, F) -> F,
-        ExpectedOp: Fn(BigUint, BigUint) -> BigUint
+        ExpectedOp: Fn(BigUint, BigUint) -> BigUint,
     {
         let inputs = test_inputs(modulus, word_bits);
 
-        for i in 0 .. inputs.len() {
+        for i in 0..inputs.len() {
             // Iterator over inputs rotated right by i places. Since
             // cycle().skip(i) rotates left by i, we need to rotate by
             // n_input_elts - i.
             let shifted_inputs = inputs.iter().cycle().skip(inputs.len() - i);
             // Calculate pointwise operations
-            let expected = inputs.iter().zip(shifted_inputs.clone()).map(
-                |(x, y)| expected_op(x.clone(), y.clone()));
-            let output = inputs.iter().zip(shifted_inputs).map(
-                |(x, y)| field_to_biguint(op(biguint_to_field(x.clone()),
-                                             biguint_to_field(y.clone()))));
+            let expected = inputs
+                .iter()
+                .zip(shifted_inputs.clone())
+                .map(|(x, y)| expected_op(x.clone(), y.clone()));
+            let output = inputs.iter().zip(shifted_inputs).map(|(x, y)| {
+                field_to_biguint(op(biguint_to_field(x.clone()), biguint_to_field(y.clone())))
+            });
             // Compare expected outputs with actual outputs
-            assert!(output.zip(expected).all(|(x, y)| x == y),
-                    "output differs from expected at rotation {}", i);
+            assert!(
+                output.zip(expected).all(|(x, y)| x == y),
+                "output differs from expected at rotation {}",
+                i
+            );
         }
         Ok(())
     }
@@ -589,10 +609,10 @@ pub mod field_tests {
 macro_rules! test_arithmetic {
     ($field:ty) => {
         mod arithmetic {
-            use crate::{Field, field_to_biguint, biguint_to_field, field_tests};
-            use std::io::Result;
-            use std::ops::{Add,Sub,Mul,Neg,Div};
+            use crate::{biguint_to_field, field_tests, field_to_biguint, Field};
             use num::{BigUint, Zero};
+            use std::io::Result;
+            use std::ops::{Add, Div, Mul, Neg, Sub};
 
             /// Return the modulus of the type `Fld`.
             fn field_modulus<F: Field>() -> BigUint {
@@ -606,49 +626,57 @@ macro_rules! test_arithmetic {
             #[test]
             fn arithmetic_addition() -> Result<()> {
                 let modulus = field_modulus::<$field>();
-                field_tests::run_binaryop_test_cases(
-                    &modulus, WORD_BITS,
-                    <$field>::add,
-                    |x, y| {
-                        let z = x + y;
-                        if z < modulus { z } else { z - &modulus }
-                    })
+                field_tests::run_binaryop_test_cases(&modulus, WORD_BITS, <$field>::add, |x, y| {
+                    let z = x + y;
+                    if z < modulus {
+                        z
+                    } else {
+                        z - &modulus
+                    }
+                })
             }
 
             #[test]
             fn arithmetic_subtraction() -> Result<()> {
                 let modulus = field_modulus::<$field>();
-                field_tests::run_binaryop_test_cases(
-                    &modulus, WORD_BITS,
-                    <$field>::sub,
-                    |x, y| if x >= y { x - y } else { &modulus - y + x })
+                field_tests::run_binaryop_test_cases(&modulus, WORD_BITS, <$field>::sub, |x, y| {
+                    if x >= y {
+                        x - y
+                    } else {
+                        &modulus - y + x
+                    }
+                })
             }
 
             #[test]
             fn arithmetic_negation() -> Result<()> {
                 let modulus = field_modulus::<$field>();
-                field_tests::run_unaryop_test_cases(
-                    &modulus, WORD_BITS,
-                    <$field>::neg,
-                    |x| if x.is_zero() { BigUint::zero() } else { &modulus - x })
+                field_tests::run_unaryop_test_cases(&modulus, WORD_BITS, <$field>::neg, |x| {
+                    if x.is_zero() {
+                        BigUint::zero()
+                    } else {
+                        &modulus - x
+                    }
+                })
             }
 
             #[test]
             fn arithmetic_multiplication() -> Result<()> {
                 let modulus = field_modulus::<$field>();
-                field_tests::run_binaryop_test_cases(
-                    &modulus, WORD_BITS,
-                    <$field>::mul,
-                    |x, y| x * y % &modulus)
+                field_tests::run_binaryop_test_cases(&modulus, WORD_BITS, <$field>::mul, |x, y| {
+                    x * y % &modulus
+                })
             }
 
             #[test]
             fn arithmetic_square() -> Result<()> {
                 let modulus = field_modulus::<$field>();
                 field_tests::run_unaryop_test_cases(
-                    &modulus, WORD_BITS,
+                    &modulus,
+                    WORD_BITS,
                     |x| <$field>::mul(x, x),
-                    |x| &x * &x % &modulus)
+                    |x| &x * &x % &modulus,
+                )
             }
 
             #[test]
@@ -659,12 +687,13 @@ macro_rules! test_arithmetic {
                 // https://github.com/rust-num/num-bigint/issues/60 is finally resolved.
                 let modulus = field_modulus::<$field>();
                 field_tests::run_binaryop_test_cases(
-                    &modulus, WORD_BITS,
+                    &modulus,
+                    WORD_BITS,
                     // Need to help the compiler infer the type of y here
                     |x: $field, y: $field| {
                         // TODO: Work out how to check that div() panics
                         // appropriately when given a zero divisor.
-                        if ! y.is_zero() {
+                        if !y.is_zero() {
                             <$field>::div(x, y)
                         } else {
                             <$field>::ZERO
@@ -676,7 +705,8 @@ macro_rules! test_arithmetic {
                         let yinv = y.modpow(&exp, &modulus);
                         // returns 0 if y was 0
                         x * yinv % &modulus
-                    })
+                    },
+                )
             }
 
             #[test]
@@ -690,18 +720,18 @@ macro_rules! test_arithmetic {
                 // inverse above.
                 let modulus = field_modulus::<$field>();
                 const WORD_BITS: usize = 32;
-                let inputs = field_tests::test_inputs(&modulus, WORD_BITS).iter()
+                let inputs = field_tests::test_inputs(&modulus, WORD_BITS)
+                    .iter()
                     .map(|x| biguint_to_field::<$field>(x.clone()))
                     .collect::<Vec<_>>();
-                let squares = inputs.iter()
-                    .map(|&x| x.square())
-                    .collect::<Vec<_>>();
-                let roots = squares.iter()
+                let squares = inputs.iter().map(|&x| x.square()).collect::<Vec<_>>();
+                let roots = squares
+                    .iter()
                     .map(|xx| xx.square_root().unwrap())
                     .collect::<Vec<_>>();
                 assert!(roots.iter().zip(inputs).all(|(&x, y)| x == y || x == -y));
                 Ok(())
             }
         }
-    }
+    };
 }
