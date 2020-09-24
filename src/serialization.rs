@@ -38,7 +38,7 @@ impl<C: Curve> ToBytes for AffinePoint<C> {
             0
         };
         let mask: u8 = zero | odd;
-        writer.write(&[mask])?;
+        writer.write_all(&[mask])?;
         writer.write_all(&self.x.to_canonical_u8_vec())
     }
 }
@@ -76,7 +76,7 @@ impl<C: Curve> Serialize for AffinePoint<C> {
     where
         S: Serializer,
     {
-        let mut buf = vec![0u8; C::BaseField::BYTES + 1];
+        let mut buf = vec![];
         self.write(&mut buf)
             .map_err(|e| S::Error::custom(format!("{}", e)))?;
         serializer.serialize_bytes(&buf)
@@ -123,6 +123,12 @@ mod test {
                 x.write(&mut buf[..])?;
                 let y = <$field>::read(&buf[..])?;
                 assert_eq!(x, y);
+
+                // Serde (de)serialization
+                let ser = bincode::serialize(&x).unwrap();
+                let y = bincode::deserialize(&ser).unwrap();
+                assert_eq!(x, y);
+
                 Ok(())
             }
         };
@@ -149,6 +155,15 @@ mod test {
                 zero.write(&mut buf[..])?;
                 let q = AffinePoint::<$curve>::read(&buf[..])?;
                 assert_eq!(zero, q);
+
+                // Serde (de)serialization
+                let ser = bincode::serialize(&p).unwrap();
+                let q = bincode::deserialize(&ser).unwrap();
+                assert_eq!(p, q);
+                let ser = bincode::serialize(&zero).unwrap();
+                let q = bincode::deserialize(&ser).unwrap();
+                assert_eq!(zero, q);
+
                 Ok(())
             }
         };
