@@ -3,6 +3,7 @@ use std::time::Instant;
 use rayon::prelude::*;
 
 use crate::{affine_multisummation_best, AffinePoint, Curve, Field, ProjectivePoint};
+use serde::{Deserialize, Serialize};
 
 /// In Yao's method, we compute an affine summation for each digit. In a parallel setting, it would
 /// be easiest to assign individual summations to threads, but this would be sub-optimal because
@@ -12,7 +13,7 @@ use crate::{affine_multisummation_best, AffinePoint, Curve, Field, ProjectivePoi
 /// uneven distributions of work among threads.
 const DIGITS_PER_CHUNK: usize = 80;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MsmPrecomputation<C: Curve> {
     /// For each generator (in the order they were passed to `msm_precompute`), contains a vector
     /// of powers, i.e. [(2^w)^i] for i < DIGITS.

@@ -10,9 +10,10 @@ use crate::{add_4_4_no_overflow, cmp_4_4, field_to_biguint, rand_range_4, rand_r
 use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
+use serde::{Serialize, Deserialize};
 
 /// An element of the Tweedledum group's base field.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Default, Serialize, Deserialize)]
 pub struct TweedledumBase {
     /// Montgomery representation, encoded with little-endian u64 limbs.
     pub limbs: [u64; 4],

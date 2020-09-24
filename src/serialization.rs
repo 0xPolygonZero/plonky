@@ -1,7 +1,9 @@
-use crate::{
-    AffinePoint, Bls12377, Bls12377Base, Bls12377Scalar, Curve, Field, Tweedledee, TweedledeeBase,
-    Tweedledum, TweedledumBase,
-};
+use crate::{AffinePoint, Bls12377, Bls12377Base, Bls12377Scalar, Curve, Field, Tweedledee, TweedledeeBase, Tweedledum, TweedledumBase};
+use serde::de::Error as DeError;
+use serde::de::Visitor;
+use serde::ser::Error as SerdeError;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::fmt;
 use std::io::{Error, ErrorKind, Read, Result, Write};
 
 pub trait ToBytes {
@@ -12,78 +14,100 @@ pub trait FromBytes: Sized {
     fn read<R: Read>(reader: R) -> Result<Self>;
 }
 
-macro_rules! impl_field {
-    ($field:ty) => {
-        impl ToBytes for $field {
-            fn write<W: Write>(&self, mut writer: W) -> Result<()> {
-                writer.write_all(&self.to_canonical_u8_vec())
-            }
-        }
-        impl FromBytes for $field {
-            fn read<R: Read>(mut reader: R) -> Result<Self> {
-                let mut buf = [0u8; Self::BYTES];
-                reader.read_exact(&mut buf)?;
-                Self::from_canonical_u8_vec(buf.to_vec())
-                    .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))
-            }
-        }
-    };
+impl<F: Field> ToBytes for F {
+    fn write<W: Write>(&self, mut writer: W) -> Result<()> {
+        writer.write_all(&self.to_canonical_u8_vec())
+    }
 }
 
-impl_field!(TweedledeeBase);
-impl_field!(TweedledumBase);
-impl_field!(Bls12377Base);
-impl_field!(Bls12377Scalar);
-
-macro_rules! impl_curve {
-    ($curve:ty, $field:ty) => {
-        impl ToBytes for AffinePoint<$curve> {
-            fn write<W: Write>(&self, mut writer: W) -> Result<()> {
-                let zero = if self.zero { 1 } else { 0 };
-                let odd = if self.y.to_canonical_u64_vec()[0] % 2 == 1 {
-                    2
-                } else {
-                    0
-                };
-                let mask: u8 = zero | odd;
-                writer.write(&[mask])?;
-                writer.write_all(&self.x.to_canonical_u8_vec())
-            }
-        }
-
-        impl FromBytes for AffinePoint<$curve> {
-            fn read<R: Read>(mut reader: R) -> Result<Self> {
-                let mut mask = vec![0u8];
-                reader.read_exact(&mut mask)?;
-                let mask = mask[0];
-                if mask & 1 == 1 {
-                    return Ok(AffinePoint {
-                        x: <$field>::ZERO,
-                        y: <$field>::ZERO,
-                        zero: true,
-                    });
-                }
-                let mut buf = [0u8; <$field>::BYTES];
-                reader.read_exact(&mut buf)?;
-                let x = <$field>::from_canonical_u8_vec(buf.to_vec())
-                    .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
-                let square_candidate = x.cube() + <$curve>::A * x + <$curve>::B;
-                let y = square_candidate
-                    .square_root()
-                    .ok_or(Error::new(ErrorKind::Other, "Invalid x coordinate"))?;
-                if (y.to_canonical_u64_vec()[0] % 2) as u8 == (mask & 2) >> 1 {
-                    return Ok(AffinePoint::nonzero(x, y));
-                } else {
-                    return Ok(AffinePoint::nonzero(x, -y));
-                }
-            }
-        }
-    };
+impl<F: Field> FromBytes for F {
+    fn read<R: Read>(mut reader: R) -> Result<Self> {
+        let mut buf = vec![0u8; Self::BYTES];
+        reader.read_exact(&mut buf)?;
+        Self::from_canonical_u8_vec(buf.to_vec())
+            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))
+    }
 }
 
-impl_curve!(Tweedledee, <Tweedledee as Curve>::BaseField);
-impl_curve!(Tweedledum, <Tweedledum as Curve>::BaseField);
-impl_curve!(Bls12377, <Bls12377 as Curve>::BaseField);
+impl<C: Curve> ToBytes for AffinePoint<C> {
+    fn write<W: Write>(&self, mut writer: W) -> Result<()> {
+        let zero = if self.zero { 1 } else { 0 };
+        let odd = if self.y.to_canonical_u64_vec()[0] % 2 == 1 {
+            2
+        } else {
+            0
+        };
+        let mask: u8 = zero | odd;
+        writer.write(&[mask])?;
+        writer.write_all(&self.x.to_canonical_u8_vec())
+    }
+}
+
+impl<C: Curve> FromBytes for AffinePoint<C> {
+    fn read<R: Read>(mut reader: R) -> Result<Self> {
+        let mut mask = vec![0u8];
+        reader.read_exact(&mut mask)?;
+        let mask = mask[0];
+        if mask & 1 == 1 {
+            return Ok(AffinePoint {
+                x: C::BaseField::ZERO,
+                y: C::BaseField::ZERO,
+                zero: true,
+            });
+        }
+        let mut buf = vec![0u8; C::BaseField::BYTES];
+        reader.read_exact(&mut buf)?;
+        let x = C::BaseField::from_canonical_u8_vec(buf.to_vec())
+            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+        let square_candidate = x.cube() + C::A * x + C::B;
+        let y = square_candidate
+            .square_root()
+            .ok_or(Error::new(ErrorKind::Other, "Invalid x coordinate"))?;
+        if (y.to_canonical_u64_vec()[0] % 2) as u8 == (mask & 2) >> 1 {
+            return Ok(AffinePoint::nonzero(x, y));
+        } else {
+            return Ok(AffinePoint::nonzero(x, -y));
+        }
+    }
+}
+
+impl<C: Curve> Serialize for AffinePoint<C> {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut buf = vec![0u8; C::BaseField::BYTES + 1];
+        self.write(&mut buf)
+            .map_err(|e| S::Error::custom(format!("{}", e)))?;
+        serializer.serialize_bytes(&buf)
+    }
+}
+
+impl<'de, C: Curve> Deserialize<'de> for AffinePoint<C> {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct AffinePointVisitor<C: Curve> {
+            phantom: std::marker::PhantomData<C>,
+        }
+
+        impl<'de, C: Curve> Visitor<'de> for AffinePointVisitor<C> {
+            type Value = AffinePoint<C>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                write!(formatter, "An affine point.")
+            }
+
+            fn visit_bytes<E: DeError>(self, v: &[u8]) -> std::result::Result<Self::Value, E> {
+                AffinePoint::<C>::read(v).map_err(|e| DeError::custom(format!("{}", e)))
+            }
+        }
+        deserializer.deserialize_bytes(AffinePointVisitor {
+            phantom: std::marker::PhantomData,
+        })
+    }
+}
 
 #[cfg(test)]
 mod test {

@@ -992,6 +992,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
     /// Adds a gate to the circuit, without doing any routing.
     pub fn add_gate<G: Gate<C>>(&mut self, gate: G, gate_constants: Vec<C::ScalarField>) {
+        println!("{} {}", self.num_gates(), G::NAME);
         debug_assert!(G::PREFIX.len() + gate_constants.len() <= NUM_CONSTANTS);
 
         // Merge the gate type's prefix bits with the given gate config constants.

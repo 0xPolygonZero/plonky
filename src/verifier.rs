@@ -1,4 +1,5 @@
 use anyhow::{bail, ensure, Result};
+use serde::{Deserialize, Serialize};
 
 use crate::partition::get_subgroup_shift;
 
@@ -11,14 +12,16 @@ use crate::{blake_hash_usize_to_curve, fft_precompute, msm_execute_parallel, msm
 
 pub const SECURITY_BITS: usize = 128;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerificationKey<C: HaloCurve> {
     pub c_constants: Vec<AffinePoint<C>>,
     pub c_s_sigmas: Vec<AffinePoint<C>>,
     pub degree: usize,
     pub num_public_inputs: usize,
     pub security_bits: usize,
+    #[serde(skip)]
     pub pedersen_g_msm_precomputation: Option<MsmPrecomputation<C>>,
+    #[serde(skip)]
     pub fft_precomputation: Option<FftPrecomputation<C::ScalarField>>,
 }
 

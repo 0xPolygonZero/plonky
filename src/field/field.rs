@@ -11,6 +11,7 @@ use rand::Rng;
 
 use crate::{biguint_to_field, field_to_biguint, Curve, ProjectivePoint};
 
+// #[typetag::serde(tag = "type")]
 pub trait Field:
     'static
     + Sized
@@ -27,6 +28,8 @@ pub trait Field:
     + Sub<Self, Output = Self>
     + Mul<Self, Output = Self>
     + Div<Self, Output = Self>
+    + serde_traitobject::Serialize
+    + serde_traitobject::Deserialize
 {
     const BITS: usize;
     const BYTES: usize;

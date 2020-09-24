@@ -7,12 +7,15 @@ use unroll::unroll_for_loops;
 
 use crate::nonzero_multiplicative_inverse_4;
 use crate::{add_4_4_no_overflow, cmp_4_4, field_to_biguint, rand_range_4, rand_range_4_from_rng, sub_4_4, Field};
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 
 /// An element of the Tweedledee group's base field.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Default, Serialize, Deserialize)]
+// #[derive(Copy, Clone, Eq, PartialEq, Hash, Default)]
+// #[typetag::serde]
 pub struct TweedledeeBase {
     /// Montgomery representation, encoded with little-endian u64 limbs.
     pub limbs: [u64; 4],
@@ -302,8 +305,8 @@ impl Debug for TweedledeeBase {
 #[cfg(test)]
 mod tests {
     use crate::test_arithmetic;
-    use crate::TweedledeeBase;
     use crate::Field;
+    use crate::TweedledeeBase;
 
     #[test]
     fn primitive_root_order() {

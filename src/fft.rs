@@ -2,6 +2,7 @@ use rayon::prelude::*;
 
 use crate::util::{log2_ceil, log2_strict};
 use crate::Field;
+use serde::{Deserialize, Serialize};
 
 /// Permutes `arr` such that each index is mapped to its reverse in binary.
 fn reverse_index_bits<T: Copy>(arr: Vec<T>) -> Vec<T> {
@@ -24,7 +25,7 @@ fn reverse_bits(n: usize, num_bits: usize) -> usize {
     result
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FftPrecomputation<F: Field> {
     /// For each layer index i, stores the cyclic subgroup corresponding to the evaluation domain of
     /// layer i. The indices within these subgroup vectors are bit-reversed.

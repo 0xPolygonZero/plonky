@@ -1,6 +1,7 @@
 use crate::{AffinePoint, Curve, Field, HaloCurve, TweedledeeBase, TweedledumBase};
+use serde::Serialize;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Serialize)]
 pub struct Tweedledee;
 
 impl Curve for Tweedledee {
@@ -39,7 +40,7 @@ impl HaloCurve for Tweedledee {
 #[cfg(test)]
 mod tests {
     use crate::curve::{Curve, HaloCurve, ProjectivePoint};
-    use crate::{Tweedledee, Field};
+    use crate::{Field, Tweedledee};
 
     /// A simple, somewhat inefficient implementation of multiplication which is used as a reference
     /// for correctness.
