@@ -99,9 +99,9 @@ impl<C: HaloCurve> Proof<C> {
             let r_sf = r_bf.try_convert::<C::ScalarField>()?;
             let r_bits = &r_sf.to_canonical_bool_vec()[..SECURITY_BITS];
             let u_j_squared = halo_n::<C>(r_bits);
-            let u_j = u_j_squared
-                .square_root()
-                .expect("Prover should have ensured that n(r) is square");
+            let u_j = u_j_squared.square_root().ok_or_else(|| {
+                anyhow!("Invalid transcript. Prover should have ensured that n(r) is square")
+            })?;
             halo_us.push(u_j);
         }
 
