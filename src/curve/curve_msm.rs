@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 /// uneven distributions of work among threads.
 const DIGITS_PER_CHUNK: usize = 80;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct MsmPrecomputation<C: Curve> {
     /// For each generator (in the order they were passed to `msm_precompute`), contains a vector
     /// of powers, i.e. [(2^w)^i] for i < DIGITS.

@@ -1,4 +1,4 @@
-use crate::{AffinePoint, Bls12377, Bls12377Base, Bls12377Scalar, Curve, Field, Tweedledee, TweedledeeBase, Tweedledum, TweedledumBase};
+use crate::{AffinePoint, Curve, Field};
 use serde::de::Error as DeError;
 use serde::de::Visitor;
 use serde::ser::Error as SerdeError;
@@ -112,7 +112,7 @@ impl<'de, C: Curve> Deserialize<'de> for AffinePoint<C> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::blake_hash_base_field_to_curve;
+    use crate::{blake_hash_base_field_to_curve, Bls12377, Bls12377Base, Bls12377Scalar, CircuitBuilder, HaloCurve, PartialWitness, Proof, Tweedledee, TweedledeeBase, Tweedledum, TweedledumBase, VerificationKey};
 
     macro_rules! test_field_serialization {
         ($field:ty, $test_name:ident) => {
@@ -188,4 +188,66 @@ mod test {
         <Bls12377 as Curve>::BaseField,
         test_bls_curve_serialization
     );
+
+    // Generate a proof and verification key for the factorial circuit.
+    fn get_circuit_vk<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
+    ) -> (Proof<C>, VerificationKey<C>) {
+        let mut builder = CircuitBuilder::<C>::new(128);
+        let n = 10;
+        let factorial_usize = (1..=n).product();
+        let factors_pis = builder.stage_public_inputs(n);
+        builder.route_public_inputs();
+        let res = builder.constant_wire(C::ScalarField::from_canonical_usize(factorial_usize));
+        let mut factorial = builder.one_wire();
+        factors_pis.iter().for_each(|pi| {
+            factorial = builder.mul(factorial, pi.routable_target());
+        });
+        builder.copy(factorial, res);
+        let mut partial_witness = PartialWitness::new();
+        (0..n).for_each(|i| {
+            partial_witness
+                .set_public_input(factors_pis[i], C::ScalarField::from_canonical_usize(i + 1));
+        });
+        let circuit = builder.build();
+        let witness = circuit.generate_witness(partial_witness);
+        let proof = circuit
+            .generate_proof::<InnerC>(&witness, &[], true)
+            .unwrap();
+        let vk = circuit.to_vk();
+        (proof, vk)
+    }
+
+    #[test]
+    fn test_proof_vk_serialization_tweedledee() {
+        let (proof, vk) = get_circuit_vk::<Tweedledee, Tweedledum>();
+        let ser_proof = bincode::serialize(&proof).unwrap();
+        let ser_vk = bincode::serialize(&vk).unwrap();
+
+        let der_proof = bincode::deserialize(&ser_proof).unwrap();
+        let der_vk: VerificationKey<Tweedledee> = bincode::deserialize(&ser_vk).unwrap();
+
+        assert_eq!(proof, der_proof);
+        assert_eq!(vk.c_constants, der_vk.c_constants);
+        assert_eq!(vk.c_s_sigmas, der_vk.c_s_sigmas);
+        assert_eq!(vk.degree, der_vk.degree);
+        assert_eq!(vk.num_public_inputs, der_vk.num_public_inputs);
+        assert_eq!(vk.security_bits, der_vk.security_bits);
+    }
+
+    #[test]
+    fn test_proof_vk_serialization_tweedledum() {
+        let (proof, vk) = get_circuit_vk::<Tweedledum, Tweedledee>();
+        let ser_proof = bincode::serialize(&proof).unwrap();
+        let ser_vk = bincode::serialize(&vk).unwrap();
+
+        let der_proof = bincode::deserialize(&ser_proof).unwrap();
+        let der_vk: VerificationKey<Tweedledum> = bincode::deserialize(&ser_vk).unwrap();
+
+        assert_eq!(proof, der_proof);
+        assert_eq!(vk.c_constants, der_vk.c_constants);
+        assert_eq!(vk.c_s_sigmas, der_vk.c_s_sigmas);
+        assert_eq!(vk.degree, der_vk.degree);
+        assert_eq!(vk.num_public_inputs, der_vk.num_public_inputs);
+        assert_eq!(vk.security_bits, der_vk.security_bits);
+    }
 }

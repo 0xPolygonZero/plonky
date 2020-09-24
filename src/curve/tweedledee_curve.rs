@@ -1,7 +1,7 @@
 use crate::{AffinePoint, Curve, Field, HaloCurve, TweedledeeBase, TweedledumBase};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Copy, Clone, Serialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Default, Serialize, Deserialize)]
 pub struct Tweedledee;
 
 impl Curve for Tweedledee {

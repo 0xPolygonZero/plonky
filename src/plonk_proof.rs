@@ -1,10 +1,11 @@
 use anyhow::{anyhow, Result};
+use serde::{Deserialize, Serialize};
 
 use crate::plonk_challenger::Challenger;
 use crate::plonk_util::{halo_g, halo_n, halo_s};
 use crate::{AffinePoint, AffinePointTarget, Curve, Field, HaloCurve, PartialWitness, Target, SECURITY_BITS};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub struct SchnorrProof<C: HaloCurve> {
     pub r: AffinePoint<C>,
     pub z1: C::ScalarField,
@@ -17,7 +18,7 @@ pub struct SchnorrProofTarget<C: Curve> {
     pub z2: Target<C::ScalarField>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Proof<C: HaloCurve> {
     /// A commitment to each wire polynomial.
     pub c_wires: Vec<AffinePoint<C>>,
@@ -29,11 +30,11 @@ pub struct Proof<C: HaloCurve> {
     pub c_pis_quotient: AffinePoint<C>,
 
     /// The opening of each polynomial at `zeta`.
-    pub o_local: OpeningSet<C::ScalarField>,
+    pub o_local: OpeningSet<C>,
     /// The opening of each polynomial at `g * zeta`.
-    pub o_right: OpeningSet<C::ScalarField>,
+    pub o_right: OpeningSet<C>,
     /// The opening of each polynomial at `g^65 * zeta`.
-    pub o_below: OpeningSet<C::ScalarField>,
+    pub o_below: OpeningSet<C>,
 
     /// L in the Halo reduction.
     pub halo_l: Vec<AffinePoint<C>>,
@@ -46,7 +47,7 @@ pub struct Proof<C: HaloCurve> {
 }
 
 impl<C: HaloCurve> Proof<C> {
-    pub fn all_opening_sets(&self) -> Vec<OpeningSet<C::ScalarField>> {
+    pub fn all_opening_sets(&self) -> Vec<OpeningSet<C>> {
         vec![
             self.o_local.clone(),
             self.o_right.clone(),
@@ -273,26 +274,26 @@ impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> ProofTarget<C,
 }
 
 /// The opening of each Plonk polynomial at a particular point.
-#[derive(Clone, Debug)]
-pub struct OpeningSet<F: Field> {
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct OpeningSet<C: Curve> {
     /// The purported opening of each constant polynomial.
-    pub o_constants: Vec<F>,
+    pub o_constants: Vec<C::ScalarField>,
     /// The purported opening of each S_sigma polynomial in the context of Plonk's permutation argument.
-    pub o_plonk_sigmas: Vec<F>,
+    pub o_plonk_sigmas: Vec<C::ScalarField>,
     /// The purported opening of each wire polynomial.
-    pub o_wires: Vec<F>,
+    pub o_wires: Vec<C::ScalarField>,
     /// The purported opening of `Z`.
-    pub o_plonk_z: F,
+    pub o_plonk_z: C::ScalarField,
     /// The purported opening of `t`.
-    pub o_plonk_t: Vec<F>,
+    pub o_plonk_t: Vec<C::ScalarField>,
     /// The purported opening of some old proofs `halo_g` polynomials.
-    pub o_old_proofs: Vec<F>,
+    pub o_old_proofs: Vec<C::ScalarField>,
     /// The purported opening of the public input quotient polynomial.
-    pub o_pi_quotient: F,
+    pub o_pi_quotient: C::ScalarField,
 }
 
-impl<F: Field> OpeningSet<F> {
-    pub fn to_vec(&self) -> Vec<F> {
+impl<C: Curve> OpeningSet<C> {
+    pub fn to_vec(&self) -> Vec<C::ScalarField> {
         [
             self.o_constants.as_slice(),
             self.o_plonk_sigmas.as_slice(),
@@ -336,10 +337,10 @@ impl<C: Curve> OpeningSetTarget<C> {
         .concat()
     }
 
-    pub fn populate_witness<F: Field>(
+    pub fn populate_witness<D: Curve>(
         &self,
         witness: &mut PartialWitness<C::ScalarField>,
-        values: &OpeningSet<F>,
+        values: &OpeningSet<D>,
     ) -> Result<()> {
         // TODO: We temporarily assume that each opened value fits in both fields.
         witness.set_targets(
