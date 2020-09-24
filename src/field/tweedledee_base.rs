@@ -14,8 +14,6 @@ use std::fmt::{Debug, Display, Formatter};
 
 /// An element of the Tweedledee group's base field.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Default, Serialize, Deserialize)]
-// #[derive(Copy, Clone, Eq, PartialEq, Hash, Default)]
-// #[typetag::serde]
 pub struct TweedledeeBase {
     /// Montgomery representation, encoded with little-endian u64 limbs.
     pub limbs: [u64; 4],

@@ -11,7 +11,6 @@ use rand::Rng;
 
 use crate::{biguint_to_field, field_to_biguint, Curve, ProjectivePoint};
 
-// #[typetag::serde(tag = "type")]
 pub trait Field:
     'static
     + Sized
