@@ -1,4 +1,4 @@
-use crate::{AffinePoint, Curve, Field};
+use crate::{AffinePoint, Curve, Field, TweedledumBase, Bls12377Base, Bls12377Scalar, TweedledeeBase};
 use serde::de::Error as DeError;
 use serde::de::Visitor;
 use serde::ser::Error as SerdeError;
@@ -108,6 +108,49 @@ impl<'de, C: Curve> Deserialize<'de> for AffinePoint<C> {
         })
     }
 }
+
+macro_rules! impl_serde_field {
+    ($field:ty) => {
+        impl Serialize for $field {
+            fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+            where
+                S: Serializer,
+            {
+                let mut buf = vec![];
+                self.write(&mut buf)
+                    .map_err(|e| S::Error::custom(format!("{}", e)))?;
+                serializer.serialize_bytes(&buf)
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $field {
+            fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                struct FieldVisitor {}
+
+                impl<'de> Visitor<'de> for FieldVisitor {
+                    type Value = $field;
+
+                    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                        write!(formatter, "A field element.")
+                    }
+
+                    fn visit_bytes<E: DeError>(self, v: &[u8]) -> std::result::Result<Self::Value, E> {
+                        <$field>::read(v).map_err(|e| DeError::custom(format!("{}", e)))
+                    }
+                }
+                deserializer.deserialize_bytes(FieldVisitor {})
+            }
+        }
+    };
+}
+
+impl_serde_field!(TweedledumBase);
+impl_serde_field!(TweedledeeBase);
+impl_serde_field!(Bls12377Base);
+impl_serde_field!(Bls12377Scalar);
 
 #[cfg(test)]
 mod test {

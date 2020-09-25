@@ -9,13 +9,12 @@ use unroll::unroll_for_loops;
 
 use crate::{add_6_6_no_overflow, cmp_6_6, Field, mul2_6, rand_range_6, rand_range_6_from_rng, sub_6_6, field_to_biguint};
 use crate::nonzero_multiplicative_inverse_6;
-use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt::{Formatter, Display};
 use std::fmt;
 
 /// An element of the BLS12 group's base field.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
 pub struct Bls12377Base {
     /// Montgomery representation, encoded with little-endian u64 limbs.
     pub limbs: [u64; 6],

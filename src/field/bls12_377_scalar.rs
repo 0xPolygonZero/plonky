@@ -9,13 +9,12 @@ use unroll::unroll_for_loops;
 
 use crate::{add_4_4_no_overflow, cmp_4_4, Field, sub_4_4, field_to_biguint, rand_range_4, rand_range_4_from_rng};
 use crate::nonzero_multiplicative_inverse_4;
-use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 
 /// An element of the BLS12 group's scalar field.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
 pub struct Bls12377Scalar {
     /// Montgomery representation, encoded with little-endian u64 limbs.
     pub limbs: [u64; 4],
