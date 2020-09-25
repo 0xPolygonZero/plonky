@@ -56,7 +56,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for ConstantGate<C> {
 
     fn generate(
         &self,
-        constants: &Vec<Vec<C::ScalarField>>,
+        constants: &[Vec<C::ScalarField>],
         _witness: &PartialWitness<C::ScalarField>,
     ) -> PartialWitness<C::ScalarField> {
         let constants = &constants[self.index];

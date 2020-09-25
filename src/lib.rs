@@ -3,6 +3,9 @@
 #![allow(clippy::suspicious_arithmetic_impl)]
 // We have tons of bigint literals in Montgomery form, which won't be readable with or without underscores.
 #![allow(clippy::unreadable_literal)]
+#![feature(associated_type_bounds)]
+// This is annoying and often wrong.
+#![allow(clippy::needless_range_loop)]
 
 pub use bigint::*;
 pub use circuit_bigint::*;
@@ -59,3 +62,6 @@ mod target;
 pub mod util;
 mod verifier;
 mod witness;
+
+#[macro_use]
+extern crate log;

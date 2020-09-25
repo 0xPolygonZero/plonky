@@ -53,7 +53,7 @@ fn main() -> Result<()> {
     let mut recursion_inputs = PartialWitness::new();
     if let Err(e) = recursion_circuit
         .proof
-        .populate_witness(&mut recursion_inputs, inner_proof.clone())
+        .populate_witness(&mut recursion_inputs, inner_proof)
     {
         panic!("Failed to populate inputs: {:?}", e);
     }

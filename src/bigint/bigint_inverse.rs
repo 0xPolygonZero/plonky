@@ -1,3 +1,4 @@
+#![allow(clippy::many_single_char_names)]
 use std::cmp::Ordering::Less;
 
 use crate::{add_4_4_no_overflow, add_6_6_no_overflow, cmp_4_4, cmp_6_6, div2_4, div2_6, is_even_4, is_even_6, is_odd_4, is_odd_6, sub_4_4, sub_6_6};

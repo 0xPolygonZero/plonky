@@ -76,7 +76,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for PublicInputGate<C> {
 
     fn generate(
         &self,
-        _constants: &Vec<Vec<C::ScalarField>>,
+        _constants: &[Vec<C::ScalarField>],
         witness: &PartialWitness<C::ScalarField>,
     ) -> PartialWitness<C::ScalarField> {
         let self_as_generator: &dyn WitnessGenerator<C::ScalarField> = self;

@@ -1,6 +1,6 @@
 use std::ops::Mul;
 
-use crate::{affine_summation_batch_inversion, AffinePoint, Curve, Field, ProjectivePoint, CurveScalar};
+use crate::{affine_summation_batch_inversion, AffinePoint, Curve, CurveScalar, Field, ProjectivePoint};
 
 const WINDOW_BITS: usize = 4;
 const BASE: usize = 1 << WINDOW_BITS;
@@ -69,6 +69,7 @@ impl<C: Curve> Mul<ProjectivePoint<C>> for CurveScalar<C> {
     }
 }
 
+#[allow(clippy::assertions_on_constants)]
 fn to_digits<C: Curve>(x: &C::ScalarField) -> Vec<u64> {
     debug_assert!(64 % WINDOW_BITS == 0,
                   "For simplicity, only power-of-two window sizes are handled for now");

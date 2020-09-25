@@ -24,7 +24,7 @@ fn reverse_bits(n: usize, num_bits: usize) -> usize {
     result
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct FftPrecomputation<F: Field> {
     /// For each layer index i, stores the cyclic subgroup corresponding to the evaluation domain of
     /// layer i. The indices within these subgroup vectors are bit-reversed.

@@ -53,7 +53,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for BufferGate<C> {
 
     fn generate(
         &self,
-        _constants: &Vec<Vec<C::ScalarField>>,
+        _constants: &[Vec<C::ScalarField>],
         _witness: &PartialWitness<C::ScalarField>,
     ) -> PartialWitness<C::ScalarField> {
         PartialWitness::new()

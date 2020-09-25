@@ -181,6 +181,7 @@ impl<F: Field> RecursiveChallenger<F> {
         (self.get_challenge(builder), self.get_challenge(builder))
     }
 
+    #[allow(clippy::type_complexity)]
     pub(crate) fn get_3_challenges<C: HaloCurve<ScalarField = F>>(
         &mut self,
         builder: &mut CircuitBuilder<C>,

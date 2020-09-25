@@ -9,6 +9,11 @@ pub struct TargetPartitions<F: Field> {
     indices: HashMap<Target<F>, usize>,
 }
 
+impl<F: Field> Default for TargetPartitions<F> {
+    fn default() -> Self {
+        TargetPartitions::new()
+    }
+}
 impl<F: Field> TargetPartitions<F> {
     pub fn new() -> Self {
         Self {

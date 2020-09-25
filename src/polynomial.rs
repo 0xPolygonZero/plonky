@@ -1,3 +1,4 @@
+#![allow(clippy::many_single_char_names)]
 use crate::{fft_precompute, fft_with_precomputation, ifft_with_precomputation_power_of_2, util::log2_ceil, AffinePoint, Curve, FftPrecomputation, Field, MsmPrecomputation, PolynomialCommitment};
 use std::cmp::Ordering;
 use std::ops::{Index, IndexMut, RangeBounds};

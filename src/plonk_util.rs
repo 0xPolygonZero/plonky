@@ -98,12 +98,10 @@ pub fn halo_n_mul<C: HaloCurve>(s_bits: &[bool], p: AffinePoint<C>) -> AffinePoi
             } else {
                 endo_p_n
             }
+        } else if bit_lo {
+            p_p
         } else {
-            if bit_lo {
-                p_p
-            } else {
-                p_n
-            }
+            p_n
         };
         acc = acc.double() + s;
     }

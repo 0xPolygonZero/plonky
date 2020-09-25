@@ -82,7 +82,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                _constants: &Vec<Vec<F>>,
+                _constants: &[Vec<F>],
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
                 let lhs = witness.get_target(self.lhs);

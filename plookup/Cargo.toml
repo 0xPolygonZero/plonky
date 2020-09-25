@@ -9,4 +9,4 @@ plonky = {path=".."}
 anyhow = "1.0.31"
 rand = "0.7.3"
 itertools = "0.9.0"
-num = "0.2.1"
+num = "0.3.0"
