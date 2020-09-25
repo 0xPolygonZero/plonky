@@ -140,7 +140,7 @@ pub trait Field:
         }
     }
 
-    fn is_valid_canonical_u64(v: &Vec<u64>) -> bool;
+    fn is_valid_canonical_u64(v: &[u64]) -> bool;
 
     #[inline(always)]
     fn is_zero(&self) -> bool {
@@ -493,7 +493,7 @@ pub mod field_tests {
         let modwords = ceil_div_usize(modulus.bits() as usize, word_bits);
         // Start with basic set close to zero: 0 .. 10
         const BIGGEST_SMALL: u32 = 10;
-        let smalls: Vec<_> = (0..BIGGEST_SMALL).map(|x| BigUint::from(x)).collect();
+        let smalls: Vec<_> = (0..BIGGEST_SMALL).map(BigUint::from).collect();
         // ... and close to MAX: MAX - x
         let word_max = (BigUint::one() << word_bits) - 1u32;
         let bigs = smalls.iter().map(|x| &word_max - x).collect();
@@ -516,17 +516,17 @@ pub mod field_tests {
         let diff_max = basic_inputs
             .iter()
             .map(|x| &maxval - x)
-            .filter(|x| x < &modulus)
+            .filter(|x| x < modulus)
             .collect();
         // Inputs 'difference from' modulus value
         let diff_mod = basic_inputs
             .iter()
-            .filter(|x| *x < &modulus && !x.is_zero())
+            .filter(|x| *x < modulus && !x.is_zero())
             .map(|x| modulus - x)
             .collect();
         let basics = basic_inputs
             .into_iter()
-            .filter(|x| x < &modulus)
+            .filter(|x| x < modulus)
             .collect::<Vec<BigUint>>();
         [basics, diff_max, diff_mod].concat()
 

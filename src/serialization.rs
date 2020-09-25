@@ -62,11 +62,11 @@ impl<C: Curve> FromBytes for AffinePoint<C> {
         let square_candidate = x.cube() + C::A * x + C::B;
         let y = square_candidate
             .square_root()
-            .ok_or(Error::new(ErrorKind::Other, "Invalid x coordinate"))?;
+            .ok_or_else(|| Error::new(ErrorKind::Other, "Invalid x coordinate"))?;
         if (y.to_canonical_u64_vec()[0] % 2) as u8 == (mask & 2) >> 1 {
-            return Ok(AffinePoint::nonzero(x, y));
+            Ok(AffinePoint::nonzero(x, y))
         } else {
-            return Ok(AffinePoint::nonzero(x, -y));
+            Ok(AffinePoint::nonzero(x, -y))
         }
     }
 }

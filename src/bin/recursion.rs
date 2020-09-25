@@ -1,7 +1,10 @@
 use anyhow::Result;
 use std::time::Instant;
 
-use plonky::{recursive_verification_circuit, verify_proof, BufferGate, Circuit, CircuitBuilder, PartialWitness, Tweedledee, Tweedledum};
+use plonky::{
+    recursive_verification_circuit, verify_proof, BufferGate, Circuit, CircuitBuilder,
+    PartialWitness, Tweedledee, Tweedledum,
+};
 
 const INNER_PROOF_DEGREE_POW: usize = 14;
 const INNER_PROOF_DEGREE: usize = 1 << INNER_PROOF_DEGREE_POW;
@@ -53,7 +56,7 @@ fn main() -> Result<()> {
     let mut recursion_inputs = PartialWitness::new();
     if let Err(e) = recursion_circuit
         .proof
-        .populate_witness(&mut recursion_inputs, inner_proof.clone())
+        .populate_witness(&mut recursion_inputs, inner_proof)
     {
         panic!("Failed to populate inputs: {:?}", e);
     }

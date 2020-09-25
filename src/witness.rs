@@ -7,6 +7,11 @@ pub struct PartialWitness<F: Field> {
     wire_values: HashMap<Target<F>, F>,
 }
 
+impl<F: Field> Default for PartialWitness<F> {
+    fn default() -> Self {
+        PartialWitness::new()
+    }
+}
 impl<F: Field> PartialWitness<F> {
     pub fn new() -> Self {
         PartialWitness {
@@ -82,7 +87,7 @@ impl<F: Field> PartialWitness<F> {
         let mut result = BigUint::zero();
         for (i, &limb) in target.limbs.iter().enumerate() {
             let limb_value = field_to_biguint(self.get_target(limb));
-            result += limb_value << i * LIMB_BITS;
+            result += limb_value << (i * LIMB_BITS);
         }
         result
     }
@@ -222,5 +227,5 @@ pub trait WitnessGenerator<F: Field>: 'static + Sync {
     fn dependencies(&self) -> Vec<Target<F>>;
 
     /// Given a partial witness, return any newly generated values. The caller will merge them in.
-    fn generate(&self, constants: &Vec<Vec<F>>, witness: &PartialWitness<F>) -> PartialWitness<F>;
+    fn generate(&self, constants: &[Vec<F>], witness: &PartialWitness<F>) -> PartialWitness<F>;
 }

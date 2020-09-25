@@ -1,5 +1,9 @@
 use anyhow::Result;
-use plonky::{blake_hash_base_field_to_curve, msm_parallel, rescue_hash_1_to_1, verify_proof, AffinePoint, Base4SumGate, Circuit, CircuitBuilder, Curve, CurveMulOp, Field, HaloCurve, PartialWitness, Target, Tweedledee, Tweedledum, Wire, Witness};
+use plonky::{
+    blake_hash_base_field_to_curve, msm_parallel, rescue_hash_1_to_1, verify_proof, AffinePoint,
+    Base4SumGate, Circuit, CircuitBuilder, Curve, CurveMulOp, Field, HaloCurve, PartialWitness,
+    Target, Tweedledee, Tweedledum, Wire, Witness,
+};
 use rand::{thread_rng, Rng};
 use std::time::Instant;
 
@@ -26,6 +30,7 @@ fn test_proof_trivial() -> Result<()> {
 }
 
 #[test]
+#[allow(clippy::same_item_push)]
 fn test_proof_trivial_circuit_many_proofs() -> Result<()> {
     let mut old_proofs = Vec::new();
     for _ in 0..10 {
@@ -149,13 +154,7 @@ fn test_proof_quadratic_public_input() -> Result<()> {
         .generate_proof::<Tweedledum>(&witness, &[], true)
         .unwrap();
     let vk = circuit.to_vk();
-    verify_proof::<Tweedledee, Tweedledum>(
-        &[F::from_canonical_usize(7)],
-        &proof,
-        &[],
-        &vk,
-        false,
-    )?;
+    verify_proof::<Tweedledee, Tweedledum>(&[F::from_canonical_usize(7)], &proof, &[], &vk, false)?;
 
     Ok(())
 }

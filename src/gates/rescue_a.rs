@@ -115,7 +115,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for RescueStepAGate<C> {
 
     fn generate(
         &self,
-        constants: &Vec<Vec<C::ScalarField>>,
+        constants: &[Vec<C::ScalarField>],
         witness: &PartialWitness<C::ScalarField>,
     ) -> PartialWitness<C::ScalarField> {
         let constants = &constants[self.index];

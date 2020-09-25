@@ -1,8 +1,9 @@
 //! Runs MSMs with various thread pool sizes, and outputs timing data.
+#![allow(clippy::same_item_push)]
 
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 
-use plonky::{Curve, Field, msm_execute_parallel, msm_precompute, Tweedledum, MsmPrecomputation};
+use plonky::{msm_execute_parallel, msm_precompute, Curve, Field, MsmPrecomputation, Tweedledum};
 
 type C = Tweedledum;
 type SF = <C as Curve>::ScalarField;
@@ -31,19 +32,25 @@ fn main() {
             durations.sort();
             let average_duration = durations.iter().sum::<Duration>() / durations.len() as u32;
             let average_secs = average_duration.as_secs_f64();
-            println!("MSMs with terms=2^{}, threads={}, window_size={}: avg={:.4}s, avg*threads={:.4}s",
-                     terms_log, threads, window_size,
-                     average_secs, average_secs * threads as f64);
+            println!(
+                "MSMs with terms=2^{}, threads={}, window_size={}: avg={:.4}s, avg*threads={:.4}s",
+                terms_log,
+                threads,
+                window_size,
+                average_secs,
+                average_secs * threads as f64
+            );
         }
     }
 }
 
 fn time_msm(terms: usize, threads: usize, precomputation: &MsmPrecomputation<C>) -> Duration {
-    let scalars: Vec<_> = (0..terms)
-        .map(|_| SF::rand())
-        .collect();
+    let scalars: Vec<_> = (0..terms).map(|_| SF::rand()).collect();
 
-    let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap();
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(threads)
+        .build()
+        .unwrap();
 
     pool.install(|| {
         let start = Instant::now();

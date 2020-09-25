@@ -1,3 +1,4 @@
+#![allow(clippy::type_complexity)]
 use std::collections::{BTreeMap, HashMap};
 
 use crate::gates::*;
@@ -109,6 +110,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         self.constant_wire(C::ScalarField::NEG_ONE)
     }
 
+    #[allow(clippy::map_entry)]
     pub fn constant_wire(&mut self, c: C::ScalarField) -> Target<C::ScalarField> {
         if self.constant_wires.contains_key(&c) {
             self.constant_wires[&c]
@@ -152,7 +154,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                _constants: &Vec<Vec<F>>,
+                _constants: &[Vec<F>],
                 _witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
                 let mut result = PartialWitness::new();
@@ -239,7 +241,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                _constants: &Vec<Vec<F>>,
+                _constants: &[Vec<F>],
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
                 let x = witness.get_target(self.x);
@@ -505,7 +507,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                _constants: &Vec<Vec<F>>,
+                _constants: &[Vec<F>],
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
                 let x_value = witness.get_target(self.x);
@@ -631,7 +633,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                _constants: &Vec<Vec<F>>,
+                _constants: &[Vec<F>],
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
                 let x_value = witness.get_target(self.x);
@@ -802,7 +804,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                _constants: &Vec<Vec<F>>,
+                _constants: &[Vec<F>],
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
                 let x = witness.get_target(self.x);
@@ -1059,7 +1061,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                _constants: &Vec<Vec<F>>,
+                _constants: &[Vec<F>],
                 _witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
                 let mut result = PartialWitness::new();

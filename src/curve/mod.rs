@@ -8,6 +8,7 @@ pub use tweedledee_curve::*;
 pub use tweedledum_curve::*;
 
 mod bls12_377_curve;
+#[allow(clippy::module_inception)]
 mod curve;
 mod curve_adds;
 mod curve_msm;

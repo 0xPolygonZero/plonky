@@ -178,6 +178,7 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
 }
 
 /// Verify all IPAs in the given proof using a reduction to a single polynomial.
+#[allow(clippy::too_many_arguments)]
 fn verify_all_ipas<C: HaloCurve>(
     c_constants: &[AffinePoint<C>],
     c_s_sigmas: &[AffinePoint<C>],
@@ -372,9 +373,7 @@ fn public_inputs_to_polynomial<F: Field>(
                 .fold(F::ZERO, |acc, x| acc + x)
         })
         .collect::<Vec<_>>();
-    for _ in scaled_wires_vec.len()..degree {
-        scaled_wires_vec.push(F::ZERO);
-    }
+    scaled_wires_vec.resize(degree, F::ZERO);
 
     fft_precomputation.map_or_else(
         || Polynomial::from_evaluations(&scaled_wires_vec, &fft_precompute(degree)),

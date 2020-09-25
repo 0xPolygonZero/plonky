@@ -7,10 +7,10 @@ use unroll::unroll_for_loops;
 
 use crate::nonzero_multiplicative_inverse_4;
 use crate::{add_4_4_no_overflow, cmp_4_4, field_to_biguint, rand_range_4, rand_range_4_from_rng, sub_4_4, Field};
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
-use serde::{Serialize, Deserialize};
 
 /// An element of the Tweedledum group's base field.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Default, Serialize, Deserialize)]
@@ -251,7 +251,7 @@ impl Field for TweedledumBase {
         Self::from_canonical([n, 0, 0, 0])
     }
 
-    fn is_valid_canonical_u64(v: &Vec<u64>) -> bool {
+    fn is_valid_canonical_u64(v: &[u64]) -> bool {
         v.len() == 4 && cmp_4_4(v[..].try_into().unwrap(), Self::ORDER) == Less
     }
 
@@ -300,12 +300,11 @@ impl Debug for TweedledumBase {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use crate::test_arithmetic;
-    use crate::TweedledumBase;
     use crate::Field;
+    use crate::TweedledumBase;
 
     #[test]
     fn primitive_root_order() {
