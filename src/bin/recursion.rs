@@ -1,10 +1,7 @@
 use anyhow::Result;
 use std::time::Instant;
 
-use plonky::{
-    recursive_verification_circuit, verify_proof, BufferGate, Circuit, CircuitBuilder,
-    PartialWitness, Tweedledee, Tweedledum,
-};
+use plonky::{recursive_verification_circuit, verify_proof, BufferGate, Circuit, CircuitBuilder, PartialWitness, Tweedledee, Tweedledum};
 
 const INNER_PROOF_DEGREE_POW: usize = 14;
 const INNER_PROOF_DEGREE: usize = 1 << INNER_PROOF_DEGREE_POW;

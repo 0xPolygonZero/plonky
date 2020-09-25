@@ -16,7 +16,7 @@ impl Curve for Tweedledum {
             11556519044732520811,
             18446744073709551615,
             4611686018427387903,
-        ],
+        ]
     };
 
     const GENERATOR_AFFINE: AffinePoint<Self> = AffinePoint {
@@ -27,7 +27,7 @@ impl Curve for Tweedledum {
                 12442237869110527732,
                 9256472484777506843,
                 1114242145010923164,
-            ],
+            ]
         },
         zero: false,
     };
@@ -40,7 +40,7 @@ impl HaloCurve for Tweedledum {
             3132214451552427455,
             3308921103222877309,
             2709928666517121162,
-        ],
+        ]
     };
     const ZETA_SCALAR: Self::ScalarField = TweedledeeBase {
         limbs: [
@@ -48,14 +48,14 @@ impl HaloCurve for Tweedledum {
             16421485501699768486,
             18374227564572127422,
             3902997619921080662,
-        ],
+        ]
     };
 }
 
 #[cfg(test)]
 mod tests {
     use crate::curve::{Curve, HaloCurve, ProjectivePoint};
-    use crate::{Field, Tweedledum};
+    use crate::{Tweedledum, Field};
 
     /// A simple, somewhat inefficient implementation of multiplication which is used as a reference
     /// for correctness.
@@ -82,6 +82,9 @@ mod tests {
         let g = C::convert(<C as Curve>::ScalarField::rand()) * C::GENERATOR_PROJECTIVE;
         let g = g.to_affine();
         let h = g.endomorphism();
-        assert_eq!(h, mul_naive(C::ZETA_SCALAR, g.to_projective()).to_affine());
+        assert_eq!(
+            h,
+            mul_naive(C::ZETA_SCALAR, g.to_projective()).to_affine()
+        );
     }
 }
