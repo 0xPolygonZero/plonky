@@ -113,6 +113,7 @@ impl<'de, C: Curve> Deserialize<'de> for AffinePoint<C> {
 mod test {
     use super::*;
     use crate::{blake_hash_base_field_to_curve, Bls12377, Bls12377Base, Bls12377Scalar, CircuitBuilder, HaloCurve, PartialWitness, Proof, Tweedledee, TweedledeeBase, Tweedledum, TweedledumBase, VerificationKey};
+    use anyhow::Result;
 
     macro_rules! test_field_serialization {
         ($field:ty, $test_name:ident) => {
@@ -125,8 +126,8 @@ mod test {
                 assert_eq!(x, y);
 
                 // Serde (de)serialization
-                let ser = bincode::serialize(&x).unwrap();
-                let y = bincode::deserialize(&ser).unwrap();
+                let ser = bincode::serialize(&x)?;
+                let y = bincode::deserialize(&ser)?;
                 assert_eq!(x, y);
 
                 Ok(())
@@ -157,11 +158,11 @@ mod test {
                 assert_eq!(zero, q);
 
                 // Serde (de)serialization
-                let ser = bincode::serialize(&p).unwrap();
-                let q = bincode::deserialize(&ser).unwrap();
+                let ser = bincode::serialize(&p)?;
+                let q = bincode::deserialize(&ser)?;
                 assert_eq!(p, q);
-                let ser = bincode::serialize(&zero).unwrap();
-                let q = bincode::deserialize(&ser).unwrap();
+                let ser = bincode::serialize(&zero)?;
+                let q = bincode::deserialize(&ser)?;
                 assert_eq!(zero, q);
 
                 Ok(())
