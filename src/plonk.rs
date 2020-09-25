@@ -568,7 +568,7 @@ impl<C: HaloCurve> Circuit<C> {
         //     self.generators.len()
         // );
 
-        println!("Witness generation took {}s", start.elapsed().as_secs_f32());
+        info!("Witness generation took {}s", start.elapsed().as_secs_f32());
         witness
     }
 

@@ -60,3 +60,6 @@ mod target;
 pub mod util;
 mod verifier;
 mod witness;
+
+#[macro_use]
+extern crate log;
