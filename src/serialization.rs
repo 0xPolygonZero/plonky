@@ -268,9 +268,19 @@ mod test {
                 let (proof, vk) = get_circuit_vk::<$curve, $inner_curve>();
                 let ser_proof = serde_cbor::to_vec(&proof)?;
                 let ser_vk = serde_cbor::to_vec(&vk)?;
-                let vk_no_fft = { let mut vk_no_fft = vk.clone(); vk_no_fft.clear_fft_precomputation(); vk_no_fft };
-                let vk_no_msm = { let mut vk_no_msm = vk.clone(); vk_no_msm.clear_msm_precomputation(); vk_no_msm };
-                let vk_none = { let mut vk_none = vk.clone(); vk_none.clear_all(); vk_none };
+                let vk_no_fft = VerificationKey {
+                    fft_precomputation: None,
+                    ..vk.clone()
+                };
+                let vk_no_msm = VerificationKey {
+                    pedersen_g_msm_precomputation: None,
+                    ..vk.clone()
+                };
+                let vk_none = VerificationKey {
+                    fft_precomputation: None,
+                    pedersen_g_msm_precomputation: None,
+                    ..vk.clone()
+                };
                 let ser_vk_no_fft = serde_cbor::to_vec(&vk_no_fft)?;
                 let ser_vk_no_msm = serde_cbor::to_vec(&vk_no_msm)?;
                 let ser_vk_none = serde_cbor::to_vec(&vk_none)?;
