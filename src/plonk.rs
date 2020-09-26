@@ -283,7 +283,7 @@ impl<C: HaloCurve> Circuit<C> {
         );
 
         // Get a list of all opened values, to append to the transcript.
-        let all_opening_sets: Vec<OpeningSet<C>> =
+        let all_opening_sets: Vec<OpeningSet<C::ScalarField>> =
             vec![o_local.clone(), o_right.clone(), o_below.clone()];
         let all_opened_values_sf: Vec<C::ScalarField> = all_opening_sets
             .iter()
@@ -463,7 +463,7 @@ impl<C: HaloCurve> Circuit<C> {
         old_proofs: &[OldProof<C>],
         pi_quotient_poly: &Polynomial<C::ScalarField>,
         zeta: C::ScalarField,
-    ) -> OpeningSet<C> {
+    ) -> OpeningSet<C::ScalarField> {
         let powers_of_zeta = powers(zeta, self.degree());
 
         OpeningSet {
