@@ -157,7 +157,6 @@ mod test {
     use super::*;
     use crate::{blake_hash_base_field_to_curve, Bls12377, Bls12377Base, Bls12377Scalar, CircuitBuilder, HaloCurve, PartialWitness, Proof, Tweedledee, TweedledeeBase, Tweedledum, TweedledumBase, VerificationKey};
     use anyhow::Result;
-    use serde_cbor;
 
     macro_rules! test_field_serialization {
         ($field:ty, $test_name:ident) => {
