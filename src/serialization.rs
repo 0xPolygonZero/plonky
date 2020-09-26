@@ -73,8 +73,8 @@ impl<C: Curve> FromBytes for AffinePoint<C> {
 
 impl<C: Curve> Serialize for AffinePoint<C> {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: Serializer,
+        where
+            S: Serializer,
     {
         let mut buf = vec![];
         self.write(&mut buf)
@@ -85,8 +85,8 @@ impl<C: Curve> Serialize for AffinePoint<C> {
 
 impl<'de, C: Curve> Deserialize<'de> for AffinePoint<C> {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
+        where
+            D: Deserializer<'de>,
     {
         struct AffinePointVisitor<C: Curve> {
             phantom: std::marker::PhantomData<C>,
@@ -157,6 +157,7 @@ mod test {
     use super::*;
     use crate::{blake_hash_base_field_to_curve, Bls12377, Bls12377Base, Bls12377Scalar, CircuitBuilder, HaloCurve, PartialWitness, Proof, Tweedledee, TweedledeeBase, Tweedledum, TweedledumBase, VerificationKey};
     use anyhow::Result;
+    use serde_cbor;
 
     macro_rules! test_field_serialization {
         ($field:ty, $test_name:ident) => {
@@ -169,8 +170,8 @@ mod test {
                 assert_eq!(x, y);
 
                 // Serde (de)serialization
-                let ser = bincode::serialize(&x)?;
-                let y = bincode::deserialize(&ser)?;
+                let ser = serde_cbor::to_vec(&x)?;
+                let y = serde_cbor::from_slice(&ser)?;
                 assert_eq!(x, y);
 
                 Ok(())
@@ -201,11 +202,11 @@ mod test {
                 assert_eq!(zero, q);
 
                 // Serde (de)serialization
-                let ser = bincode::serialize(&p)?;
-                let q = bincode::deserialize(&ser)?;
+                let ser = serde_cbor::to_vec(&p)?;
+                let q = serde_cbor::from_slice(&ser)?;
                 assert_eq!(p, q);
-                let ser = bincode::serialize(&zero)?;
-                let q = bincode::deserialize(&ser)?;
+                let ser = serde_cbor::to_vec(&zero)?;
+                let q = serde_cbor::from_slice(&ser)?;
                 assert_eq!(zero, q);
 
                 Ok(())
@@ -234,8 +235,7 @@ mod test {
     );
 
     // Generate a proof and verification key for the factorial circuit.
-    fn get_circuit_vk<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
-    ) -> (Proof<C>, VerificationKey<C>) {
+    fn get_circuit_vk<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>() -> (Proof<C>, VerificationKey<C>) {
         let mut builder = CircuitBuilder::<C>::new(128);
         let n = 10;
         let factorial_usize = (1..=n).product();
@@ -261,37 +261,42 @@ mod test {
         (proof, vk)
     }
 
-    #[test]
-    fn test_proof_vk_serialization_tweedledee() {
-        let (proof, vk) = get_circuit_vk::<Tweedledee, Tweedledum>();
-        let ser_proof = bincode::serialize(&proof).unwrap();
-        let ser_vk = bincode::serialize(&vk).unwrap();
 
-        let der_proof = bincode::deserialize(&ser_proof).unwrap();
-        let der_vk: VerificationKey<Tweedledee> = bincode::deserialize(&ser_vk).unwrap();
+    macro_rules! test_proof_vk_serialization {
+        ($curve:ty, $inner_curve:ty, $test_name:ident) => {
+            #[test]
+            fn $test_name() -> Result<()> {
+                let (proof, vk) = get_circuit_vk::<$curve, $inner_curve>();
+                let ser_proof = serde_cbor::to_vec(&proof)?;
+                let ser_vk = serde_cbor::to_vec(&vk)?;
+                let vk_no_fft = { let mut vk_no_fft = vk.clone(); vk_no_fft.clear_fft_precomputation(); vk_no_fft };
+                let vk_no_msm = { let mut vk_no_msm = vk.clone(); vk_no_msm.clear_msm_precomputation(); vk_no_msm };
+                let vk_none = { let mut vk_none = vk.clone(); vk_none.clear_all(); vk_none };
+                let ser_vk_no_fft = serde_cbor::to_vec(&vk_no_fft)?;
+                let ser_vk_no_msm = serde_cbor::to_vec(&vk_no_msm)?;
+                let ser_vk_none = serde_cbor::to_vec(&vk_none)?;
+                println!("Vk size: {} bytes", ser_vk.len());
+                println!("Vk size without fft precomputation: {} bytes", ser_vk_no_fft.len());
+                println!("Vk size without msm precomputation: {} bytes", ser_vk_no_msm.len());
+                println!("Vk size without any precomputation: {} bytes", ser_vk_none.len());
 
-        assert_eq!(proof, der_proof);
-        assert_eq!(vk.c_constants, der_vk.c_constants);
-        assert_eq!(vk.c_s_sigmas, der_vk.c_s_sigmas);
-        assert_eq!(vk.degree, der_vk.degree);
-        assert_eq!(vk.num_public_inputs, der_vk.num_public_inputs);
-        assert_eq!(vk.security_bits, der_vk.security_bits);
+                let der_proof = serde_cbor::from_slice(&ser_proof)?;
+                let der_vk: VerificationKey<$curve> = serde_cbor::from_slice(&ser_vk)?;
+                let der_vk_no_fft: VerificationKey<$curve> = serde_cbor::from_slice(&ser_vk_no_fft)?;
+                let der_vk_no_msm: VerificationKey<$curve> = serde_cbor::from_slice(&ser_vk_no_msm)?;
+                let der_vk_none: VerificationKey<$curve> = serde_cbor::from_slice(&ser_vk_none)?;
+
+                assert_eq!(proof, der_proof);
+                assert_eq!(vk, der_vk);
+                assert_eq!(vk_no_fft, der_vk_no_fft);
+                assert_eq!(vk_no_msm, der_vk_no_msm);
+                assert_eq!(vk_none, der_vk_none);
+
+                Ok(())
+            }
+        };
     }
 
-    #[test]
-    fn test_proof_vk_serialization_tweedledum() {
-        let (proof, vk) = get_circuit_vk::<Tweedledum, Tweedledee>();
-        let ser_proof = bincode::serialize(&proof).unwrap();
-        let ser_vk = bincode::serialize(&vk).unwrap();
-
-        let der_proof = bincode::deserialize(&ser_proof).unwrap();
-        let der_vk: VerificationKey<Tweedledum> = bincode::deserialize(&ser_vk).unwrap();
-
-        assert_eq!(proof, der_proof);
-        assert_eq!(vk.c_constants, der_vk.c_constants);
-        assert_eq!(vk.c_s_sigmas, der_vk.c_s_sigmas);
-        assert_eq!(vk.degree, der_vk.degree);
-        assert_eq!(vk.num_public_inputs, der_vk.num_public_inputs);
-        assert_eq!(vk.security_bits, der_vk.security_bits);
-    }
+    test_proof_vk_serialization!(Tweedledee, Tweedledum, test_proof_vk_serialization_tweedledee);
+    test_proof_vk_serialization!(Tweedledum, Tweedledee, test_proof_vk_serialization_tweedledum);
 }

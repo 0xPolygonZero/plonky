@@ -12,22 +12,35 @@ use crate::{blake_hash_usize_to_curve, fft_precompute, msm_execute_parallel, msm
 
 pub const SECURITY_BITS: usize = 128;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct VerificationKey<C: HaloCurve> {
     pub c_constants: Vec<AffinePoint<C>>,
     pub c_s_sigmas: Vec<AffinePoint<C>>,
     pub degree: usize,
     pub num_public_inputs: usize,
     pub security_bits: usize,
-    #[serde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pedersen_g_msm_precomputation: Option<MsmPrecomputation<C>>,
-    #[serde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fft_precomputation: Option<FftPrecomputation<C::ScalarField>>,
 }
 
 impl<C: HaloCurve> From<Circuit<C>> for VerificationKey<C> {
     fn from(circuit: Circuit<C>) -> Self {
         circuit.to_vk()
+    }
+}
+
+impl<C: HaloCurve> VerificationKey<C> {
+    pub fn clear_msm_precomputation(&mut self) {
+        self.pedersen_g_msm_precomputation = None;
+    }
+    pub fn clear_fft_precomputation(&mut self) {
+        self.fft_precomputation = None;
+    }
+    pub fn clear_all(&mut self) {
+        self.clear_fft_precomputation();
+        self.clear_msm_precomputation();
     }
 }
 
