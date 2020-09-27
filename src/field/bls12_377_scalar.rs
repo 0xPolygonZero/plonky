@@ -7,8 +7,8 @@ use rand::Rng;
 
 use unroll::unroll_for_loops;
 
-use crate::{add_4_4_no_overflow, cmp_4_4, Field, sub_4_4, field_to_biguint, rand_range_4, rand_range_4_from_rng};
-use crate::nonzero_multiplicative_inverse_4;
+use crate::{add_no_overflow, cmp, Field, sub, field_to_biguint, rand_range, rand_range_from_rng};
+use crate::nonzero_multiplicative_inverse;
 use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -86,8 +86,8 @@ impl Bls12377Scalar {
 
         let mut result = [c[4], c[0], c[1], c[2]];
         // Final conditional subtraction.
-        if cmp_4_4(result, Self::ORDER) != Less {
-            result = sub_4_4(result, Self::ORDER);
+        if cmp(result, Self::ORDER) != Less {
+            result = sub(result, Self::ORDER);
         }
         result
     }
@@ -98,11 +98,11 @@ impl Add<Bls12377Scalar> for Bls12377Scalar {
 
     fn add(self, rhs: Self) -> Self {
         // First we do a widening addition, then we reduce if necessary.
-        let sum = add_4_4_no_overflow(self.limbs, rhs.limbs);
-        let limbs = if cmp_4_4(sum, Self::ORDER) == Less {
+        let sum = add_no_overflow(self.limbs, rhs.limbs);
+        let limbs = if cmp(sum, Self::ORDER) == Less {
             sum
         } else {
-            sub_4_4(sum, Self::ORDER)
+            sub(sum, Self::ORDER)
         };
         Self { limbs }
     }
@@ -112,12 +112,12 @@ impl Sub<Bls12377Scalar> for Bls12377Scalar {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self {
-        let limbs = if cmp_4_4(self.limbs, rhs.limbs) == Less {
+        let limbs = if cmp(self.limbs, rhs.limbs) == Less {
             // Underflow occurs, so we compute the difference as `self + (-rhs)`.
-            add_4_4_no_overflow(self.limbs, (-rhs).limbs)
+            add_no_overflow(self.limbs, (-rhs).limbs)
         } else {
             // No underflow, so it's faster to subtract directly.
-            sub_4_4(self.limbs, rhs.limbs)
+            sub(self.limbs, rhs.limbs)
         };
         Self { limbs }
     }
@@ -146,7 +146,7 @@ impl Neg for Bls12377Scalar {
         if self == Self::ZERO {
             Self::ZERO
         } else {
-            Self { limbs: sub_4_4(Self::ORDER, self.limbs) }
+            Self { limbs: sub(Self::ORDER, self.limbs) }
         }
     }
 }
@@ -186,24 +186,24 @@ impl Field for Bls12377Scalar {
     }
 
     fn is_valid_canonical_u64(v: &[u64]) -> bool {
-        v.len() == 4 && cmp_4_4(v[..].try_into().unwrap(), Self::ORDER) == Less
+        v.len() == 4 && cmp(v[..].try_into().unwrap(), Self::ORDER) == Less
     }
 
     fn multiplicative_inverse_assuming_nonzero(&self) -> Self {
         // Let x R = self. We compute M((x R)^-1, R^3) = x^-1 R^-1 R^3 R^-1 = x^-1 R.
-        let self_r_inv = nonzero_multiplicative_inverse_4(self.limbs, Self::ORDER);
+        let self_r_inv = nonzero_multiplicative_inverse(self.limbs, Self::ORDER);
         Self { limbs: Self::montgomery_multiply(self_r_inv, Self::R3) }
     }
 
     fn rand() -> Self {
         Self {
-            limbs: rand_range_4(Self::ORDER),
+            limbs: rand_range(Self::ORDER),
         }
     }
 
     fn rand_from_rng<R: Rng>(rng: &mut R) -> Self {
         Self {
-            limbs: rand_range_4_from_rng(Self::ORDER, rng),
+            limbs: rand_range_from_rng(Self::ORDER, rng),
         }
     }
 }

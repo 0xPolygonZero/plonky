@@ -7,6 +7,12 @@
 // This is annoying and often wrong.
 #![allow(clippy::needless_range_loop)]
 
+// Required for generic low-level functions on small arrays.
+#![feature(const_generics)]
+// Unfortunatly it makes rustc complain, so we include
+#![allow(incomplete_features)]
+
+
 pub use bigint::*;
 pub use circuit_bigint::*;
 pub use circuit_builder::*;

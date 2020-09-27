@@ -7,8 +7,8 @@ use rand::Rng;
 
 use unroll::unroll_for_loops;
 
-use crate::{add_6_6_no_overflow, cmp_6_6, Field, mul2_6, rand_range_6, rand_range_6_from_rng, sub_6_6, field_to_biguint};
-use crate::nonzero_multiplicative_inverse_6;
+use crate::{add_no_overflow, cmp, Field, mul2, rand_range, rand_range_from_rng, sub, field_to_biguint};
+use crate::nonzero_multiplicative_inverse;
 use std::cmp::Ordering;
 use std::fmt::{Formatter, Display};
 use std::fmt;
@@ -91,8 +91,8 @@ impl Bls12377Base {
 
         let mut result = [c[6], c[0], c[1], c[2], c[3], c[4]];
         // Final conditional subtraction.
-        if cmp_6_6(result, Self::ORDER) != Less {
-            result = sub_6_6(result, Self::ORDER);
+        if cmp(result, Self::ORDER) != Less {
+            result = sub(result, Self::ORDER);
         }
         result
     }
@@ -103,11 +103,11 @@ impl Add<Bls12377Base> for Bls12377Base {
 
     fn add(self, rhs: Self) -> Self {
         // First we do a widening addition, then we reduce if necessary.
-        let sum = add_6_6_no_overflow(self.limbs, rhs.limbs);
-        let limbs = if cmp_6_6(sum, Self::ORDER) == Less {
+        let sum = add_no_overflow(self.limbs, rhs.limbs);
+        let limbs = if cmp(sum, Self::ORDER) == Less {
             sum
         } else {
-            sub_6_6(sum, Self::ORDER)
+            sub(sum, Self::ORDER)
         };
         Self { limbs }
     }
@@ -117,12 +117,12 @@ impl Sub<Bls12377Base> for Bls12377Base {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        let limbs = if cmp_6_6(self.limbs, rhs.limbs) == Less {
+        let limbs = if cmp(self.limbs, rhs.limbs) == Less {
             // Underflow occurs, so we compute the difference as `self + (-rhs)`.
-            add_6_6_no_overflow(self.limbs, (-rhs).limbs)
+            add_no_overflow(self.limbs, (-rhs).limbs)
         } else {
             // No underflow, so it's faster to subtract directly.
-            sub_6_6(self.limbs, rhs.limbs)
+            sub(self.limbs, rhs.limbs)
         };
         Self { limbs }
     }
@@ -161,7 +161,7 @@ impl Neg for Bls12377Base {
         if self == Self::ZERO {
             Self::ZERO
         } else {
-            Self { limbs: sub_6_6(Bls12377Base::ORDER, self.limbs) }
+            Self { limbs: sub(Bls12377Base::ORDER, self.limbs) }
         }
     }
 }
@@ -217,21 +217,21 @@ impl Field for Bls12377Base {
     }
 
     fn is_valid_canonical_u64(v: &[u64]) -> bool {
-        v.len() == 6 && cmp_6_6(v[..].try_into().unwrap(), Self::ORDER) == Less
+        v.len() == 6 && cmp(v[..].try_into().unwrap(), Self::ORDER) == Less
     }
 
     fn multiplicative_inverse_assuming_nonzero(&self) -> Self {
         // Let x R = self. We compute M((x R)^-1, R^3) = x^-1 R^-1 R^3 R^-1 = x^-1 R.
-        let self_r_inv = nonzero_multiplicative_inverse_6(self.limbs, Self::ORDER);
+        let self_r_inv = nonzero_multiplicative_inverse(self.limbs, Self::ORDER);
         Self { limbs: Self::montgomery_multiply(self_r_inv, Self::R3) }
     }
 
     fn double(&self) -> Self {
-        let result = mul2_6(self.limbs);
-        let limbs = if cmp_6_6(result, Self::ORDER) == Less {
+        let result = mul2(self.limbs);
+        let limbs = if cmp(result, Self::ORDER) == Less {
             result
         } else {
-            sub_6_6(result, Self::ORDER)
+            sub(result, Self::ORDER)
         };
         Self { limbs }
     }
@@ -240,24 +240,24 @@ impl Field for Bls12377Base {
         // First compute (unreduced) self * 3 via a double and add, then reduce. We might need to do
         // two comparisons, but at least we'll always do a single subtraction.
 
-        let mut sum = mul2_6(self.limbs);
-        sum = add_6_6_no_overflow(sum, self.limbs);
-        let limbs = if cmp_6_6(sum, Self::ORDER) == Less {
+        let mut sum = mul2(self.limbs);
+        sum = add_no_overflow(sum, self.limbs);
+        let limbs = if cmp(sum, Self::ORDER) == Less {
             sum
-        } else if cmp_6_6(sum, Self::ORDER_X2) == Less {
-            sub_6_6(sum, Self::ORDER)
+        } else if cmp(sum, Self::ORDER_X2) == Less {
+            sub(sum, Self::ORDER)
         } else {
-            sub_6_6(sum, Self::ORDER_X2)
+            sub(sum, Self::ORDER_X2)
         };
         Self { limbs }
     }
 
     fn rand() -> Self {
-        Self { limbs: rand_range_6(Self::ORDER) }
+        Self { limbs: rand_range(Self::ORDER) }
     }
 
     fn rand_from_rng<R: Rng>(rng: &mut R) -> Self {
-        Self { limbs: rand_range_6_from_rng(Self::ORDER, rng) }
+        Self { limbs: rand_range_from_rng(Self::ORDER, rng) }
     }
 }
 
