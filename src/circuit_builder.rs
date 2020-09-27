@@ -1,3 +1,4 @@
+#![allow(clippy::type_complexity)]
 use std::collections::{BTreeMap, HashMap};
 
 use crate::gates::*;
@@ -109,6 +110,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         self.constant_wire(C::ScalarField::NEG_ONE)
     }
 
+    #[allow(clippy::map_entry)]
     pub fn constant_wire(&mut self, c: C::ScalarField) -> Target<C::ScalarField> {
         if self.constant_wires.contains_key(&c) {
             self.constant_wires[&c]
@@ -152,7 +154,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                _constants: &Vec<Vec<F>>,
+                _constants: &[Vec<F>],
                 _witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
                 let mut result = PartialWitness::new();
@@ -239,7 +241,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                _constants: &Vec<Vec<F>>,
+                _constants: &[Vec<F>],
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
                 let x = witness.get_target(self.x);
@@ -505,7 +507,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                _constants: &Vec<Vec<F>>,
+                _constants: &[Vec<F>],
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
                 let x_value = witness.get_target(self.x);
@@ -631,7 +633,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                _constants: &Vec<Vec<F>>,
+                _constants: &[Vec<F>],
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
                 let x_value = witness.get_target(self.x);
@@ -802,7 +804,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                _constants: &Vec<Vec<F>>,
+                _constants: &[Vec<F>],
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
                 let x = witness.get_target(self.x);
@@ -992,6 +994,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
     /// Adds a gate to the circuit, without doing any routing.
     pub fn add_gate<G: Gate<C>>(&mut self, gate: G, gate_constants: Vec<C::ScalarField>) {
+        trace!("{} {}", self.num_gates(), G::NAME);
         debug_assert!(G::PREFIX.len() + gate_constants.len() <= NUM_CONSTANTS);
 
         // Merge the gate type's prefix bits with the given gate config constants.
@@ -1058,7 +1061,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                _constants: &Vec<Vec<F>>,
+                _constants: &[Vec<F>],
                 _witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
                 let mut result = PartialWitness::new();
@@ -1076,19 +1079,18 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
 
         // Print gate counts.
-        println!("Gate counts:");
+        info!("Gate counts:");
         for (gate, count) in &self.gate_counts {
-            println!("{}: {}", gate, count);
+            info!("{}: {}", gate, count);
         }
-        println!();
 
         // Pad to a power of two.
-        println!("Total gates before padding: {}", self.num_gates());
+        info!("Total gates before padding: {}", self.num_gates());
         while !self.num_gates().is_power_of_two() {
             // Add an empty gate.
             self.add_gate_no_constants(BufferGate::new(self.num_gates()));
         }
-        println!("Total gates after padding: {}", self.num_gates());
+        info!("Total gates after padding: {}", self.num_gates());
 
         let degree = self.num_gates();
         let degree_pow = log2_strict(degree);

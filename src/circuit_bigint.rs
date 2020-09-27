@@ -47,7 +47,7 @@ impl<F: Field> BigIntTarget<F> {
 
     pub fn get_bounded_limb(&self, index: usize) -> BoundedTarget<F> {
         // We shift self.max to get the max value of this limb AND any more significant limbs.
-        let max_high_limbs = &self.max >> LIMB_BITS * index;
+        let max_high_limbs = &self.max >> (LIMB_BITS * index);
         let max_any_limb = (BigUint::one() << LIMB_BITS) - BigUint::one();
         let max_this_limb = max_high_limbs.min(max_any_limb);
         BoundedTarget {
@@ -92,10 +92,10 @@ impl<F: Field> From<BoundedTarget<F>> for BigIntTarget<F> {
 }
 
 pub(crate) fn biguint_to_limbs<F: Field>(biguint: &BigUint) -> Vec<F> {
-    let num_limbs = ceil_div_usize(biguint.bits(), LIMB_BITS);
+    let num_limbs = ceil_div_usize(biguint.bits() as usize, LIMB_BITS);
     let base = BigUint::one() << LIMB_BITS;
     (0..num_limbs)
-        .map(|i| biguint_to_field((biguint >> i * LIMB_BITS) % &base))
+        .map(|i| biguint_to_field((biguint >> (i * LIMB_BITS)) % &base))
         .collect()
 }
 
@@ -105,7 +105,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         max: &BigUint,
         validate: bool,
     ) -> BigIntTarget<C::ScalarField> {
-        let num_limbs = ceil_div_usize(max.bits(), LIMB_BITS);
+        let num_limbs = ceil_div_usize(max.bits() as usize, LIMB_BITS);
         let limbs = self.add_virtual_targets(num_limbs);
 
         if validate {
@@ -235,7 +235,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
                     .limbs
                     .get(0)
                     .cloned()
-                    .unwrap_or(self.zero_wire()),
+                    .unwrap_or_else(|| self.zero_wire()),
             );
 
             // The second limb (or zero if there isn't one) becomes our carry.
@@ -301,7 +301,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                _constants: &Vec<Vec<F>>,
+                _constants: &[Vec<F>],
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
                 let value = witness.get_target(self.input.target);
@@ -426,7 +426,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                _constants: &Vec<Vec<F>>,
+                _constants: &[Vec<F>],
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
                 let x = witness.get_bigint_target(&self.x);

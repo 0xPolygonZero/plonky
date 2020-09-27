@@ -1,3 +1,4 @@
+#![allow(clippy::type_complexity)]
 use crate::plonk_util::halo_n;
 use crate::{blake_hash_base_field_to_curve, AffinePoint, Base4SumGate, BufferGate, CircuitBuilder, Curve, CurveAddGate, CurveDblGate, CurveEndoGate, Field, HaloCurve, PartialWitness, Target, Wire, WitnessGenerator};
 use std::marker::PhantomData;
@@ -237,7 +238,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                _constants: &Vec<Vec<InnerC::BaseField>>,
+                _constants: &[Vec<InnerC::BaseField>],
                 witness: &PartialWitness<InnerC::BaseField>,
             ) -> PartialWitness<InnerC::BaseField> {
                 let scalar = witness

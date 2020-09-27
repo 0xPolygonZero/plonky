@@ -220,6 +220,7 @@ pub fn recursive_verification_circuit<
 }
 
 /// Verify all IPAs in the given proof, and return IPA challenges.
+#[allow(clippy::too_many_arguments)]
 fn verify_all_ipas<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     builder: &mut CircuitBuilder<C>,
     proof: &ProofTarget<C, InnerC>,

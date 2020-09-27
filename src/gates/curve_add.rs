@@ -172,7 +172,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> WitnessGenerator<C
 
     fn generate(
         &self,
-        _constants: &Vec<Vec<C::ScalarField>>,
+        _constants: &[Vec<C::ScalarField>],
         witness: &PartialWitness<InnerC::BaseField>,
     ) -> PartialWitness<InnerC::BaseField> {
         // Notation:
