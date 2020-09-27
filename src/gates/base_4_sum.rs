@@ -103,7 +103,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for Base4SumGate<C> {
 
     fn generate(
         &self,
-        _constants: &Vec<Vec<C::ScalarField>>,
+        _constants: &[Vec<C::ScalarField>],
         _witness: &PartialWitness<C::ScalarField>,
     ) -> PartialWitness<C::ScalarField> {
         // For base 4 decompositions, we don't do any witness generation on a per-gate level.

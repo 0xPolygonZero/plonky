@@ -50,7 +50,6 @@ impl Bls12377Scalar {
         Self::montgomery_multiply(self.limbs, [1, 0, 0, 0])
     }
 
-
     #[unroll_for_loops]
     fn montgomery_multiply(a: [u64; 4], b: [u64; 4]) -> [u64; 4] {
         // Interleaved Montgomery multiplication, as described in Algorithm 2 of
@@ -186,7 +185,7 @@ impl Field for Bls12377Scalar {
         Self::from_canonical([n, 0, 0, 0])
     }
 
-    fn is_valid_canonical_u64(v: &Vec<u64>) -> bool {
+    fn is_valid_canonical_u64(v: &[u64]) -> bool {
         v.len() == 4 && cmp(v[..].try_into().unwrap(), Self::ORDER) == Less
     }
 
@@ -207,8 +206,6 @@ impl Field for Bls12377Scalar {
             limbs: rand_range_from_rng(Self::ORDER, rng),
         }
     }
-
-
 }
 
 impl Ord for Bls12377Scalar {
@@ -228,7 +225,6 @@ impl Display for Bls12377Scalar {
         field_to_biguint(*self).fmt(f)
     }
 }
-
 
 #[cfg(test)]
 mod tests {

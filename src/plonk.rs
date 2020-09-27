@@ -117,7 +117,8 @@ impl<C: HaloCurve> Circuit<C> {
         };
 
         // Generate a random beta and gamma from the transcript.
-        challenger.observe_affine_points(&PolynomialCommitment::to_affine_vec(&c_wires));
+        challenger
+            .observe_affine_points(&PolynomialCommitment::commitments_to_affine_vec(&c_wires));
         let (beta_bf, gamma_bf) = challenger.get_2_challenges();
         let beta_sf = beta_bf.try_convert::<C::ScalarField>()?;
         let gamma_sf = gamma_bf.try_convert::<C::ScalarField>()?;
@@ -237,7 +238,8 @@ impl<C: HaloCurve> Circuit<C> {
             .collect::<Vec<_>>();
 
         // Observe the `t` polynomial commitment.
-        challenger.observe_affine_points(&PolynomialCommitment::to_affine_vec(&c_plonk_t));
+        challenger
+            .observe_affine_points(&PolynomialCommitment::commitments_to_affine_vec(&c_plonk_t));
         // If the proof doesn't output public inputs, observe the `pis_quotient` polynomial commitment and the public inputs.
         challenger.observe_affine_point(c_pis_quotient.to_affine());
         // Observe the public inputs
@@ -568,7 +570,7 @@ impl<C: HaloCurve> Circuit<C> {
         //     self.generators.len()
         // );
 
-        println!("Witness generation took {}s", start.elapsed().as_secs_f32());
+        info!("Witness generation took {}s", start.elapsed().as_secs_f32());
         witness
     }
 

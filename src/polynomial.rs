@@ -1,11 +1,28 @@
+#![allow(clippy::many_single_char_names)]
 use crate::{fft_precompute, fft_with_precomputation, ifft_with_precomputation_power_of_2, util::log2_ceil, AffinePoint, Curve, FftPrecomputation, Field, MsmPrecomputation, PolynomialCommitment};
 use std::cmp::Ordering;
 use std::ops::{Index, IndexMut, RangeBounds};
 use std::slice::{Iter, IterMut, SliceIndex};
 
 /// Polynomial struct holding a polynomial in coefficient form.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Polynomial<F: Field>(Vec<F>);
+
+impl<F: Field> PartialEq for Polynomial<F> {
+    fn eq(&self, other: &Self) -> bool {
+        let max_terms = self.0.len().max(other.0.len());
+        for i in 0..max_terms {
+            let self_i = self.0.get(i).cloned().unwrap_or(F::ZERO);
+            let other_i = other.0.get(i).cloned().unwrap_or(F::ZERO);
+            if self_i != other_i {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+impl<F: Field> Eq for Polynomial<F> {}
 
 impl<F: Field> From<Vec<F>> for Polynomial<F> {
     /// Takes a vector of coefficients and returns the corresponding polynomial.
@@ -311,6 +328,9 @@ impl<F: Field> Polynomial<F> {
 
     // Divides a polynomial `a` by `Z_H = X^n - 1`. Assumes `Z_H | a`, otherwise result is meaningless.
     pub fn divide_by_z_h(&self, n: usize) -> Self {
+        if self.is_zero() {
+            return self.clone();
+        }
         let mut a_trim = self.clone();
         a_trim.trim();
         let g = F::MULTIPLICATIVE_SUBGROUP_GENERATOR;
@@ -476,6 +496,12 @@ mod test {
         assert_eq!(a, a_test);
     }
 
+    #[test]
+    fn divide_zero_poly_by_z_h() {
+        let zero_poly = Polynomial::<TweedledeeBase>::empty();
+        zero_poly.divide_by_z_h(16);
+    }
+
     // Test to see which polynomial division method is faster for divisions of the type
     // `(X^n - 1)/(X - a)
     #[test]
@@ -500,5 +526,19 @@ mod test {
         let now = Instant::now();
         xn_minus_one.polynomial_long_division(&denom);
         println!("Division time: {:?}", now.elapsed());
+    }
+
+    #[test]
+    fn eq() {
+        type F = TweedledeeBase;
+        assert_eq!(Polynomial::<F>(vec![]), Polynomial(vec![]));
+        assert_eq!(Polynomial::<F>(vec![F::ZERO]), Polynomial(vec![F::ZERO]));
+        assert_eq!(Polynomial::<F>(vec![]), Polynomial(vec![F::ZERO]));
+        assert_eq!(Polynomial::<F>(vec![F::ZERO]), Polynomial(vec![]));
+        assert_eq!(Polynomial::<F>(vec![F::ZERO]), Polynomial(vec![F::ZERO, F::ZERO]));
+        assert_eq!(Polynomial::<F>(vec![F::ONE]), Polynomial(vec![F::ONE, F::ZERO]));
+        assert_ne!(Polynomial::<F>(vec![]), Polynomial(vec![F::ONE]));
+        assert_ne!(Polynomial::<F>(vec![F::ZERO]), Polynomial(vec![F::ZERO, F::ONE]));
+        assert_ne!(Polynomial::<F>(vec![F::ZERO]), Polynomial(vec![F::ONE, F::ZERO]));
     }
 }

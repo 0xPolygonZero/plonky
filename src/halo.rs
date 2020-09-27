@@ -12,6 +12,7 @@ pub struct OpeningProof<C: HaloCurve> {
     pub schnorr_proof: SchnorrProof<C>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn batch_opening_proof<C: HaloCurve>(
     polynomials_coeffs: &[&[C::ScalarField]],
     commitments: &[PolynomialCommitment<C>],
@@ -181,6 +182,7 @@ fn schnorr_protocol<C: HaloCurve>(
 }
 
 /// Verify the final IPA.
+#[allow(clippy::too_many_arguments)]
 pub fn verify_ipa<C: HaloCurve>(
     halo_l: &[AffinePoint<C>],
     halo_r: &[AffinePoint<C>],

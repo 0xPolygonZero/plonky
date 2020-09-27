@@ -194,7 +194,7 @@ impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> WitnessGenerat
 
     fn generate(
         &self,
-        _constants: &Vec<Vec<C::ScalarField>>,
+        _constants: &[Vec<C::ScalarField>],
         witness: &PartialWitness<InnerC::BaseField>,
     ) -> PartialWitness<InnerC::BaseField> {
         let group_acc_old_x_target = Wire {

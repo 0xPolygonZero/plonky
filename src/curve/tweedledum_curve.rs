@@ -1,6 +1,7 @@
 use crate::{AffinePoint, Curve, Field, HaloCurve, TweedledeeBase, TweedledumBase};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Default, Serialize, Deserialize)]
 pub struct Tweedledum;
 
 impl Curve for Tweedledum {

@@ -89,7 +89,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for ArithmeticGate<C> {
 
     fn generate(
         &self,
-        constants: &Vec<Vec<C::ScalarField>>,
+        constants: &[Vec<C::ScalarField>],
         witness: &PartialWitness<C::ScalarField>,
     ) -> PartialWitness<C::ScalarField> {
         let multiplicand_0_target = Wire {

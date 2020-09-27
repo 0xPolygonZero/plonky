@@ -250,7 +250,7 @@ impl Field for TweedledeeBase {
         Self::from_canonical([n, 0, 0, 0])
     }
 
-    fn is_valid_canonical_u64(v: &Vec<u64>) -> bool {
+    fn is_valid_canonical_u64(v: &[u64]) -> bool {
         v.len() == 4 && cmp(v[..].try_into().unwrap(), Self::ORDER) == Less
     }
 
@@ -302,8 +302,8 @@ impl Debug for TweedledeeBase {
 #[cfg(test)]
 mod tests {
     use crate::test_arithmetic;
-    use crate::TweedledeeBase;
     use crate::Field;
+    use crate::TweedledeeBase;
 
     #[test]
     fn primitive_root_order() {

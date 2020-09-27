@@ -1,10 +1,11 @@
 use anyhow::{anyhow, Result};
+use serde::{Deserialize, Serialize};
 
 use crate::plonk_challenger::Challenger;
 use crate::plonk_util::{halo_g, halo_n, halo_s};
 use crate::{AffinePoint, AffinePointTarget, Curve, Field, HaloCurve, PartialWitness, Target, SECURITY_BITS};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub struct SchnorrProof<C: HaloCurve> {
     pub r: AffinePoint<C>,
     pub z1: C::ScalarField,
@@ -17,7 +18,7 @@ pub struct SchnorrProofTarget<C: Curve> {
     pub z2: Target<C::ScalarField>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Proof<C: HaloCurve> {
     /// A commitment to each wire polynomial.
     pub c_wires: Vec<AffinePoint<C>>,
@@ -98,9 +99,9 @@ impl<C: HaloCurve> Proof<C> {
             let r_sf = r_bf.try_convert::<C::ScalarField>()?;
             let r_bits = &r_sf.to_canonical_bool_vec()[..SECURITY_BITS];
             let u_j_squared = halo_n::<C>(r_bits);
-            let u_j = u_j_squared
-                .square_root()
-                .expect("Prover should have ensured that n(r) is square");
+            let u_j = u_j_squared.square_root().ok_or_else(|| {
+                anyhow!("Invalid transcript. Prover should have ensured that n(r) is square")
+            })?;
             halo_us.push(u_j);
         }
 
@@ -273,7 +274,11 @@ impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> ProofTarget<C,
 }
 
 /// The opening of each Plonk polynomial at a particular point.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+// Since `Field` is already a subtrait of `Serialize` and `DeserializeOwned`, we don't need serde to
+// add its own bounds `where F: Serialize`. The redundant bounds would normally be harmless, but
+// they cause an error due to a compiler bug: https://github.com/rust-lang/rust/issues/41617
+#[serde(bound = "")]
 pub struct OpeningSet<F: Field> {
     /// The purported opening of each constant polynomial.
     pub o_constants: Vec<F>,
