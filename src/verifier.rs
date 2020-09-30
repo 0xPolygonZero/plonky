@@ -18,6 +18,7 @@ pub struct VerificationKey<C: HaloCurve> {
     pub c_s_sigmas: Vec<AffinePoint<C>>,
     pub degree: usize,
     pub num_public_inputs: usize,
+    pub num_gates_without_pis: usize,
     pub security_bits: usize,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pedersen_g_msm_precomputation: Option<MsmPrecomputation<C>>,
@@ -128,7 +129,7 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
     // Compute the denominator `prod_{pi \in PI} (X - pi)`.
     let pis_quotient_denominator = (0..num_public_input_gates)
         .fold(C::ScalarField::ONE, |acc, i| {
-            acc * (challs.zeta - subgroup_generator_n.exp_usize(2 * i))
+            acc * (challs.zeta - subgroup_generator_n.exp_usize(vk.num_gates_without_pis + 2 * i))
         });
     let pis_quotient_numerator =
         C::ScalarField::inner_product(&proof.o_local.o_wires, &powers(challs.alpha, NUM_WIRES))
@@ -136,6 +137,7 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
                 public_inputs,
                 challs.alpha,
                 vk.degree,
+                vk.num_gates_without_pis,
                 vk.fft_precomputation.as_ref(),
             )
             .eval(challs.zeta);
@@ -376,16 +378,17 @@ fn public_inputs_to_polynomial<F: Field>(
     public_inputs: &[F],
     alpha: F,
     degree: usize,
+    num_gates_without_pis: usize,
     fft_precomputation: Option<&FftPrecomputation<F>>,
 ) -> Polynomial<F> {
     let pis_wires_vec = public_inputs_to_wires_vec(public_inputs);
-    let mut scaled_wires_vec = (0..pis_wires_vec[0].len())
+    let mut scaled_wires_vec = vec![F::ZERO; num_gates_without_pis];
+    scaled_wires_vec.extend((0..pis_wires_vec[0].len())
         .map(|i| {
             (0..pis_wires_vec.len())
                 .map(|j| pis_wires_vec[j][i] * alpha.exp_usize(j))
                 .fold(F::ZERO, |acc, x| acc + x)
-        })
-        .collect::<Vec<_>>();
+        }));
     scaled_wires_vec.resize(degree, F::ZERO);
 
     fft_precomputation.map_or_else(

@@ -1,4 +1,5 @@
 #![allow(clippy::type_complexity)]
+
 use std::collections::{BTreeMap, HashMap};
 
 use crate::gates::*;
@@ -33,32 +34,14 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
     }
 
-    pub fn stage_public_input(&mut self) -> PublicInput<C::ScalarField> {
+    pub fn add_public_input(&mut self) -> Target<C::ScalarField> {
         let index = self.public_input_index;
         self.public_input_index += 1;
-        PublicInput {
-            index,
-            _field: PhantomData,
-        }
+        Target::PublicInput(PublicInput::new(index))
     }
 
-    pub fn stage_public_inputs(&mut self, n: usize) -> Vec<PublicInput<C::ScalarField>> {
-        (0..n).map(|_i| self.stage_public_input()).collect()
-    }
-
-    /// Add `PublicInputGate`s which enable public inputs to be routed. Should be called after all
-    /// `stage_public_input[s]` calls, but before any gates are added.
-    pub fn route_public_inputs(&mut self) {
-        debug_assert_eq!(
-            self.num_gates(),
-            0,
-            "Must be called before any gates are added"
-        );
-        let num_pi_gates = ceil_div_usize(self.public_input_index, NUM_WIRES);
-        for i in 0..num_pi_gates {
-            self.add_gate_no_constants(PublicInputGate::new(i * 2));
-            self.add_gate_no_constants(BufferGate::new(i * 2 + 1));
-        }
+    pub fn add_public_inputs(&mut self, n: usize) -> Vec<Target<C::ScalarField>> {
+        (0..n).map(|_i| self.add_public_input()).collect()
     }
 
     pub fn add_virtual_target(&mut self) -> Target<C::ScalarField> {
@@ -71,7 +54,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         (0..n).map(|_i| self.add_virtual_target()).collect()
     }
 
-    pub fn add_virtual_point_target<InnerC: Curve<BaseField = C::ScalarField>>(
+    pub fn add_virtual_point_target<InnerC: Curve<BaseField=C::ScalarField>>(
         &mut self,
     ) -> AffinePointTarget<InnerC> {
         let x = self.add_virtual_target();
@@ -79,7 +62,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         AffinePointTarget { x, y }
     }
 
-    pub fn add_virtual_point_targets<InnerC: Curve<BaseField = C::ScalarField>>(
+    pub fn add_virtual_point_targets<InnerC: Curve<BaseField=C::ScalarField>>(
         &mut self,
         n: usize,
     ) -> Vec<AffinePointTarget<InnerC>> {
@@ -1071,12 +1054,39 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
     }
 
+    fn append_public_input_gates(&mut self) {
+        let num_gates = self.num_gates();
+        let num_pi_gates = ceil_div_usize(self.public_input_index, NUM_WIRES);
+        for i in 0..num_pi_gates {
+            self.add_gate_no_constants(PublicInputGate::new(num_gates + i * 2));
+            self.add_gate_no_constants(BufferGate::new(num_gates + i * 2 + 1));
+        }
+    }
+
+    // Replace all `PublicInput`-type targets by their corresponding `Wire`-type targets
+    // in the copy constraints pairs.
+    pub fn route_public_inputs(&mut self, offset: usize) {
+        self.copy_constraints.iter_mut().for_each(|(x, y)| {
+            if let Target::PublicInput(pi) = x {
+                *x = pi.routable_target(offset);
+            }
+            if let Target::PublicInput(pi) = y {
+                *y = pi.routable_target(offset);
+            }
+        });
+    }
+
     pub fn build(mut self) -> Circuit<C> {
         // Since we will open each polynomial at three points outside of H, we need three random
         // values to ensure nothing is learned from the out-of-H openings.
         for _i in 0..3 {
             self.add_blinding_gate();
         }
+
+        // Append the public inputs at the end of the circuit and update the copy constraints.
+        let num_gates_without_pis = self.num_gates();
+        self.append_public_input_gates();
+        self.route_public_inputs(num_gates_without_pis);
 
         // Print gate counts.
         info!("Gate counts:");
@@ -1153,6 +1163,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         Circuit {
             security_bits,
             num_public_inputs,
+            num_gates_without_pis,
             gate_constants,
             routing_target_partitions,
             generators,
@@ -1191,7 +1202,6 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         for &(a, b) in &self.copy_constraints {
             partitions.merge(a, b);
         }
-
         partitions
     }
 }

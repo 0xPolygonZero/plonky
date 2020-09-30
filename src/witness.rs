@@ -3,6 +3,7 @@ use crate::{biguint_to_field, biguint_to_limbs, field_to_biguint, AffinePoint, A
 use num::{BigUint, Zero};
 use std::{cmp::Ordering, collections::HashMap};
 
+#[derive(Debug)]
 pub struct PartialWitness<F: Field> {
     wire_values: HashMap<Target<F>, F>,
 }
@@ -167,14 +168,28 @@ impl<F: Field> PartialWitness<F> {
         self.set_target(Target::Wire(wire), value);
     }
 
-    pub fn set_public_input(&mut self, pi: PublicInput<F>, value: F) {
-        self.set_wire(pi.original_wire(), value);
-        self.set_target(pi.routable_target(), value);
-    }
-
     pub fn extend(&mut self, other: PartialWitness<F>) {
         for (target, value) in other.wire_values {
             self.set_target(target, value);
+        }
+    }
+
+    #[allow(clippy::needless_collect)]
+    // Replace all `PublicInput`-type targets by their corresponding `Wire`-type targets
+    // in the partial witness.
+    pub fn replace_public_inputs(&mut self, offset: usize) {
+        let new_pis = self.wire_values.iter().filter_map(|(t, v)| {
+            if let Target::PublicInput(pi) = t {
+                Some((Target::Wire(pi.original_wire(offset)), *v))
+            } else {
+                None
+            }
+        }).collect::<Vec<_>>();
+
+        self.wire_values.retain(|t, _| !matches!(t, Target::PublicInput(_)));
+
+        for (t, v) in new_pis.into_iter() {
+            self.wire_values.insert(t, v);
         }
     }
 }

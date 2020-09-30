@@ -136,17 +136,15 @@ fn test_proof_quadratic() -> Result<()> {
 fn test_proof_quadratic_public_input() -> Result<()> {
     type F = <Tweedledee as Curve>::ScalarField;
     let mut builder = CircuitBuilder::<Tweedledee>::new(128);
-    let seven_pi = builder.stage_public_input();
-    builder.route_public_inputs();
+    let seven_pi = builder.add_public_input();
     let one = builder.one_wire();
     let t = builder.add_virtual_target();
     let t_sq = builder.square(t);
     let quad = builder.add_many(&[one, t, t_sq]);
-    let seven = seven_pi.routable_target();
-    let res = builder.sub(quad, seven);
+    let res = builder.sub(quad, seven_pi);
     builder.assert_zero(res);
     let mut partial_witness = PartialWitness::new();
-    partial_witness.set_target(seven, F::from_canonical_usize(7));
+    partial_witness.set_target(seven_pi, F::from_canonical_usize(7));
     partial_witness.set_target(t, F::TWO);
     let circuit = builder.build();
     let witness = circuit.generate_witness(partial_witness);
@@ -164,18 +162,17 @@ fn test_proof_sum_public_input() -> Result<()> {
     type F = <Tweedledee as Curve>::ScalarField;
     let mut builder = CircuitBuilder::<Tweedledee>::new(128);
     let n = 100;
-    let factorial_usize = (1..=n).sum();
-    let factors_pis = builder.stage_public_inputs(n);
-    builder.route_public_inputs();
-    let res = builder.constant_wire(F::from_canonical_usize(factorial_usize));
+    let triangular_usize = (1..=n).sum();
+    let triangular_pis = builder.add_public_inputs(n);
+    let res = builder.constant_wire(F::from_canonical_usize(triangular_usize));
     let mut factorial = builder.zero_wire();
-    factors_pis.iter().for_each(|pi| {
-        factorial = builder.add(factorial, pi.routable_target());
+    triangular_pis.iter().for_each(|&pi| {
+        factorial = builder.add(factorial, pi);
     });
     builder.copy(factorial, res);
     let mut partial_witness = PartialWitness::new();
     (0..n).for_each(|i| {
-        partial_witness.set_public_input(factors_pis[i], F::from_canonical_usize(i + 1));
+        partial_witness.set_target(triangular_pis[i], F::from_canonical_usize(i + 1));
     });
     let circuit = builder.build();
     let witness = circuit.generate_witness(partial_witness);
@@ -203,17 +200,16 @@ fn test_proof_factorial_public_input() -> Result<()> {
     let mut builder = CircuitBuilder::<Tweedledee>::new(128);
     let n = 20;
     let factorial_usize = (1..=n).product();
-    let factors_pis = builder.stage_public_inputs(n);
-    builder.route_public_inputs();
+    let factors_pis = builder.add_public_inputs(n);
     let res = builder.constant_wire(F::from_canonical_usize(factorial_usize));
     let mut factorial = builder.one_wire();
-    factors_pis.iter().for_each(|pi| {
-        factorial = builder.mul(factorial, pi.routable_target());
+    factors_pis.iter().for_each(|&pi| {
+        factorial = builder.mul(factorial, pi);
     });
     builder.copy(factorial, res);
     let mut partial_witness = PartialWitness::new();
     (0..n).for_each(|i| {
-        partial_witness.set_public_input(factors_pis[i], F::from_canonical_usize(i + 1));
+        partial_witness.set_target(factors_pis[i], F::from_canonical_usize(i + 1));
     });
     let circuit = builder.build();
     let witness = circuit.generate_witness(partial_witness);
@@ -241,11 +237,10 @@ fn test_proof_public_input() -> Result<()> {
         .collect::<Vec<_>>();
     let mut builder = CircuitBuilder::<Tweedledee>::new(128);
     let pis = (0..n)
-        .map(|_| builder.stage_public_input())
+        .map(|_| builder.add_public_input())
         .collect::<Vec<_>>();
-    builder.route_public_inputs();
     let mut partial_witness = PartialWitness::new();
-    (0..n).for_each(|i| partial_witness.set_public_input(pis[i], values[i]));
+    (0..n).for_each(|i| partial_witness.set_target(pis[i], values[i]));
     let circuit = builder.build();
     let witness = circuit.generate_witness(partial_witness);
     let proof = circuit
