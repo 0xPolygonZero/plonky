@@ -7,7 +7,6 @@ use crate::plonk_util::{commit_polynomials, polynomials_to_values_padded, sigma_
 use crate::util::{ceil_div_usize, log2_strict, transpose};
 use crate::{blake_hash_usize_to_curve, fft_precompute, generate_rescue_constants, msm_precompute, AffinePoint, AffinePointTarget, BoundedTarget, Circuit, Curve, Field, HaloCurve, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, NUM_CONSTANTS, NUM_WIRES};
 use num::{BigUint, Zero};
-use std::marker::PhantomData;
 
 pub struct CircuitBuilder<C: HaloCurve> {
     pub(crate) security_bits: usize,

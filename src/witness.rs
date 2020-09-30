@@ -1,5 +1,5 @@
 use crate::util::transpose;
-use crate::{biguint_to_field, biguint_to_limbs, field_to_biguint, AffinePoint, AffinePointTarget, BigIntTarget, Curve, Field, ForeignFieldTarget, OrderingTarget, PublicInput, Target, Wire, LIMB_BITS, NUM_WIRES};
+use crate::{biguint_to_field, biguint_to_limbs, field_to_biguint, AffinePoint, AffinePointTarget, BigIntTarget, Curve, Field, ForeignFieldTarget, OrderingTarget, Target, Wire, LIMB_BITS, NUM_WIRES};
 use num::{BigUint, Zero};
 use std::{cmp::Ordering, collections::HashMap};
 
