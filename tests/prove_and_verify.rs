@@ -1,9 +1,5 @@
 use anyhow::Result;
-use plonky::{
-    blake_hash_base_field_to_curve, msm_parallel, rescue_hash_1_to_1, verify_proof, AffinePoint,
-    Base4SumGate, Circuit, CircuitBuilder, Curve, CurveMulOp, Field, HaloCurve, PartialWitness,
-    Target, Tweedledee, Tweedledum, Wire, Witness,
-};
+use plonky::{blake_hash_base_field_to_curve, msm_parallel, rescue_hash_1_to_1, verify_proof, AffinePoint, Base4SumGate, Circuit, CircuitBuilder, Curve, CurveMulOp, Field, HaloCurve, PartialWitness, Target, Tweedledee, Tweedledum, Wire, Witness};
 use rand::{thread_rng, Rng};
 use std::time::Instant;
 
@@ -241,6 +237,37 @@ fn test_proof_public_input() -> Result<()> {
         .collect::<Vec<_>>();
     let mut partial_witness = PartialWitness::new();
     (0..n).for_each(|i| partial_witness.set_target(pis[i], values[i]));
+    let circuit = builder.build();
+    let witness = circuit.generate_witness(partial_witness);
+    let proof = circuit
+        .generate_proof::<Tweedledum>(&witness, &[], true)
+        .unwrap();
+    let pis = circuit.get_public_inputs(&witness);
+    // Check that the public inputs are set correctly in the proof.
+    assert_eq!(values, pis);
+    let vk = circuit.to_vk();
+    verify_proof::<Tweedledee, Tweedledum>(&values, &proof, &[], &vk, true)?;
+
+    Ok(())
+}
+
+#[test]
+fn test_proof_public_input_copied() -> Result<()> {
+    // Set many random public inputs
+    let n = thread_rng().gen_range(1, 200);
+    let values = (0..n)
+        .map(|_| <Tweedledee as Curve>::ScalarField::rand())
+        .collect::<Vec<_>>();
+    let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+    let pis = (0..n)
+        .map(|_| builder.add_public_input())
+        .collect::<Vec<_>>();
+    let virtuals = builder.add_virtual_targets(n);
+    let mut partial_witness = PartialWitness::new();
+    (0..n).for_each(|i| {
+        partial_witness.set_target(virtuals[i], values[i]);
+        builder.copy(virtuals[i], pis[i]);
+    });
     let circuit = builder.build();
     let witness = circuit.generate_witness(partial_witness);
     let proof = circuit
