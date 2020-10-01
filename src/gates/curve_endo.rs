@@ -35,6 +35,8 @@ impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C>
     for CurveEndoGate<C, InnerC>
 {
     const NAME: &'static str = "CurveEndoGate";
+    const DEGREE: usize = 6;
+    const NUM_CONSTANTS: usize = 0;
 
     const PREFIX: &'static [bool] = &[true, true];
 

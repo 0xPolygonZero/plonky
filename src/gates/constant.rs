@@ -22,6 +22,8 @@ impl<C: HaloCurve> ConstantGate<C> {
 
 impl<C: HaloCurve> Gate<C> for ConstantGate<C> {
     const NAME: &'static str = "ConstantGate";
+    const DEGREE: usize = 1;
+    const NUM_CONSTANTS: usize = 1;
 
     const PREFIX: &'static [bool] = &[true, false, true, true, false];
 

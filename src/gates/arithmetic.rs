@@ -29,6 +29,8 @@ impl<C: HaloCurve> ArithmeticGate<C> {
 
 impl<C: HaloCurve> Gate<C> for ArithmeticGate<C> {
     const NAME: &'static str = "ArithmeticGate";
+    const DEGREE: usize = 3;
+    const NUM_CONSTANTS: usize = 2;
 
     const PREFIX: &'static [bool] = &[true, false, false, true];
 

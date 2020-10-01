@@ -23,6 +23,8 @@ impl<C: HaloCurve> BufferGate<C> {
 
 impl<C: HaloCurve> Gate<C> for BufferGate<C> {
     const NAME: &'static str = "BufferGate";
+    const DEGREE: usize = 0;
+    const NUM_CONSTANTS: usize = 0;
 
     const PREFIX: &'static [bool] = &[true, false, true, false, false, false];
 

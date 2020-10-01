@@ -30,6 +30,8 @@ impl<C: HaloCurve> Base4SumGate<C> {
 
 impl<C: HaloCurve> Gate<C> for Base4SumGate<C> {
     const NAME: &'static str = "Base4SumGate";
+    const DEGREE: usize = 4;
+    const NUM_CONSTANTS: usize = 0;
 
     const PREFIX: &'static [bool] = &[true, false, false, false];
 

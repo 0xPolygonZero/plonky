@@ -29,6 +29,8 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> CurveDblGate<C, In
 
 impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveDblGate<C, InnerC> {
     const NAME: &'static str = "CurveDblGate";
+    const DEGREE: usize = 3;
+    const NUM_CONSTANTS: usize = 0;
 
     const PREFIX: &'static [bool] = &[true, false, true, true, true];
 

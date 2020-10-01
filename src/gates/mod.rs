@@ -242,6 +242,8 @@ fn assert_inverses_recursively<C: HaloCurve>(
 
 pub trait Gate<C: HaloCurve>: WitnessGenerator<C::ScalarField> {
     const NAME: &'static str;
+    const DEGREE: usize;
+    const NUM_CONSTANTS: usize;
 
     /// In order to combine the constraints of various gate types into a unified constraint set, we
     /// assign each gate type a binary prefix such that no two prefixes overlap.
@@ -427,6 +429,7 @@ macro_rules! test_gate_low_degree {
                 .iter()
                 .map(|c| $crate::plonk_util::polynomial_degree_plus_1(c, &fft_precomputation_16n))
                 .collect::<Vec<_>>();
+            dbg!(&constraint_degrees_plus_1);
             let max_degree_excl = (crate::plonk::QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER + 1) * n;
             for (i, &deg_plus_1) in constraint_degrees_plus_1.iter().enumerate() {
                 assert!(

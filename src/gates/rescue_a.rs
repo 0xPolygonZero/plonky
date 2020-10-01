@@ -30,6 +30,8 @@ impl<C: HaloCurve> RescueStepAGate<C> {
 
 impl<C: HaloCurve> Gate<C> for RescueStepAGate<C> {
     const NAME: &'static str = "RescueStepAGate";
+    const DEGREE: usize = 5;
+    const NUM_CONSTANTS: usize = 4;
 
     const PREFIX: &'static [bool] = &[false, false];
 

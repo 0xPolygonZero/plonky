@@ -26,6 +26,8 @@ impl<C: HaloCurve> PublicInputGate<C> {
 
 impl<C: HaloCurve> Gate<C> for PublicInputGate<C> {
     const NAME: &'static str = "PublicInputGate";
+    const DEGREE: usize = 1;
+    const NUM_CONSTANTS: usize = 0;
 
     const PREFIX: &'static [bool] = &[true, false, true, false, false, true];
 
