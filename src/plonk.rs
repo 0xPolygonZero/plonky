@@ -507,8 +507,10 @@ impl<C: HaloCurve> Circuit<C> {
 
         // Replace public inputs targets by their corresponding wires in the circuit.
         witness.replace_public_inputs(self.num_gates_without_pis);
-        
-        witness.extend(self.generate_copies(&witness, &witness.all_populated_targets()));
+
+        let mut copy_result = self.generate_copies(&witness, &witness.all_populated_targets());
+        copy_result.copy_buffer_to_pi_gate(self.num_gates_without_pis);
+        witness.extend(copy_result);
 
         // Build a list of "pending" generators which are ready to run.
         let mut pending_generator_indices = HashSet::new();
@@ -539,7 +541,8 @@ impl<C: HaloCurve> Circuit<C> {
                 completed_generator_indices.insert(generator_idx);
             }
 
-            let copy_result = self.generate_copies(&witness, &populated_targets);
+            let mut copy_result = self.generate_copies(&witness, &populated_targets);
+            copy_result.copy_buffer_to_pi_gate(self.num_gates_without_pis);
             populated_targets.extend(copy_result.all_populated_targets());
             witness.extend(copy_result);
 
