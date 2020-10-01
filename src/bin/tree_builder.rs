@@ -1,4 +1,7 @@
 use plonky::{CurveAddGate, RescueStepBGate, RescueStepAGate, ArithmeticGate, ConstantGate, BufferGate, PublicInputGate, Base4SumGate, CurveEndoGate, CurveDblGate, Tweedledum, Tweedledee, Gate };
+use std::collections::HashMap;
+use std::collections::hash_map::RandomState;
+
 #[macro_use]
 extern crate log;
 
@@ -61,6 +64,29 @@ impl Tree {
         let fin: String = fin.join("\n");
         let graph = format!("digraph G {{\ngraph [ordering=\"out\"]\n{}\n}}", fin);
         std::fs::write("graph.dot", graph).expect("Cannot write to file graph.dot");
+    }
+
+    fn prefixes(&self) -> HashMap<String, Vec<bool>> {
+        let mut prefixes = HashMap::new();
+        let mut nodes = vec![(self, vec![])];
+
+        while !nodes.is_empty() {
+            let n = nodes.pop().unwrap();
+            if !n.0.node.is_empty() {
+                prefixes.insert(n.0.node.clone(), n.1.clone());
+            }
+            if let Some(l) = &n.0.left {
+                let mut prefix = n.1.clone();
+                prefix.push(false);
+                nodes.push((l, prefix));
+            }
+            if let Some(r) = &n.0.right {
+                let mut prefix = n.1.clone();
+                prefix.push(true);
+                nodes.push((r, prefix));
+            }
+        }
+        prefixes
     }
 }
 
@@ -130,5 +156,6 @@ fn main() {
     ];
 
     let tree = gates_to_tree(&gates);
-    tree.graph();
+    // tree.graph();
+    dbg!(tree.prefixes());
 }
