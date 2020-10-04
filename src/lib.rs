@@ -13,8 +13,6 @@
 #![allow(incomplete_features)]
 
 
-#![feature(const_generics)]
-
 pub use bigint::*;
 pub use circuit_bigint::*;
 pub use circuit_builder::*;
