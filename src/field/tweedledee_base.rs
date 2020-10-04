@@ -1,159 +1,14 @@
 use rand::Rng;
+use std::cmp::Ordering;
 use std::cmp::Ordering::Less;
 use std::convert::TryInto;
 use std::ops::{Add, Div, Mul, Neg, Sub};
-
-use unroll::unroll_for_loops;
-
-use crate::nonzero_multiplicative_inverse;
-use crate::{add_no_overflow, mul2, cmp, field_to_biguint, rand_range, rand_range_from_rng, sub, Field};
-use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 
-// TODO: These low-level functions should be collected together in their own
-// module.
-#[inline]
-fn mul_add_cy_in(a: u64, b: u64, c: u64, cy_in: u64) -> (u64, u64) {
-    let t = (a as u128) * (b as u128) + (c as u128) + (cy_in as u128);
-    ((t >> 64) as u64, t as u64)
-}
-
-#[inline]
-fn mul_add(a: u64, b: u64, c: u64) -> (u64, u64) {
-    let t = (a as u128) * (b as u128) + (c as u128);
-    ((t >> 64) as u64, t as u64)
-}
-
-
-pub trait MontyRepr {
-    /// The order of the field
-    const ORDER: [u64; 4];
-    /// Twice the order of the field
-    const ORDER_X2: [u64; 4];
-    /// R in the context of the Montgomery reduction, i.e. 2^256 % |F|.
-    const R: [u64; 4];
-    /// R^2 in the context of the Montgomery reduction, i.e. 2^(256*2) % |F|.
-    const R2: [u64; 4];
-    /// R^3 in the context of the Montgomery reduction, i.e. 2^(256*3) % |F|.
-    const R3: [u64; 4];
-    /// In the context of Montgomery multiplication, µ = -|F|^-1 mod 2^64.
-    const MU: u64;
-
-    #[unroll_for_loops]
-    fn monty_multiply(a: [u64; 4], b: [u64; 4]) -> [u64; 4] {
-        // Interleaved Montgomery multiplication, as described in Algorithm 2 of
-        // https://eprint.iacr.org/2017/1057.pdf
-
-        // Note that in the loop below, to avoid explicitly shifting c, we will treat i as the least
-        // significant digit and wrap around.
-        let mut c = [0u64; 5];
-
-        for i in 0..4 {
-            // Add a[i] b to c.
-            let mut carry = 0;
-            for j in 0..4 {
-                let result = c[(i + j) % 5] as u128 + a[i] as u128 * b[j] as u128 + carry as u128;
-                c[(i + j) % 5] = result as u64;
-                carry = (result >> 64) as u64;
-            }
-            c[(i + 4) % 5] += carry;
-
-            // q = u c mod r = u c[0] mod r.
-            let q = Self::MU.wrapping_mul(c[i]);
-
-            // C += N q
-            carry = 0;
-            for j in 0..4 {
-                let result =
-                    c[(i + j) % 5] as u128 + q as u128 * Self::ORDER[j] as u128 + carry as u128;
-                c[(i + j) % 5] = result as u64;
-                carry = (result >> 64) as u64;
-            }
-            c[(i + 4) % 5] += carry;
-
-            debug_assert_eq!(c[i], 0);
-        }
-
-        let mut result = [c[4], c[0], c[1], c[2]];
-        // Final conditional subtraction.
-        if cmp(result, Self::ORDER) != Less {
-            result = sub(result, Self::ORDER);
-        }
-        result
-    }
-
-    #[unroll_for_loops]
-    fn monty_square(a: [u64; 4]) -> [u64; 4] {
-        let mut c = [0u64; 4];
-        let mut hi = 0u64;
-
-        for i in 0 .. 4 {
-            // u holds the off-diagonal part of the square calculation. Only the
-            // first N - i elements are used.
-            let mut u = [0u64; 4];
-            let mut hi_in = 0u64;
-            for j in i+1 .. 4 {
-                let (hi_out, lo) = mul_add(a[j], a[i], hi_in);
-                u[j - (i+1)] = lo;
-                hi_in = hi_out;
-            }
-            u[4 - (i+1)] = hi_in;
-            u = mul2(u);
-            let (mut hi_in, lo) = mul_add(a[i], a[i], c[i]);
-            c[i] = lo;
-            for j in i+1 .. 4 {
-                // c[j] = c[j] + u[j] + hi_in
-                let (t, cy1) = c[j].overflowing_add(hi_in);
-                let (t, cy2) = u[j - (i+1)].overflowing_add(t);
-                c[j] = t;
-                hi_in = (cy1 as u64) + (cy2 as u64);
-            }
-
-            let (t, cy1) = hi.overflowing_add(hi_in);
-            let (t, cy2) = u[4 - (i+1)].overflowing_add(t);
-            hi = t;
-            debug_assert_eq!(cy1 | cy2, false);
-
-            let m = c[0].wrapping_mul(Self::MU);
-            let (mut hi_in, lo) = mul_add(Self::ORDER[0], m, c[0]);
-            debug_assert_eq!(lo, 0u64);
-            for j in 1 .. 4 {
-                let (hi_out, lo) = mul_add_cy_in(Self::ORDER[j], m, c[j], hi_in);
-                c[j - 1] = lo;
-                hi_in = hi_out;
-            }
-            let (t, cy) = hi.overflowing_add(hi_in);
-            c[4 - 1] = t;
-            hi = cy as u64;
-        }
-        debug_assert_eq!(hi, 0u64);
-        // Final conditional subtraction.
-        if cmp(c, Self::ORDER) != Less {
-            c = sub(c, Self::ORDER);
-        }
-        c
-    }
-
-    fn monty_inverse(limbs: [u64; 4]) -> [u64; 4] {
-        // Let x R = self. We compute M((x R)^-1, R^3) = x^-1 R^-1 R^3 R^-1 =
-        // x^-1 R.
-        // TODO: There are faster ways to do this (for example, see McIvor,
-        // McLoone and McCanny (2004)).
-        let self_r_inv = nonzero_multiplicative_inverse(limbs, Self::ORDER);
-        Self::monty_multiply(self_r_inv, Self::R3)
-    }
-
-    fn from_monty(c: [u64; 4]) -> [u64; 4] {
-        // We compute M(c, R^2) = c * R^2 * R^-1 = c * R.
-        Self::monty_multiply(c, Self::R2)
-    }
-
-    fn to_monty(limbs: [u64; 4]) -> [u64; 4] {
-        // Let x * R = limbs. We compute M(x * R, 1) = x * R * R^-1 = x.
-        Self::monty_multiply(limbs, [1, 0, 0, 0])
-    }
-}
+use crate::{cmp, field_to_biguint,
+            rand_range, rand_range_from_rng,
+            MontyRepr, Field};
 
 /// An element of the Tweedledee group's base field.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Default)]
@@ -222,14 +77,7 @@ impl Add<TweedledeeBase> for TweedledeeBase {
     type Output = Self;
 
     fn add(self, rhs: TweedledeeBase) -> Self::Output {
-        // First we do a widening addition, then we reduce if necessary.
-        let sum = add_no_overflow(self.limbs, rhs.limbs);
-        let limbs = if cmp(sum, Self::ORDER) == Less {
-            sum
-        } else {
-            sub(sum, Self::ORDER)
-        };
-        Self { limbs }
+        Self { limbs: Self::monty_add(self.limbs, rhs.limbs) }
     }
 }
 
@@ -237,14 +85,7 @@ impl Sub<TweedledeeBase> for TweedledeeBase {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self {
-        let limbs = if cmp(self.limbs, rhs.limbs) == Less {
-            // Underflow occurs, so we compute the difference as `self + (-rhs)`.
-            add_no_overflow(self.limbs, (-rhs).limbs)
-        } else {
-            // No underflow, so it's faster to subtract directly.
-            sub(self.limbs, rhs.limbs)
-        };
-        Self { limbs }
+        Self { limbs: Self::monty_sub(self.limbs, rhs.limbs) }
     }
 }
 
@@ -252,9 +93,7 @@ impl Mul<TweedledeeBase> for TweedledeeBase {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self {
-        Self {
-            limbs: Self::monty_multiply(self.limbs, rhs.limbs),
-        }
+        Self { limbs: Self::monty_multiply(self.limbs, rhs.limbs) }
     }
 }
 
@@ -270,21 +109,15 @@ impl Neg for TweedledeeBase {
     type Output = Self;
 
     fn neg(self) -> Self {
-        if self == Self::ZERO {
-            Self::ZERO
-        } else {
-            Self {
-                limbs: sub(Self::ORDER, self.limbs),
-            }
-        }
+        Self { limbs: Self::monty_neg(self.limbs) }
     }
 }
 
 impl Field for TweedledeeBase {
     const BITS: usize = 255;
     const BYTES: usize = 32;
-    const ZERO: Self = Self { limbs: [0; 4] };
-    const ONE: Self = Self { limbs: Self::R };
+    const ZERO: Self = Self { limbs: <Self as MontyRepr>::ZERO };
+    const ONE: Self = Self { limbs: <Self as MontyRepr>::ONE };
     const TWO: Self = Self {
         limbs: [
             7117711835490418681,

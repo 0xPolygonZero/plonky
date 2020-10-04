@@ -3,6 +3,7 @@ pub use bls12_377_scalar::*;
 pub use field::*;
 pub use tweedledee_base::*;
 pub use tweedledum_base::*;
+pub use monty::*;
 
 mod bls12_377_base;
 mod bls12_377_scalar;
@@ -10,3 +11,4 @@ mod bls12_377_scalar;
 mod field;
 mod tweedledee_base;
 mod tweedledum_base;
+mod monty;
