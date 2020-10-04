@@ -254,7 +254,7 @@ mod tests {
 
     #[test]
     fn valid_canonical_vec() {
-        let small = TweedledeeBase::ONE.to_canonical_u64_vec();
+        let small = <TweedledeeBase as Field>::ONE.to_canonical_u64_vec();
         assert!(TweedledeeBase::is_valid_canonical_u64(&small));
 
         let big = TweedledeeBase::ORDER_X2.to_vec();

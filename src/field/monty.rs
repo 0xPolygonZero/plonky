@@ -56,7 +56,6 @@ pub trait MontyRepr {
     }
 
     fn monty_neg(limbs: [u64; 4]) -> [u64; 4] {
-        // FIXME: Should have a MontyRepr::ZERO or 'is_zero()'
         if limbs == Self::ZERO {
             Self::ZERO
         } else {
@@ -151,6 +150,7 @@ pub trait MontyRepr {
             c[4 - 1] = t;
             hi = cy as u64;
         }
+        // NB: This is only true for the Tweedle* curves.
         debug_assert_eq!(hi, 0u64);
         // Final conditional subtraction.
         if cmp(c, Self::ORDER) != Less {
@@ -162,8 +162,6 @@ pub trait MontyRepr {
     fn monty_inverse(limbs: [u64; 4]) -> [u64; 4] {
         // Let x R = self. We compute M((x R)^-1, R^3) = x^-1 R^-1 R^3 R^-1 =
         // x^-1 R.
-        // TODO: There are faster ways to do this (for example, see McIvor,
-        // McLoone and McCanny (2004)).
         let self_r_inv = nonzero_multiplicative_inverse(limbs, Self::ORDER);
         Self::monty_multiply(self_r_inv, Self::R3)
     }
