@@ -64,14 +64,7 @@ impl<C: HaloCurve> Gate<C> for PublicInputGate<C> {
 
 impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for PublicInputGate<C> {
     fn dependencies(&self) -> Vec<Target<C::ScalarField>> {
-        (0..NUM_WIRES)
-            .map(|i| {
-                Target::Wire(Wire {
-                    gate: self.index,
-                    input: i,
-                })
-            })
-            .collect()
+        Vec::new()
     }
 
     fn generate(
@@ -79,20 +72,28 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for PublicInputGate<C> {
         _constants: &[Vec<C::ScalarField>],
         witness: &PartialWitness<C::ScalarField>,
     ) -> PartialWitness<C::ScalarField> {
-        let self_as_generator: &dyn WitnessGenerator<C::ScalarField> = self;
-        let targets: Vec<Target<C::ScalarField>> = self_as_generator.dependencies();
+        let targets: Vec<Target<C::ScalarField>> = (0..NUM_WIRES)
+            .map(|i| {
+                Target::Wire(Wire {
+                    gate: self.index,
+                    input: i,
+                })
+            })
+            .collect();
 
         let mut result = PartialWitness::new();
         for i_advice in 0..NUM_ADVICE_WIRES {
             let i_wire = NUM_ROUTED_WIRES + i_advice;
-            let value = witness.get_target(targets[i_wire]);
-            result.set_wire(
-                Wire {
-                    gate: self.index + 1,
-                    input: i_advice,
-                },
-                value,
-            );
+            if witness.contains_target(targets[i_wire]) {
+                let value = witness.get_target(targets[i_wire]);
+                result.set_wire(
+                    Wire {
+                        gate: self.index + 1,
+                        input: i_advice,
+                    },
+                    value,
+                );
+            }
         }
         result
     }

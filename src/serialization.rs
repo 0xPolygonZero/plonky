@@ -238,18 +238,17 @@ mod test {
         let mut builder = CircuitBuilder::<C>::new(128);
         let n = 10;
         let factorial_usize = (1..=n).product();
-        let factors_pis = builder.stage_public_inputs(n);
-        builder.route_public_inputs();
+        let factors_pis = builder.add_public_inputs(n);
         let res = builder.constant_wire(C::ScalarField::from_canonical_usize(factorial_usize));
         let mut factorial = builder.one_wire();
-        factors_pis.iter().for_each(|pi| {
-            factorial = builder.mul(factorial, pi.routable_target());
+        factors_pis.iter().for_each(|&pi| {
+            factorial = builder.mul(factorial, pi);
         });
         builder.copy(factorial, res);
         let mut partial_witness = PartialWitness::new();
         (0..n).for_each(|i| {
             partial_witness
-                .set_public_input(factors_pis[i], C::ScalarField::from_canonical_usize(i + 1));
+                .set_target(factors_pis[i], C::ScalarField::from_canonical_usize(i + 1));
         });
         let circuit = builder.build();
         let witness = circuit.generate_witness(partial_witness);

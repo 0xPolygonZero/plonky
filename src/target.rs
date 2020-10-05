@@ -29,6 +29,7 @@ impl Wire {
 /// A routing target over a field `F`.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum Target<F: Field> {
+    PublicInput(PublicInput<F>),
     VirtualTarget(VirtualTarget),
     Wire(Wire),
     // Trick taken from https://github.com/rust-lang/rust/issues/32739#issuecomment-627765543.
@@ -38,13 +39,24 @@ pub enum Target<F: Field> {
 impl<Fp: Field> Target<Fp> {
     pub fn convert<Fq: Field>(self) -> Target<Fq> {
         match self {
+            Target::PublicInput(pi) => Target::PublicInput(pi.convert()),
             Target::VirtualTarget(v) => Target::VirtualTarget(v),
             Target::Wire(w) => Target::Wire(w),
             _ => unreachable!(),
         }
     }
+
     pub fn convert_slice<Fq: Field>(s: &[Self]) -> Vec<Target<Fq>> {
         s.iter().map(|t| t.convert()).collect()
+    }
+
+    pub fn index(&self) -> usize {
+        match self {
+            Target::PublicInput(pi) => pi.index,
+            Target::VirtualTarget(v) => v.index,
+            Target::Wire(w) => w.gate,
+            Target::_Field(_, _) => unreachable!()
+        }
     }
 }
 
@@ -56,29 +68,37 @@ pub struct BoundedTarget<F: Field> {
     pub max: BigUint,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct PublicInput<F: Field> {
     pub index: usize,
-    pub _field: PhantomData<F>,
+    _field: PhantomData<F>,
 }
 
 /// See `PublicInputGate` for an explanation of how we make public inputs routable.
 impl<F: Field> PublicInput<F> {
-    pub fn original_wire(&self) -> Wire {
-        let gate = self.index / NUM_WIRES * 2;
+    pub fn new(index: usize) -> Self {
+        PublicInput { index, _field: PhantomData }
+    }
+
+    pub(crate) fn original_wire(&self, offset: usize) -> Wire {
+        let gate = offset + (self.index / NUM_WIRES) * 2;
         let input = self.index % NUM_WIRES;
         Wire { gate, input }
     }
 
-    pub fn routable_target(&self) -> Target<F> {
+    pub(crate) fn routable_target(&self, offset: usize) -> Target<F> {
         let Wire {
             mut gate,
             mut input,
-        } = self.original_wire();
+        } = self.original_wire(offset);
         if input >= NUM_ROUTED_WIRES {
             gate += 1;
             input -= NUM_ROUTED_WIRES;
         }
         Target::Wire(Wire { gate, input })
+    }
+
+    pub fn convert<Fq: Field>(self) -> PublicInput<Fq> {
+        PublicInput { index: self.index, _field: PhantomData }
     }
 }

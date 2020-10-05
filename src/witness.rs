@@ -1,8 +1,9 @@
 use crate::util::transpose;
-use crate::{biguint_to_field, biguint_to_limbs, field_to_biguint, AffinePoint, AffinePointTarget, BigIntTarget, Curve, Field, ForeignFieldTarget, OrderingTarget, PublicInput, Target, Wire, LIMB_BITS, NUM_WIRES};
+use crate::{biguint_to_field, biguint_to_limbs, field_to_biguint, AffinePoint, AffinePointTarget, BigIntTarget, Curve, Field, ForeignFieldTarget, OrderingTarget, Target, Wire, LIMB_BITS, NUM_WIRES, NUM_ADVICE_WIRES, NUM_ROUTED_WIRES};
 use num::{BigUint, Zero};
 use std::{cmp::Ordering, collections::HashMap};
 
+#[derive(Debug)]
 pub struct PartialWitness<F: Field> {
     wire_values: HashMap<Target<F>, F>,
 }
@@ -12,6 +13,7 @@ impl<F: Field> Default for PartialWitness<F> {
         PartialWitness::new()
     }
 }
+
 impl<F: Field> PartialWitness<F> {
     pub fn new() -> Self {
         PartialWitness {
@@ -167,15 +169,40 @@ impl<F: Field> PartialWitness<F> {
         self.set_target(Target::Wire(wire), value);
     }
 
-    pub fn set_public_input(&mut self, pi: PublicInput<F>, value: F) {
-        self.set_wire(pi.original_wire(), value);
-        self.set_target(pi.routable_target(), value);
-    }
-
     pub fn extend(&mut self, other: PartialWitness<F>) {
         for (target, value) in other.wire_values {
             self.set_target(target, value);
         }
+    }
+
+    /// Replace all `PublicInput`-type targets by their corresponding `Wire`-type targets
+    /// in the partial witness.
+    pub(crate) fn replace_public_inputs(&mut self, offset: usize) {
+        let new_pis = self.wire_values.iter().filter_map(|(t, v)| {
+            if let Target::PublicInput(pi) = t {
+                Some((Target::Wire(pi.original_wire(offset)), *v))
+            } else {
+                None
+            }
+        }).collect::<Vec<_>>();
+
+        self.wire_values.retain(|t, _| !matches!(t, Target::PublicInput(_)));
+        self.wire_values.extend(new_pis);
+    }
+
+    /// Looks through the keys and looks for targets in `BufferGate`s following a `PublicInputGate`.
+    /// If some are found, add the corresponding non-routable wire in the `PublicInputGate` to the
+    /// partial witness.
+    pub(crate) fn copy_buffer_to_pi_gate(&mut self, offset: usize) {
+        let pis_wires = self.wire_values.iter().filter_map(|(t, &v)| {
+            match t {
+                Target::Wire(Wire { gate: n, input: i }) if ((*n > offset) && ((n - offset) % 2 == 1) && (*i < NUM_ADVICE_WIRES)) => {
+                    Some((Target::Wire(Wire { gate: n - 1, input: NUM_ROUTED_WIRES + i }), v))
+                }
+                _ => None
+            }
+        }).collect::<Vec<_>>();
+        self.wire_values.extend(pis_wires);
     }
 }
 
