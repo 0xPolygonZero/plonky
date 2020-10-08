@@ -9,7 +9,7 @@
 
 // Required for generic low-level functions on small arrays.
 #![feature(const_generics)]
-// Unfortunatly it makes rustc complain, so we include
+// Unfortunately it makes rustc complain, so we include
 #![allow(incomplete_features)]
 
 

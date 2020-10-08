@@ -31,6 +31,7 @@ pub(crate) const QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER: usize = 7;
 pub struct Circuit<C: HaloCurve> {
     pub security_bits: usize,
     pub num_public_inputs: usize,
+    pub num_gates_without_pis: usize,
     pub gate_constants: Vec<Vec<C::ScalarField>>,
     pub routing_target_partitions: TargetPartitions<C::ScalarField>,
     pub generators: Vec<Box<dyn WitnessGenerator<C::ScalarField>>>,
@@ -110,7 +111,7 @@ impl<C: HaloCurve> Circuit<C> {
             wire_values_by_wire_no_pis.iter_mut().for_each(|w| {
                 for i in 0..num_public_input_gates {
                     // Set the wire value at the public input gate to zero.
-                    w[2 * i] = C::ScalarField::ZERO;
+                    w[self.num_gates_without_pis + 2 * i] = C::ScalarField::ZERO;
                 }
             });
             values_to_polynomials(&wire_values_by_wire_no_pis, &self.fft_precomputation_n)
@@ -207,7 +208,7 @@ impl<C: HaloCurve> Circuit<C> {
                 Polynomial::from(vec![C::ScalarField::ONE]),
                 |acc, i| {
                     let mut ans =
-                        acc.mul(&vec![-self.subgroup_n[2 * i], C::ScalarField::ONE].into());
+                        acc.mul(&vec![-self.subgroup_n[self.num_gates_without_pis + 2 * i], C::ScalarField::ONE].into());
                     ans.trim();
                     ans
                 },
@@ -234,7 +235,7 @@ impl<C: HaloCurve> Circuit<C> {
         );
 
         let public_inputs = (0..self.num_public_inputs)
-            .map(|i| wire_values_by_wire_index[i % NUM_WIRES][2 * (i / NUM_WIRES)])
+            .map(|i| wire_values_by_wire_index[i % NUM_WIRES][self.num_gates_without_pis + 2 * (i / NUM_WIRES)])
             .collect::<Vec<_>>();
 
         // Observe the `t` polynomial commitment.
@@ -503,7 +504,13 @@ impl<C: HaloCurve> Circuit<C> {
 
         // We start with the inputs as our witness, and execute any copy constraints.
         let mut witness = inputs;
-        witness.extend(self.generate_copies(&witness, &witness.all_populated_targets()));
+
+        // Replace public inputs targets by their corresponding wires in the circuit.
+        witness.replace_public_inputs(self.num_gates_without_pis);
+
+        let mut copy_result = self.generate_copies(&witness, &witness.all_populated_targets());
+        copy_result.copy_buffer_to_pi_gate(self.num_gates_without_pis);
+        witness.extend(copy_result);
 
         // Build a list of "pending" generators which are ready to run.
         let mut pending_generator_indices = HashSet::new();
@@ -534,7 +541,8 @@ impl<C: HaloCurve> Circuit<C> {
                 completed_generator_indices.insert(generator_idx);
             }
 
-            let copy_result = self.generate_copies(&witness, &populated_targets);
+            let mut copy_result = self.generate_copies(&witness, &populated_targets);
+            copy_result.copy_buffer_to_pi_gate(self.num_gates_without_pis);
             populated_targets.extend(copy_result.all_populated_targets());
             witness.extend(copy_result);
 
@@ -621,6 +629,7 @@ impl<C: HaloCurve> Circuit<C> {
                 .collect::<Vec<_>>(),
             degree: self.degree(),
             num_public_inputs: self.num_public_inputs,
+            num_gates_without_pis: self.num_gates_without_pis,
             security_bits: self.security_bits,
             pedersen_g_msm_precomputation: Some(self.pedersen_g_msm_precomputation.clone()),
             fft_precomputation: Some(self.fft_precomputation_n.clone()),
@@ -629,7 +638,7 @@ impl<C: HaloCurve> Circuit<C> {
 
     pub fn get_public_inputs(&self, witness: &Witness<C::ScalarField>) -> Vec<C::ScalarField> {
         (0..self.num_public_inputs)
-            .map(|i| witness.get_indices(2 * (i / NUM_WIRES), i % NUM_WIRES))
+            .map(|i| witness.get_indices(self.num_gates_without_pis + 2 * (i / NUM_WIRES), i % NUM_WIRES))
             .collect()
     }
 }
