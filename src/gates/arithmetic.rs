@@ -33,6 +33,7 @@ impl<C: HaloCurve> Gate<C> for ArithmeticGate<C> {
     const NUM_CONSTANTS: usize = 2;
 
     const PREFIX: &'static [bool] = &[true, false, false, true];
+    type Constraints = ();
 
     fn evaluate_unfiltered(
         local_constant_values: &[C::ScalarField],

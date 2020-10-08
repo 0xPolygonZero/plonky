@@ -33,6 +33,7 @@ impl<C: HaloCurve> Gate<C> for RescueStepAGate<C> {
     const DEGREE: usize = 5;
     const NUM_CONSTANTS: usize = 4;
 
+    type Constraints = ();
     const PREFIX: &'static [bool] = &[false, false];
 
     fn evaluate_unfiltered(

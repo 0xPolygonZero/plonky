@@ -39,6 +39,7 @@ mod curve_endo;
 mod public_input;
 mod rescue_a;
 mod rescue_b;
+mod bam;
 
 pub const RESCUE_SPONGE_WIDTH: usize = 4;
 pub const RESCUE_SPONGE_RATE: usize = RESCUE_SPONGE_WIDTH - 1;
@@ -248,6 +249,8 @@ pub trait Gate<C: HaloCurve>: WitnessGenerator<C::ScalarField> {
     /// In order to combine the constraints of various gate types into a unified constraint set, we
     /// assign each gate type a binary prefix such that no two prefixes overlap.
     const PREFIX: &'static [bool];
+
+    type Constraints;
 
     fn evaluate_filtered(
         local_constant_values: &[C::ScalarField],

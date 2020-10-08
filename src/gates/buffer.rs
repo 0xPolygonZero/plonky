@@ -27,6 +27,7 @@ impl<C: HaloCurve> Gate<C> for BufferGate<C> {
     const NUM_CONSTANTS: usize = 0;
 
     const PREFIX: &'static [bool] = &[true, false, true, false, false, false];
+    type Constraints = ();
 
     fn evaluate_unfiltered(
         _local_constant_values: &[C::ScalarField],

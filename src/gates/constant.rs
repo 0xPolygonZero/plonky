@@ -25,6 +25,7 @@ impl<C: HaloCurve> Gate<C> for ConstantGate<C> {
     const DEGREE: usize = 1;
     const NUM_CONSTANTS: usize = 1;
 
+    type Constraints = ();
     const PREFIX: &'static [bool] = &[true, false, true, true, false];
 
     fn evaluate_unfiltered(

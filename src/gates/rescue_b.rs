@@ -29,6 +29,7 @@ impl<C: HaloCurve> Gate<C> for RescueStepBGate<C> {
     const NUM_CONSTANTS: usize = 4;
 
     const PREFIX: &'static [bool] = &[false, true];
+    type Constraints = ();
 
     fn evaluate_unfiltered(
         local_constant_values: &[C::ScalarField],

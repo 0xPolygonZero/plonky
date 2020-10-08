@@ -29,6 +29,7 @@ impl<C: HaloCurve> Gate<C> for PublicInputGate<C> {
     const DEGREE: usize = 1;
     const NUM_CONSTANTS: usize = 0;
 
+    type Constraints = ();
     const PREFIX: &'static [bool] = &[true, false, true, false, false, true];
 
     fn evaluate_unfiltered(

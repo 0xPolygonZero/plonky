@@ -32,6 +32,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveD
     const DEGREE: usize = 3;
     const NUM_CONSTANTS: usize = 0;
 
+    type Constraints = ();
     const PREFIX: &'static [bool] = &[true, false, true, true, true];
 
     fn evaluate_unfiltered(

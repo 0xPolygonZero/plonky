@@ -38,6 +38,7 @@ impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C>
     const DEGREE: usize = 6;
     const NUM_CONSTANTS: usize = 0;
 
+    type Constraints = ();
     const PREFIX: &'static [bool] = &[true, true];
 
     fn evaluate_unfiltered(
