@@ -2,7 +2,7 @@
 name = "plonky"
 description = "Recursive SNARKs based on Plonk and Halo"
 version = "0.1.0"
-authors = ["Daniel Lubarov"]
+authors = ["Daniel Lubarov <daniel@mirprotocol.org>", "William Borgeaud <william@mirprotocol.org>"]
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/mir-protocol/plonky"
