@@ -28,14 +28,21 @@ impl<C: HaloCurve> ArithmeticGate<C> {
 }
 
 impl<C: HaloCurve> Gate<C> for ArithmeticGate<C> {
-    const NAME: &'static str = "ArithmeticGate";
-    const DEGREE: usize = 3;
-    const NUM_CONSTANTS: usize = 2;
-
-    const PREFIX: &'static [bool] = &[true, false, false, true];
-    type Constraints = ();
+    fn name(&self) -> &'static str {
+        "ArithmeticGate"
+    }
+    fn degree(&self) -> usize {
+        3
+    }
+    fn num_constants(&self) -> usize {
+        2
+    }
+    fn prefix(&self) -> &'static [bool] {
+        &[true, false, false, true]
+    }
 
     fn evaluate_unfiltered(
+        &self,
         local_constant_values: &[C::ScalarField],
         local_wire_values: &[C::ScalarField],
         _right_wire_values: &[C::ScalarField],
@@ -52,6 +59,7 @@ impl<C: HaloCurve> Gate<C> for ArithmeticGate<C> {
     }
 
     fn evaluate_unfiltered_recursively(
+        &self,
         builder: &mut CircuitBuilder<C>,
         local_constant_values: &[Target<C::ScalarField>],
         local_wire_values: &[Target<C::ScalarField>],

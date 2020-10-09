@@ -34,14 +34,21 @@ impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> CurveEndoGate<
 impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C>
     for CurveEndoGate<C, InnerC>
 {
-    const NAME: &'static str = "CurveEndoGate";
-    const DEGREE: usize = 6;
-    const NUM_CONSTANTS: usize = 0;
-
-    type Constraints = ();
-    const PREFIX: &'static [bool] = &[true, true];
+    fn name(&self) -> &'static str {
+        "CurveEndoGate"
+    }
+    fn degree(&self) -> usize {
+        6
+    }
+    fn num_constants(&self) -> usize {
+        0
+    }
+    fn prefix(&self) -> &'static [bool] {
+        &[true, true]
+    }
 
     fn evaluate_unfiltered(
+        &self,
         _local_constant_values: &[InnerC::BaseField],
         local_wire_values: &[InnerC::BaseField],
         right_wire_values: &[InnerC::BaseField],
@@ -89,6 +96,7 @@ impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C>
     }
 
     fn evaluate_unfiltered_recursively(
+        &self,
         builder: &mut CircuitBuilder<C>,
         _local_constant_values: &[Target<C::ScalarField>],
         local_wire_values: &[Target<C::ScalarField>],

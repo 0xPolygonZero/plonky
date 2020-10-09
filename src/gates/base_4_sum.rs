@@ -28,15 +28,24 @@ impl<C: HaloCurve> Base4SumGate<C> {
     }
 }
 
-impl<C: HaloCurve> Gate<C> for Base4SumGate<C> {
-    const NAME: &'static str = "Base4SumGate";
-    const DEGREE: usize = 4;
-    const NUM_CONSTANTS: usize = 0;
-
-    const PREFIX: &'static [bool] = &[true, false, false, false];
-    type Constraints = ();
+impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C, InnerC>
+    for Base4SumGate<C>
+{
+    fn name(&self) -> &'static str {
+        "Base4SumGate"
+    }
+    fn degree(&self) -> usize {
+        4
+    }
+    fn num_constants(&self) -> usize {
+        0
+    }
+    fn prefix(&self) -> &'static [bool] {
+        &[true, false, false, false]
+    }
 
     fn evaluate_unfiltered(
+        &self,
         _local_constant_values: &[C::ScalarField],
         local_wire_values: &[C::ScalarField],
         _right_wire_values: &[C::ScalarField],
@@ -65,6 +74,7 @@ impl<C: HaloCurve> Gate<C> for Base4SumGate<C> {
     }
 
     fn evaluate_unfiltered_recursively(
+        &self,
         builder: &mut CircuitBuilder<C>,
         _local_constant_values: &[Target<C::ScalarField>],
         local_wire_values: &[Target<C::ScalarField>],

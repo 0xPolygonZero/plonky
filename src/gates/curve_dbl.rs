@@ -27,15 +27,24 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> CurveDblGate<C, In
     pub const WIRE_LAMBDA: usize = 5;
 }
 
-impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveDblGate<C, InnerC> {
-    const NAME: &'static str = "CurveDblGate";
-    const DEGREE: usize = 3;
-    const NUM_CONSTANTS: usize = 0;
-
-    type Constraints = ();
-    const PREFIX: &'static [bool] = &[true, false, true, true, true];
+impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C, InnerC>
+    for CurveDblGate<C, InnerC>
+{
+    fn name(&self) -> &'static str {
+        "CurveDblGate"
+    }
+    fn degree(&self) -> usize {
+        3
+    }
+    fn num_constants(&self) -> usize {
+        0
+    }
+    fn prefix(&self) -> &'static [bool] {
+        &[true, false, true, true, true]
+    }
 
     fn evaluate_unfiltered(
+        &self,
         _local_constant_values: &[InnerC::BaseField],
         local_wire_values: &[InnerC::BaseField],
         _right_wire_values: &[InnerC::BaseField],
@@ -66,6 +75,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> Gate<C> for CurveD
     }
 
     fn evaluate_unfiltered_recursively(
+        &self,
         builder: &mut CircuitBuilder<C>,
         _local_constant_values: &[Target<C::ScalarField>],
         local_wire_values: &[Target<C::ScalarField>],

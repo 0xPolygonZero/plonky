@@ -21,15 +21,24 @@ impl<C: HaloCurve> BufferGate<C> {
     }
 }
 
-impl<C: HaloCurve> Gate<C> for BufferGate<C> {
-    const NAME: &'static str = "BufferGate";
-    const DEGREE: usize = 0;
-    const NUM_CONSTANTS: usize = 0;
-
-    const PREFIX: &'static [bool] = &[true, false, true, false, false, false];
-    type Constraints = ();
+impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C, InnerC>
+    for BufferGate<C>
+{
+    fn name(&self) -> &'static str {
+        "BufferGate"
+    }
+    fn degree(&self) -> usize {
+        0
+    }
+    fn num_constants(&self) -> usize {
+        0
+    }
+    fn prefix(&self) -> &'static [bool] {
+        &[true, false, true, false, false, false]
+    }
 
     fn evaluate_unfiltered(
+        &self,
         _local_constant_values: &[C::ScalarField],
         _local_wire_values: &[C::ScalarField],
         _right_wire_values: &[C::ScalarField],
@@ -39,6 +48,7 @@ impl<C: HaloCurve> Gate<C> for BufferGate<C> {
     }
 
     fn evaluate_unfiltered_recursively(
+        &self,
         _builder: &mut CircuitBuilder<C>,
         _local_constant_values: &[Target<C::ScalarField>],
         _local_wire_values: &[Target<C::ScalarField>],
