@@ -8,22 +8,6 @@ use crate::util::{ceil_div_usize, log2_strict, transpose};
 use crate::{blake_hash_usize_to_curve, fft_precompute, generate_rescue_constants, msm_precompute, AffinePoint, AffinePointTarget, BoundedTarget, Circuit, Curve, Field, HaloCurve, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, NUM_CONSTANTS, NUM_WIRES};
 use num::{BigUint, Zero};
 
-pub struct CustomGenerator<F: Field> {
-    pub targets: Vec<Target<F>>,
-    pub dependencies: Vec<Target<F>>,
-    pub generate: Box<dyn Fn(&[Target<F>], &[Vec<F>], &PartialWitness<F>) -> PartialWitness<F> + Sync>
-}
-
-impl<F: Field> WitnessGenerator<F> for CustomGenerator<F> {
-    fn dependencies(&self) -> Vec<Target<F>> {
-        self.dependencies.clone()
-    }
-
-    fn generate(&self, constants: &[Vec<F>], witness: &PartialWitness<F>) -> PartialWitness<F> {
-        (self.generate)(self.targets.as_slice(), constants, witness)
-    }
-}
-
 pub struct CircuitBuilder<C: HaloCurve> {
     pub(crate) security_bits: usize,
     public_input_index: usize,
@@ -69,7 +53,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         (0..n).map(|_i| self.add_virtual_target()).collect()
     }
 
-    pub fn add_virtual_point_target<InnerC: Curve<BaseField=C::ScalarField>>(
+    pub fn add_virtual_point_target<InnerC: Curve<BaseField = C::ScalarField>>(
         &mut self,
     ) -> AffinePointTarget<InnerC> {
         let x = self.add_virtual_target();
@@ -77,7 +61,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         AffinePointTarget { x, y }
     }
 
-    pub fn add_virtual_point_targets<InnerC: Curve<BaseField=C::ScalarField>>(
+    pub fn add_virtual_point_targets<InnerC: Curve<BaseField = C::ScalarField>>(
         &mut self,
         n: usize,
     ) -> Vec<AffinePointTarget<InnerC>> {
@@ -616,29 +600,6 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         power: usize,
     ) -> Target<C::ScalarField> {
         self.exp_constant(x, C::ScalarField::from_canonical_usize(power))
-    }
-
-    pub fn negg(&mut self, x: Target<C::ScalarField>) -> Target<C::ScalarField> {
-
-        let x_neg = self.add_virtual_target();
-        let neg_gen = CustomGenerator {
-            targets: vec![x, x_neg],
-            dependencies: vec![x],
-            generate: Box::new(|targets: &[Target<C::ScalarField>], _consts: &[Vec<C::ScalarField>], pw: &PartialWitness<C::ScalarField>| {
-                let x_value = pw.get_target(targets[0]);
-                let x_neg_value = -x_value;
-
-                let mut result = PartialWitness::new();
-                result.set_target(targets[1], x_neg_value);
-                result
-            } )
-        };
-        self.add_generator(neg_gen);
-
-        // Enforce that x * x_inv = 1.
-        let product = self.add(x, x_neg);
-        self.assert_zero(product);
-        x_neg
     }
 
     pub fn inv(&mut self, x: Target<C::ScalarField>) -> Target<C::ScalarField> {
