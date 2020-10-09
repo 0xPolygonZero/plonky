@@ -81,7 +81,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         AffinePointTarget { x: p.x, y: neg_y }
     }
 
-    pub fn curve_add<InnerC: Curve<BaseField = C::ScalarField>>(
+    pub fn curve_add<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &mut self,
         p_1: AffinePointTarget<InnerC>,
         p_2: AffinePointTarget<InnerC>,
@@ -150,7 +150,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
     }
 
-    pub fn curve_double<InnerC: Curve<BaseField = C::ScalarField>>(
+    pub fn curve_double<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &mut self,
         p: AffinePointTarget<InnerC>,
     ) -> AffinePointTarget<InnerC> {
@@ -182,7 +182,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
     }
 
-    pub fn curve_sub<InnerC: Curve<BaseField = C::ScalarField>>(
+    pub fn curve_sub<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &mut self,
         p_1: AffinePointTarget<InnerC>,
         p_2: AffinePointTarget<InnerC>,
@@ -191,7 +191,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         self.curve_add::<InnerC>(p_1, neg_p_2)
     }
 
-    pub fn curve_mul<InnerC: Curve<BaseField = C::ScalarField>>(
+    pub fn curve_mul<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &mut self,
         mul: CurveMulOp<C, InnerC>,
     ) -> AffinePointTarget<InnerC> {
@@ -284,7 +284,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     /// Note: This assumes the most significant bit of each scalar is unset. This occurs with high
     /// probability if the field size is slightly larger than a power of two and the scalars are
     /// uniformly random.
-    pub fn curve_msm<InnerC: Curve<BaseField = C::ScalarField>>(
+    pub fn curve_msm<InnerC: HaloCurve<BaseField = C::ScalarField>>(
         &mut self,
         parts: &[CurveMulOp<C, InnerC>],
     ) -> AffinePointTarget<InnerC> {
@@ -641,7 +641,7 @@ mod tests {
         type C = Tweedledee;
         type InnerC = Tweedledum;
         type SF = <C as Curve>::ScalarField;
-        let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+        let mut builder = CircuitBuilder::<Tweedledee>::new::<InnerC>(128);
 
         // This is an arbitrary nonzero scalar.
         let scalar = builder.constant_wire(SF::FIVE);

@@ -1,4 +1,4 @@
-use crate::{AffinePoint, Curve, Field, TweedledumBase, Bls12377Base, Bls12377Scalar, TweedledeeBase};
+use crate::{AffinePoint, Bls12377Base, Bls12377Scalar, Curve, Field, TweedledeeBase, TweedledumBase};
 use serde::de::Error as DeError;
 use serde::de::Visitor;
 use serde::ser::Error as SerdeError;
@@ -73,8 +73,8 @@ impl<C: Curve> FromBytes for AffinePoint<C> {
 
 impl<C: Curve> Serialize for AffinePoint<C> {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-        where
-            S: Serializer,
+    where
+        S: Serializer,
     {
         let mut buf = vec![];
         self.write(&mut buf)
@@ -85,8 +85,8 @@ impl<C: Curve> Serialize for AffinePoint<C> {
 
 impl<'de, C: Curve> Deserialize<'de> for AffinePoint<C> {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-        where
-            D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         struct AffinePointVisitor<C: Curve> {
             phantom: std::marker::PhantomData<C>,
@@ -137,7 +137,10 @@ macro_rules! impl_serde_field {
                         write!(formatter, "A field element.")
                     }
 
-                    fn visit_bytes<E: DeError>(self, v: &[u8]) -> std::result::Result<Self::Value, E> {
+                    fn visit_bytes<E: DeError>(
+                        self,
+                        v: &[u8],
+                    ) -> std::result::Result<Self::Value, E> {
                         <$field>::read(v).map_err(|e| DeError::custom(format!("{}", e)))
                     }
                 }
@@ -234,8 +237,9 @@ mod test {
     );
 
     // Generate a proof and verification key for the factorial circuit.
-    fn get_circuit_vk<C: HaloCurve, InnerC: HaloCurve<BaseField=C::ScalarField>>() -> (Proof<C>, VerificationKey<C>) {
-        let mut builder = CircuitBuilder::<C>::new(128);
+    fn get_circuit_vk<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
+    ) -> (Proof<C>, VerificationKey<C>) {
+        let mut builder = CircuitBuilder::<C>::new::<InnerC>(128);
         let n = 10;
         let factorial_usize = (1..=n).product();
         let factors_pis = builder.add_public_inputs(n);
@@ -247,8 +251,7 @@ mod test {
         builder.copy(factorial, res);
         let mut partial_witness = PartialWitness::new();
         (0..n).for_each(|i| {
-            partial_witness
-                .set_target(factors_pis[i], C::ScalarField::from_canonical_usize(i + 1));
+            partial_witness.set_target(factors_pis[i], C::ScalarField::from_canonical_usize(i + 1));
         });
         let circuit = builder.build();
         let witness = circuit.generate_witness(partial_witness);
@@ -258,7 +261,6 @@ mod test {
         let vk = circuit.to_vk();
         (proof, vk)
     }
-
 
     macro_rules! test_proof_vk_serialization {
         ($curve:ty, $inner_curve:ty, $test_name:ident) => {
@@ -284,14 +286,25 @@ mod test {
                 let ser_vk_no_msm = serde_cbor::to_vec(&vk_no_msm)?;
                 let ser_vk_none = serde_cbor::to_vec(&vk_none)?;
                 println!("Vk size: {} bytes", ser_vk.len());
-                println!("Vk size without fft precomputation: {} bytes", ser_vk_no_fft.len());
-                println!("Vk size without msm precomputation: {} bytes", ser_vk_no_msm.len());
-                println!("Vk size without any precomputation: {} bytes", ser_vk_none.len());
+                println!(
+                    "Vk size without fft precomputation: {} bytes",
+                    ser_vk_no_fft.len()
+                );
+                println!(
+                    "Vk size without msm precomputation: {} bytes",
+                    ser_vk_no_msm.len()
+                );
+                println!(
+                    "Vk size without any precomputation: {} bytes",
+                    ser_vk_none.len()
+                );
 
                 let der_proof = serde_cbor::from_slice(&ser_proof)?;
                 let der_vk: VerificationKey<$curve> = serde_cbor::from_slice(&ser_vk)?;
-                let der_vk_no_fft: VerificationKey<$curve> = serde_cbor::from_slice(&ser_vk_no_fft)?;
-                let der_vk_no_msm: VerificationKey<$curve> = serde_cbor::from_slice(&ser_vk_no_msm)?;
+                let der_vk_no_fft: VerificationKey<$curve> =
+                    serde_cbor::from_slice(&ser_vk_no_fft)?;
+                let der_vk_no_msm: VerificationKey<$curve> =
+                    serde_cbor::from_slice(&ser_vk_no_msm)?;
                 let der_vk_none: VerificationKey<$curve> = serde_cbor::from_slice(&ser_vk_none)?;
 
                 assert_eq!(proof, der_proof);
@@ -305,6 +318,14 @@ mod test {
         };
     }
 
-    test_proof_vk_serialization!(Tweedledee, Tweedledum, test_proof_vk_serialization_tweedledee);
-    test_proof_vk_serialization!(Tweedledum, Tweedledee, test_proof_vk_serialization_tweedledum);
+    test_proof_vk_serialization!(
+        Tweedledee,
+        Tweedledum,
+        test_proof_vk_serialization_tweedledee
+    );
+    test_proof_vk_serialization!(
+        Tweedledum,
+        Tweedledee,
+        test_proof_vk_serialization_tweedledum
+    );
 }

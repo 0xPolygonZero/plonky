@@ -30,6 +30,7 @@ pub use rescue_b::*;
 use crate::{CircuitBuilder, Field, HaloCurve, Target, WitnessGenerator};
 
 mod arithmetic;
+// mod bam;
 mod base_4_sum;
 mod buffer;
 mod constant;
@@ -39,79 +40,90 @@ mod curve_endo;
 mod public_input;
 mod rescue_a;
 mod rescue_b;
-mod bam;
 
 pub const RESCUE_SPONGE_WIDTH: usize = 4;
 pub const RESCUE_SPONGE_RATE: usize = RESCUE_SPONGE_WIDTH - 1;
 
 pub fn evaluate_all_constraints<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
+    gates: &[Box<dyn Gate<C>>],
     local_constant_values: &[C::ScalarField],
     local_wire_values: &[C::ScalarField],
     right_wire_values: &[C::ScalarField],
     below_wire_values: &[C::ScalarField],
 ) -> Vec<C::ScalarField> {
-    let constraint_sets_per_gate = vec![
-        CurveAddGate::<C, InnerC>::evaluate_filtered(
-            local_constant_values,
-            local_wire_values,
-            right_wire_values,
-            below_wire_values,
-        ),
-        CurveDblGate::<C, InnerC>::evaluate_filtered(
-            local_constant_values,
-            local_wire_values,
-            right_wire_values,
-            below_wire_values,
-        ),
-        CurveEndoGate::<C, InnerC>::evaluate_filtered(
-            local_constant_values,
-            local_wire_values,
-            right_wire_values,
-            below_wire_values,
-        ),
-        Base4SumGate::<C>::evaluate_filtered(
-            local_constant_values,
-            local_wire_values,
-            right_wire_values,
-            below_wire_values,
-        ),
-        PublicInputGate::<C>::evaluate_filtered(
-            local_constant_values,
-            local_wire_values,
-            right_wire_values,
-            below_wire_values,
-        ),
-        BufferGate::<C>::evaluate_filtered(
-            local_constant_values,
-            local_wire_values,
-            right_wire_values,
-            below_wire_values,
-        ),
-        ConstantGate::<C>::evaluate_filtered(
-            local_constant_values,
-            local_wire_values,
-            right_wire_values,
-            below_wire_values,
-        ),
-        ArithmeticGate::<C>::evaluate_filtered(
-            local_constant_values,
-            local_wire_values,
-            right_wire_values,
-            below_wire_values,
-        ),
-        RescueStepAGate::<C>::evaluate_filtered(
-            local_constant_values,
-            local_wire_values,
-            right_wire_values,
-            below_wire_values,
-        ),
-        RescueStepBGate::<C>::evaluate_filtered(
-            local_constant_values,
-            local_wire_values,
-            right_wire_values,
-            below_wire_values,
-        ),
-    ];
+    let constraint_sets_per_gate = gates
+        .iter()
+        .map(|g| {
+            g.evaluate_filtered(
+                local_constant_values,
+                local_wire_values,
+                right_wire_values,
+                below_wire_values,
+            )
+        })
+        .collect::<Vec<_>>();
+    // let constraint_sets_per_gate = vec![
+    //     CurveAddGate::<C, InnerC>::evaluate_filtered(
+    //         local_constant_values,
+    //         local_wire_values,
+    //         right_wire_values,
+    //         below_wire_values,
+    //     ),
+    //     CurveDblGate::<C, InnerC>::evaluate_filtered(
+    //         local_constant_values,
+    //         local_wire_values,
+    //         right_wire_values,
+    //         below_wire_values,
+    //     ),
+    //     CurveEndoGate::<C, InnerC>::evaluate_filtered(
+    //         local_constant_values,
+    //         local_wire_values,
+    //         right_wire_values,
+    //         below_wire_values,
+    //     ),
+    //     Base4SumGate::<C>::evaluate_filtered(
+    //         local_constant_values,
+    //         local_wire_values,
+    //         right_wire_values,
+    //         below_wire_values,
+    //     ),
+    //     PublicInputGate::<C>::evaluate_filtered(
+    //         local_constant_values,
+    //         local_wire_values,
+    //         right_wire_values,
+    //         below_wire_values,
+    //     ),
+    //     BufferGate::<C>::evaluate_filtered(
+    //         local_constant_values,
+    //         local_wire_values,
+    //         right_wire_values,
+    //         below_wire_values,
+    //     ),
+    //     ConstantGate::<C>::evaluate_filtered(
+    //         local_constant_values,
+    //         local_wire_values,
+    //         right_wire_values,
+    //         below_wire_values,
+    //     ),
+    //     ArithmeticGate::<C>::evaluate_filtered(
+    //         local_constant_values,
+    //         local_wire_values,
+    //         right_wire_values,
+    //         below_wire_values,
+    //     ),
+    //     RescueStepAGate::<C>::evaluate_filtered(
+    //         local_constant_values,
+    //         local_wire_values,
+    //         right_wire_values,
+    //         below_wire_values,
+    //     ),
+    //     RescueStepBGate::<C>::evaluate_filtered(
+    //         local_constant_values,
+    //         local_wire_values,
+    //         right_wire_values,
+    //         below_wire_values,
+    //     ),
+    // ];
 
     let mut unified_constraint_set = vec![];
     for constraint_sets in constraint_sets_per_gate {
@@ -130,83 +142,96 @@ pub fn evaluate_all_constraints_recursively<
     InnerC: HaloCurve<BaseField = C::ScalarField>,
 >(
     builder: &mut CircuitBuilder<C>,
+    gates: &[Box<dyn Gate<C>>],
     local_constant_values: &[Target<C::ScalarField>],
     local_wire_values: &[Target<C::ScalarField>],
     right_wire_values: &[Target<C::ScalarField>],
     below_wire_values: &[Target<C::ScalarField>],
 ) -> Vec<Target<C::ScalarField>> {
-    let constraint_sets_per_gate = vec![
-        CurveAddGate::<C, InnerC>::evaluate_filtered_recursively(
-            builder,
-            local_constant_values,
-            local_wire_values,
-            right_wire_values,
-            below_wire_values,
-        ),
-        CurveDblGate::<C, InnerC>::evaluate_filtered_recursively(
-            builder,
-            local_constant_values,
-            local_wire_values,
-            right_wire_values,
-            below_wire_values,
-        ),
-        CurveEndoGate::<C, InnerC>::evaluate_filtered_recursively(
-            builder,
-            local_constant_values,
-            local_wire_values,
-            right_wire_values,
-            below_wire_values,
-        ),
-        Base4SumGate::<C>::evaluate_filtered_recursively(
-            builder,
-            local_constant_values,
-            local_wire_values,
-            right_wire_values,
-            below_wire_values,
-        ),
-        PublicInputGate::<C>::evaluate_filtered_recursively(
-            builder,
-            local_constant_values,
-            local_wire_values,
-            right_wire_values,
-            below_wire_values,
-        ),
-        BufferGate::<C>::evaluate_filtered_recursively(
-            builder,
-            local_constant_values,
-            local_wire_values,
-            right_wire_values,
-            below_wire_values,
-        ),
-        ConstantGate::<C>::evaluate_filtered_recursively(
-            builder,
-            local_constant_values,
-            local_wire_values,
-            right_wire_values,
-            below_wire_values,
-        ),
-        ArithmeticGate::<C>::evaluate_filtered_recursively(
-            builder,
-            local_constant_values,
-            local_wire_values,
-            right_wire_values,
-            below_wire_values,
-        ),
-        RescueStepAGate::<C>::evaluate_filtered_recursively(
-            builder,
-            local_constant_values,
-            local_wire_values,
-            right_wire_values,
-            below_wire_values,
-        ),
-        RescueStepBGate::<C>::evaluate_filtered_recursively(
-            builder,
-            local_constant_values,
-            local_wire_values,
-            right_wire_values,
-            below_wire_values,
-        ),
-    ];
+    let constraint_sets_per_gate = gates
+        .iter()
+        .map(|g| {
+            g.evaluate_filtered_recursively(
+                builder,
+                local_constant_values,
+                local_wire_values,
+                right_wire_values,
+                below_wire_values,
+            )
+        })
+        .collect::<Vec<_>>();
+    // let constraint_sets_per_gate = vec![
+    //     CurveAddGate::<C, InnerC>::evaluate_filtered_recursively(
+    //         builder,
+    //         local_constant_values,
+    //         local_wire_values,
+    //         right_wire_values,
+    //         below_wire_values,
+    //     ),
+    //     CurveDblGate::<C, InnerC>::evaluate_filtered_recursively(
+    //         builder,
+    //         local_constant_values,
+    //         local_wire_values,
+    //         right_wire_values,
+    //         below_wire_values,
+    //     ),
+    //     CurveEndoGate::<C, InnerC>::evaluate_filtered_recursively(
+    //         builder,
+    //         local_constant_values,
+    //         local_wire_values,
+    //         right_wire_values,
+    //         below_wire_values,
+    //     ),
+    //     Base4SumGate::<C>::evaluate_filtered_recursively(
+    //         builder,
+    //         local_constant_values,
+    //         local_wire_values,
+    //         right_wire_values,
+    //         below_wire_values,
+    //     ),
+    //     PublicInputGate::<C>::evaluate_filtered_recursively(
+    //         builder,
+    //         local_constant_values,
+    //         local_wire_values,
+    //         right_wire_values,
+    //         below_wire_values,
+    //     ),
+    //     BufferGate::<C>::evaluate_filtered_recursively(
+    //         builder,
+    //         local_constant_values,
+    //         local_wire_values,
+    //         right_wire_values,
+    //         below_wire_values,
+    //     ),
+    //     ConstantGate::<C>::evaluate_filtered_recursively(
+    //         builder,
+    //         local_constant_values,
+    //         local_wire_values,
+    //         right_wire_values,
+    //         below_wire_values,
+    //     ),
+    //     ArithmeticGate::<C>::evaluate_filtered_recursively(
+    //         builder,
+    //         local_constant_values,
+    //         local_wire_values,
+    //         right_wire_values,
+    //         below_wire_values,
+    //     ),
+    //     RescueStepAGate::<C>::evaluate_filtered_recursively(
+    //         builder,
+    //         local_constant_values,
+    //         local_wire_values,
+    //         right_wire_values,
+    //         below_wire_values,
+    //     ),
+    //     RescueStepBGate::<C>::evaluate_filtered_recursively(
+    //         builder,
+    //         local_constant_values,
+    //         local_wire_values,
+    //         right_wire_values,
+    //         below_wire_values,
+    //     ),
+    // ];
 
     let mut unified_constraint_set = vec![];
     for constraint_set in constraint_sets_per_gate {
@@ -242,24 +267,20 @@ fn assert_inverses_recursively<C: HaloCurve>(
 }
 
 pub trait Gate<C: HaloCurve>: WitnessGenerator<C::ScalarField> {
-    const NAME: &'static str;
-    const DEGREE: usize;
-    const NUM_CONSTANTS: usize;
-
-    /// In order to combine the constraints of various gate types into a unified constraint set, we
-    /// assign each gate type a binary prefix such that no two prefixes overlap.
-    const PREFIX: &'static [bool];
-
-    type Constraints;
+    fn name(&self) -> &'static str;
+    fn degree(&self) -> usize;
+    fn num_constants(&self) -> usize;
+    fn prefix(&self) -> &'static [bool];
 
     fn evaluate_filtered(
+        &self,
         local_constant_values: &[C::ScalarField],
         local_wire_values: &[C::ScalarField],
         right_wire_values: &[C::ScalarField],
         below_wire_values: &[C::ScalarField],
     ) -> Vec<C::ScalarField> {
-        let filter = Self::evaluate_prefix_filter(local_constant_values);
-        let unfiltered = Self::evaluate_unfiltered(
+        let filter = self.evaluate_prefix_filter(local_constant_values);
+        let unfiltered = self.evaluate_unfiltered(
             local_constant_values,
             local_wire_values,
             right_wire_values,
@@ -269,14 +290,15 @@ pub trait Gate<C: HaloCurve>: WitnessGenerator<C::ScalarField> {
     }
 
     fn evaluate_filtered_recursively(
+        &self,
         builder: &mut CircuitBuilder<C>,
         local_constant_values: &[Target<C::ScalarField>],
         local_wire_values: &[Target<C::ScalarField>],
         right_wire_values: &[Target<C::ScalarField>],
         below_wire_values: &[Target<C::ScalarField>],
     ) -> Vec<Target<C::ScalarField>> {
-        let filter = Self::evaluate_prefix_filter_recursively(builder, local_constant_values);
-        let unfiltered = Self::evaluate_unfiltered_recursively(
+        let filter = self.evaluate_prefix_filter_recursively(builder, local_constant_values);
+        let unfiltered = self.evaluate_unfiltered_recursively(
             builder,
             local_constant_values,
             local_wire_values,
@@ -289,9 +311,9 @@ pub trait Gate<C: HaloCurve>: WitnessGenerator<C::ScalarField> {
             .collect()
     }
 
-    fn evaluate_prefix_filter(local_constant_values: &[C::ScalarField]) -> C::ScalarField {
+    fn evaluate_prefix_filter(&self, local_constant_values: &[C::ScalarField]) -> C::ScalarField {
         let mut product = C::ScalarField::ONE;
-        for (i, &bit) in Self::PREFIX.iter().enumerate() {
+        for (i, &bit) in self.prefix().iter().enumerate() {
             let c = local_constant_values[i];
             if bit {
                 product = product * c;
@@ -303,12 +325,13 @@ pub trait Gate<C: HaloCurve>: WitnessGenerator<C::ScalarField> {
     }
 
     fn evaluate_prefix_filter_recursively(
+        &self,
         builder: &mut CircuitBuilder<C>,
         local_constant_values: &[Target<C::ScalarField>],
     ) -> Target<C::ScalarField> {
         let one = builder.one_wire();
         let mut product = one;
-        for (i, &bit) in Self::PREFIX.iter().enumerate() {
+        for (i, &bit) in self.prefix().iter().enumerate() {
             let c = local_constant_values[i];
             let term = if bit { c } else { builder.sub(one, c) };
             product = builder.mul(product, term);
@@ -321,6 +344,7 @@ pub trait Gate<C: HaloCurve>: WitnessGenerator<C::ScalarField> {
     /// For example, if the gate computes `c = a * b`, this should return `[c(x) - a(x) * b(x)]`,
     /// where `x` is the challenge point.
     fn evaluate_unfiltered(
+        &self,
         local_constant_values: &[C::ScalarField],
         local_wire_values: &[C::ScalarField],
         right_wire_values: &[C::ScalarField],
@@ -329,6 +353,7 @@ pub trait Gate<C: HaloCurve>: WitnessGenerator<C::ScalarField> {
 
     /// Like the other `evaluate` method, but in the context of a recursive circuit.
     fn evaluate_unfiltered_recursively(
+        &self,
         builder: &mut CircuitBuilder<C>,
         local_constant_values: &[Target<C::ScalarField>],
         local_wire_values: &[Target<C::ScalarField>],
@@ -410,10 +435,12 @@ macro_rules! test_gate_low_degree {
             let constant_values_16n_t = $crate::util::transpose(&constant_values_16n);
             let wire_values_16n_t = $crate::util::transpose(&wire_values_16n);
 
+            let gate = <$gate>::new(0);
             // Evaluate constraints at each of our 16n points.
             let mut constraint_values_16n: Vec<Vec<SF>> = Vec::new();
             for i in 0..16 * n {
                 let constraints: Vec<SF> = <$gate as $crate::gates::Gate<C>>::evaluate_filtered(
+                    &gate,
                     &constant_values_16n_t[i],
                     &wire_values_16n_t[i],
                     &wire_values_16n_t[(i + 16) % (16 * n)],

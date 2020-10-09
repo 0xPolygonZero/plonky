@@ -7,7 +7,7 @@ use crate::gates::evaluate_all_constraints;
 use crate::halo::verify_ipa;
 use crate::plonk_proof::OldProof;
 use crate::plonk_util::{halo_g, halo_n, halo_n_mul, halo_s, pedersen_hash, powers, reduce_with_powers};
-use crate::util::{ceil_div_usize, log2_strict};
+use crate::util::{ceil_div_usize, get_canonical_gates, log2_strict};
 use crate::{blake_hash_usize_to_curve, fft_precompute, msm_execute_parallel, msm_precompute, AffinePoint, Circuit, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, Polynomial, Proof, GRID_WIDTH, NUM_ROUTED_WIRES, NUM_WIRES};
 
 pub const SECURITY_BITS: usize = 128;
@@ -68,6 +68,7 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
     let degree = vk.degree;
 
     let constraint_terms = evaluate_all_constraints::<C, InnerC>(
+        &get_canonical_gates::<C, InnerC>(),
         &proof.o_local.o_constants,
         &proof.o_local.o_wires,
         &proof.o_right.o_wires,
@@ -127,8 +128,8 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
     // Verify that the purported opening of the public input quotient polynomial is valid.
     let num_public_input_gates = ceil_div_usize(vk.num_public_inputs, NUM_WIRES);
     // Compute the denominator `prod_{pi \in PI} (X - pi)`.
-    let pis_quotient_denominator = (0..num_public_input_gates)
-        .fold(C::ScalarField::ONE, |acc, i| {
+    let pis_quotient_denominator =
+        (0..num_public_input_gates).fold(C::ScalarField::ONE, |acc, i| {
             acc * (challs.zeta - subgroup_generator_n.exp_usize(vk.num_gates_without_pis + 2 * i))
         });
     let pis_quotient_numerator =
@@ -383,12 +384,11 @@ fn public_inputs_to_polynomial<F: Field>(
 ) -> Polynomial<F> {
     let pis_wires_vec = public_inputs_to_wires_vec(public_inputs);
     let mut scaled_wires_vec = vec![F::ZERO; num_gates_without_pis];
-    scaled_wires_vec.extend((0..pis_wires_vec[0].len())
-        .map(|i| {
-            (0..pis_wires_vec.len())
-                .map(|j| pis_wires_vec[j][i] * alpha.exp_usize(j))
-                .fold(F::ZERO, |acc, x| acc + x)
-        }));
+    scaled_wires_vec.extend((0..pis_wires_vec[0].len()).map(|i| {
+        (0..pis_wires_vec.len())
+            .map(|j| pis_wires_vec[j][i] * alpha.exp_usize(j))
+            .fold(F::ZERO, |acc, x| acc + x)
+    }));
     scaled_wires_vec.resize(degree, F::ZERO);
 
     fft_precomputation.map_or_else(

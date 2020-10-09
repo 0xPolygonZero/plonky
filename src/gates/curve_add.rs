@@ -33,7 +33,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> CurveAddGate<C, In
     pub const WIRE_LAMBDA: usize = 8;
 }
 
-impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C, InnerC>
+impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C>
     for CurveAddGate<C, InnerC>
 {
     fn name(&self) -> &'static str {
@@ -98,7 +98,7 @@ impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C, InnerC
 
     fn evaluate_unfiltered_recursively(
         &self,
-        builder: &mut CircuitBuilder<C, InnerC>,
+        builder: &mut CircuitBuilder<C>,
         _local_constant_values: &[Target<C::ScalarField>],
         local_wire_values: &[Target<C::ScalarField>],
         right_wire_values: &[Target<C::ScalarField>],
@@ -155,7 +155,7 @@ impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C, InnerC
     }
 }
 
-impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> WitnessGenerator<C::ScalarField>
+impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> WitnessGenerator<C::ScalarField>
     for CurveAddGate<C, InnerC>
 {
     fn dependencies(&self) -> Vec<Target<C::ScalarField>> {

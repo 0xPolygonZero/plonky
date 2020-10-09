@@ -2,7 +2,7 @@ use crate::gates::evaluate_all_constraints_recursively;
 use crate::plonk_challenger::RecursiveChallenger;
 use crate::plonk_proof::OldProofTarget;
 use crate::plonk_util::{powers_recursive, reduce_with_powers_recursive};
-use crate::util::ceil_div_usize;
+use crate::util::{ceil_div_usize, get_canonical_gates};
 use crate::{get_subgroup_shift, hash_usize_to_curve, AffinePointTarget, Circuit, CircuitBuilder, CurveMulEndoResult, CurveMulOp, Field, HaloCurve, OpeningSetTarget, ProofTarget, SchnorrProofTarget, Target, GRID_WIDTH, NUM_CONSTANTS, NUM_ROUTED_WIRES, NUM_WIRES, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER};
 
 /// Wraps a `Circuit` for recursive verification with inputs for the proof data.
@@ -47,7 +47,7 @@ pub fn recursive_verification_circuit<
     num_public_inputs: usize,
     num_old_proofs: usize,
 ) -> RecursiveCircuit<C, InnerC> {
-    let mut builder = CircuitBuilder::<C>::new(security_bits);
+    let mut builder = CircuitBuilder::<C>::new::<InnerC>(security_bits);
     let public_inputs = RecursionPublicInputs {
         beta: builder.add_public_input(),
         gamma: builder.add_public_input(),
@@ -154,10 +154,7 @@ pub fn recursive_verification_circuit<
     builder.copy(public_inputs.alpha, alpha);
     builder.copy(public_inputs.zeta, zeta);
     for i in 0..NUM_CONSTANTS {
-        builder.copy(
-            public_inputs.o_constants[i],
-            proof.o_local.o_constants[i],
-        );
+        builder.copy(public_inputs.o_constants[i], proof.o_local.o_constants[i]);
     }
     for i in 0..NUM_ROUTED_WIRES {
         builder.copy(
@@ -166,36 +163,18 @@ pub fn recursive_verification_circuit<
         );
     }
     for i in 0..NUM_WIRES {
-        builder.copy(
-            public_inputs.o_local_wires[i],
-            proof.o_local.o_wires[i],
-        );
-        builder.copy(
-            public_inputs.o_right_wires[i],
-            proof.o_right.o_wires[i],
-        );
-        builder.copy(
-            public_inputs.o_below_wires[i],
-            proof.o_below.o_wires[i],
-        );
+        builder.copy(public_inputs.o_local_wires[i], proof.o_local.o_wires[i]);
+        builder.copy(public_inputs.o_right_wires[i], proof.o_right.o_wires[i]);
+        builder.copy(public_inputs.o_below_wires[i], proof.o_below.o_wires[i]);
     }
-    builder.copy(
-        public_inputs.o_plonk_z_local,
-        proof.o_local.o_plonk_z,
-    );
-    builder.copy(
-        public_inputs.o_plonk_z_right,
-        proof.o_right.o_plonk_z,
-    );
+    builder.copy(public_inputs.o_plonk_z_local, proof.o_local.o_plonk_z);
+    builder.copy(public_inputs.o_plonk_z_right, proof.o_right.o_plonk_z);
     for i in 0..degree_pow {
         builder.copy(public_inputs.halo_us[i], halo_us[i]);
     }
     let shift = 2 + degree_pow;
     for i in 0..num_old_proofs {
-        builder.copy(
-            old_proofs[i].halo_g.x,
-            public_inputs.old_proofs[shift * i],
-        );
+        builder.copy(old_proofs[i].halo_g.x, public_inputs.old_proofs[shift * i]);
         builder.copy(
             old_proofs[i].halo_g.y,
             public_inputs.old_proofs[shift * i + 1],
@@ -544,6 +523,7 @@ fn verify_assumptions<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField
     let vanishing_z_1_term = builder.mul(o_z_minus_1, lagrange_1_eval);
     let constraint_terms = evaluate_all_constraints_recursively::<C, InnerC>(
         builder,
+        &get_canonical_gates::<C, InnerC>(),
         &o_constants,
         &o_local_wires,
         &o_right_wires,

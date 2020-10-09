@@ -28,9 +28,7 @@ impl<C: HaloCurve> Base4SumGate<C> {
     }
 }
 
-impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C, InnerC>
-    for Base4SumGate<C>
-{
+impl<C: HaloCurve> Gate<C> for Base4SumGate<C> {
     fn name(&self) -> &'static str {
         "Base4SumGate"
     }

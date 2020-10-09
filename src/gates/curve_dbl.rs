@@ -27,7 +27,7 @@ impl<C: HaloCurve, InnerC: Curve<BaseField = C::ScalarField>> CurveDblGate<C, In
     pub const WIRE_LAMBDA: usize = 5;
 }
 
-impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C, InnerC>
+impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C>
     for CurveDblGate<C, InnerC>
 {
     fn name(&self) -> &'static str {

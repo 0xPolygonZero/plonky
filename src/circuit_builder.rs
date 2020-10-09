@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::gates::*;
 use crate::plonk_util::{commit_polynomials, polynomials_to_values_padded, sigma_polynomials, values_to_polynomials};
-use crate::util::{ceil_div_usize, log2_strict, transpose};
+use crate::util::{ceil_div_usize, get_canonical_gates, log2_strict, transpose};
 use crate::{blake_hash_usize_to_curve, fft_precompute, generate_rescue_constants, msm_precompute, AffinePoint, AffinePointTarget, BoundedTarget, Circuit, Curve, Field, HaloCurve, PartialWitness, PublicInput, Target, TargetPartitions, VirtualTarget, Wire, WitnessGenerator, NUM_CONSTANTS, NUM_WIRES};
 use num::{BigUint, Zero};
 
@@ -15,12 +15,13 @@ pub struct CircuitBuilder<C: HaloCurve> {
     gate_counts: BTreeMap<&'static str, usize>,
     gate_constants: Vec<Vec<C::ScalarField>>,
     copy_constraints: Vec<(Target<C::ScalarField>, Target<C::ScalarField>)>,
+    gates: Vec<Box<dyn Gate<C>>>,
     generators: Vec<Box<dyn WitnessGenerator<C::ScalarField>>>,
     constant_wires: HashMap<C::ScalarField, Target<C::ScalarField>>,
 }
 
 impl<C: HaloCurve> CircuitBuilder<C> {
-    pub fn new(security_bits: usize) -> Self {
+    pub fn new<InnerC: HaloCurve<BaseField = C::ScalarField>>(security_bits: usize) -> Self {
         CircuitBuilder {
             security_bits,
             public_input_index: 0,
@@ -28,6 +29,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             gate_counts: BTreeMap::new(),
             gate_constants: Vec::new(),
             copy_constraints: Vec::new(),
+            gates: get_canonical_gates::<C, InnerC>(),
             generators: Vec::new(),
             constant_wires: HashMap::new(),
         }
@@ -976,12 +978,12 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
     /// Adds a gate to the circuit, without doing any routing.
     pub fn add_gate<G: Gate<C>>(&mut self, gate: G, gate_constants: Vec<C::ScalarField>) {
-        trace!("{} {}", self.num_gates(), G::NAME);
-        debug_assert!(G::PREFIX.len() + gate_constants.len() <= NUM_CONSTANTS);
+        trace!("{} {}", self.num_gates(), gate.name());
+        debug_assert!(gate.prefix().len() + gate_constants.len() <= NUM_CONSTANTS);
 
         // Merge the gate type's prefix bits with the given gate config constants.
         let mut all_constants = Vec::new();
-        for &prefix_bit in G::PREFIX {
+        for &prefix_bit in gate.prefix() {
             all_constants.push(C::ScalarField::from_canonical_bool(prefix_bit));
         }
         all_constants.extend(gate_constants);
@@ -992,8 +994,8 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
 
         self.gate_constants.push(all_constants);
+        *self.gate_counts.entry(gate.name()).or_insert(0) += 1;
         self.add_generator(gate);
-        *self.gate_counts.entry(G::NAME).or_insert(0) += 1;
     }
 
     pub fn add_generator<G: WitnessGenerator<C::ScalarField>>(&mut self, generator: G) {
@@ -1165,6 +1167,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             num_gates_without_pis,
             gate_constants,
             routing_target_partitions,
+            gates: self.gates,
             generators,
             subgroup_generator_n,
             subgroup_generator_8n,

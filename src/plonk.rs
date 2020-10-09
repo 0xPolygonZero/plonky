@@ -16,7 +16,7 @@ use crate::polynomial::Polynomial;
 use crate::target::Target;
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::witness::{PartialWitness, Witness, WitnessGenerator};
-use crate::{evaluate_all_constraints, fft_with_precomputation_power_of_2, AffinePoint, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, OpeningSet, VerificationKey};
+use crate::{evaluate_all_constraints, fft_with_precomputation_power_of_2, AffinePoint, ArithmeticGate, Base4SumGate, BufferGate, ConstantGate, CurveAddGate, CurveDblGate, CurveEndoGate, FftPrecomputation, Field, Gate, HaloCurve, MsmPrecomputation, OpeningSet, PublicInputGate, RescueStepAGate, RescueStepBGate, VerificationKey};
 
 pub(crate) const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
@@ -34,6 +34,7 @@ pub struct Circuit<C: HaloCurve> {
     pub num_gates_without_pis: usize,
     pub gate_constants: Vec<Vec<C::ScalarField>>,
     pub routing_target_partitions: TargetPartitions<C::ScalarField>,
+    pub gates: Vec<Box<dyn Gate<C>>>,
     pub generators: Vec<Box<dyn WitnessGenerator<C::ScalarField>>>,
     /// A generator of `subgroup_n`.
     pub subgroup_generator_n: C::ScalarField,
@@ -207,8 +208,13 @@ impl<C: HaloCurve> Circuit<C> {
             let pis_quotient_denominator = (0..num_public_input_gates).fold(
                 Polynomial::from(vec![C::ScalarField::ONE]),
                 |acc, i| {
-                    let mut ans =
-                        acc.mul(&vec![-self.subgroup_n[self.num_gates_without_pis + 2 * i], C::ScalarField::ONE].into());
+                    let mut ans = acc.mul(
+                        &vec![
+                            -self.subgroup_n[self.num_gates_without_pis + 2 * i],
+                            C::ScalarField::ONE,
+                        ]
+                        .into(),
+                    );
                     ans.trim();
                     ans
                 },
@@ -235,7 +241,10 @@ impl<C: HaloCurve> Circuit<C> {
         );
 
         let public_inputs = (0..self.num_public_inputs)
-            .map(|i| wire_values_by_wire_index[i % NUM_WIRES][self.num_gates_without_pis + 2 * (i / NUM_WIRES)])
+            .map(|i| {
+                wire_values_by_wire_index[i % NUM_WIRES]
+                    [self.num_gates_without_pis + 2 * (i / NUM_WIRES)]
+            })
             .collect::<Vec<_>>();
 
         // Observe the `t` polynomial commitment.
@@ -417,6 +426,7 @@ impl<C: HaloCurve> Circuit<C> {
                 }
 
                 let constraint_terms = evaluate_all_constraints::<C, InnerC>(
+                    &self.gates,
                     &local_constant_values,
                     &local_wire_values,
                     &right_wire_values,
@@ -638,7 +648,12 @@ impl<C: HaloCurve> Circuit<C> {
 
     pub fn get_public_inputs(&self, witness: &Witness<C::ScalarField>) -> Vec<C::ScalarField> {
         (0..self.num_public_inputs)
-            .map(|i| witness.get_indices(self.num_gates_without_pis + 2 * (i / NUM_WIRES), i % NUM_WIRES))
+            .map(|i| {
+                witness.get_indices(
+                    self.num_gates_without_pis + 2 * (i / NUM_WIRES),
+                    i % NUM_WIRES,
+                )
+            })
             .collect()
     }
 }

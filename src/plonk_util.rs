@@ -341,7 +341,7 @@ pub fn halo_g<F: Field>(x: F, us: &[F]) -> F {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{CircuitBuilder, Curve, Field, PartialWitness, Tweedledee};
+    use crate::{CircuitBuilder, Curve, Field, PartialWitness, Tweedledee, Tweedledum};
 
     #[test]
     fn test_halo_n() {
@@ -359,7 +359,7 @@ mod test {
 
     #[test]
     fn test_permutation_polynomial() {
-        let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+        let mut builder = CircuitBuilder::<Tweedledee>::new::<Tweedledum>(128);
         let one = builder.one_wire();
         let t = builder.add_virtual_target();
         let t_sq = builder.square(t);

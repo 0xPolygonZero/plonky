@@ -500,7 +500,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{CircuitBuilder, PartialWitness, Tweedledum};
+    use crate::{CircuitBuilder, PartialWitness, Tweedledee, Tweedledum};
     use num::{BigUint, FromPrimitive, Integer};
 
     #[test]
@@ -509,7 +509,7 @@ mod tests {
         let y_value = BigUint::from_u128(33333333333333333333333333333333333333).unwrap();
         let expected_z_value = &x_value + &y_value;
 
-        let mut builder = CircuitBuilder::<Tweedledum>::new(128);
+        let mut builder = CircuitBuilder::<Tweedledum>::new::<Tweedledee>(128);
         let x = builder.constant_bigint(&x_value);
         let y = builder.constant_bigint(&y_value);
         let z = builder.bigint_add(&x, &y);
@@ -526,7 +526,7 @@ mod tests {
         let y_value = BigUint::from_u128(456456456456456456456456456456456456).unwrap();
         let expected_z_value = &x_value * &y_value;
 
-        let mut builder = CircuitBuilder::<Tweedledum>::new(128);
+        let mut builder = CircuitBuilder::<Tweedledum>::new::<Tweedledee>(128);
         let x = builder.constant_bigint(&x_value);
         let y = builder.constant_bigint(&y_value);
         let z = builder.bigint_mul(&x, &y);
@@ -543,7 +543,7 @@ mod tests {
         let y_value = BigUint::from_u128(123123123123123123123123123123123123).unwrap();
         let (expected_div_value, expected_rem_value) = x_value.div_rem(&y_value);
 
-        let mut builder = CircuitBuilder::<Tweedledum>::new(128);
+        let mut builder = CircuitBuilder::<Tweedledum>::new::<Tweedledee>(128);
         let x = builder.constant_bigint(&x_value);
         let y = builder.constant_bigint(&y_value);
         let (div, rem) = builder.bigint_div_rem(&x, &y);

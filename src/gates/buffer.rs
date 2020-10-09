@@ -21,9 +21,7 @@ impl<C: HaloCurve> BufferGate<C> {
     }
 }
 
-impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C, InnerC>
-    for BufferGate<C>
-{
+impl<C: HaloCurve> Gate<C> for BufferGate<C> {
     fn name(&self) -> &'static str {
         "BufferGate"
     }

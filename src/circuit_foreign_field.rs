@@ -73,18 +73,19 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{CircuitBuilder, Curve, Field, PartialWitness, Tweedledum};
+    use crate::{CircuitBuilder, Curve, Field, PartialWitness, Tweedledee, Tweedledum};
 
     #[test]
     fn test_foreign_field_add() {
         type C = Tweedledum;
+        type InnerC = Tweedledee;
         type FF = <C as Curve>::ScalarField;
 
         let x_value = FF::rand();
         let y_value = FF::rand();
         let expected_z_value = x_value + y_value;
 
-        let mut builder = CircuitBuilder::<C>::new(128);
+        let mut builder = CircuitBuilder::<C>::new::<InnerC>(128);
         let x = builder.constant_foreign_field(x_value);
         let y = builder.constant_foreign_field(y_value);
         let z = builder.foreign_field_add::<FF>(&x, &y);
@@ -98,13 +99,14 @@ mod tests {
     #[test]
     fn test_foreign_field_mul() {
         type C = Tweedledum;
+        type InnerC = Tweedledee;
         type FF = <C as Curve>::ScalarField;
 
         let x_value = FF::rand();
         let y_value = FF::rand();
         let expected_z_value = x_value * y_value;
 
-        let mut builder = CircuitBuilder::<C>::new(128);
+        let mut builder = CircuitBuilder::<C>::new::<InnerC>(128);
         let x = builder.constant_foreign_field(x_value);
         let y = builder.constant_foreign_field(y_value);
         let z = builder.foreign_field_mul::<FF>(&x, &y);

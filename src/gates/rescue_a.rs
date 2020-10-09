@@ -28,7 +28,7 @@ impl<C: HaloCurve> RescueStepAGate<C> {
     }
 }
 
-impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C> for RescueStepAGate<C> {
+impl<C: HaloCurve> Gate<C> for RescueStepAGate<C> {
     fn name(&self) -> &'static str {
         "RescueStepAGate"
     }

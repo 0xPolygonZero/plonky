@@ -48,8 +48,8 @@ impl<C: HaloCurve> Gate<C> for ArithmeticGate<C> {
         _right_wire_values: &[C::ScalarField],
         _below_wire_values: &[C::ScalarField],
     ) -> Vec<C::ScalarField> {
-        let const_0 = local_constant_values[Self::PREFIX.len()];
-        let const_1 = local_constant_values[Self::PREFIX.len() + 1];
+        let const_0 = local_constant_values[self.prefix().len()];
+        let const_1 = local_constant_values[self.prefix().len() + 1];
         let multiplicand_0 = local_wire_values[Self::WIRE_MULTIPLICAND_0];
         let multiplicand_1 = local_wire_values[Self::WIRE_MULTIPLICAND_1];
         let addend = local_wire_values[Self::WIRE_ADDEND];
@@ -66,8 +66,8 @@ impl<C: HaloCurve> Gate<C> for ArithmeticGate<C> {
         _right_wire_values: &[Target<C::ScalarField>],
         _below_wire_values: &[Target<C::ScalarField>],
     ) -> Vec<Target<C::ScalarField>> {
-        let const_0 = local_constant_values[Self::PREFIX.len()];
-        let const_1 = local_constant_values[Self::PREFIX.len() + 1];
+        let const_0 = local_constant_values[self.prefix().len()];
+        let const_1 = local_constant_values[self.prefix().len() + 1];
         let multiplicand_0 = local_wire_values[Self::WIRE_MULTIPLICAND_0];
         let multiplicand_1 = local_wire_values[Self::WIRE_MULTIPLICAND_1];
         let addend = local_wire_values[Self::WIRE_ADDEND];
@@ -120,8 +120,8 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for ArithmeticGate<C> {
             input: Self::WIRE_OUTPUT,
         };
 
-        let const_0 = constants[self.index][Self::PREFIX.len()];
-        let const_1 = constants[self.index][Self::PREFIX.len() + 1];
+        let const_0 = constants[self.index][self.prefix().len()];
+        let const_1 = constants[self.index][self.prefix().len() + 1];
 
         let multiplicand_0 = witness.get_wire(multiplicand_0_target);
         let multiplicand_1 = witness.get_wire(multiplicand_1_target);

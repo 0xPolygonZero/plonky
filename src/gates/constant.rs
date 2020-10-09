@@ -20,9 +20,7 @@ impl<C: HaloCurve> ConstantGate<C> {
     }
 }
 
-impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C, InnerC>
-    for ConstantGate<C>
-{
+impl<C: HaloCurve> Gate<C> for ConstantGate<C> {
     fn name(&self) -> &'static str {
         "ConstantGate"
     }

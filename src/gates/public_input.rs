@@ -24,7 +24,7 @@ impl<C: HaloCurve> PublicInputGate<C> {
     }
 }
 
-impl<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>> Gate<C> for PublicInputGate<C> {
+impl<C: HaloCurve> Gate<C> for PublicInputGate<C> {
     fn name(&self) -> &'static str {
         "PublicInputGate"
     }

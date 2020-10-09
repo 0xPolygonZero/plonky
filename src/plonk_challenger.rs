@@ -230,12 +230,13 @@ impl<F: Field> RecursiveChallenger<F> {
 #[cfg(test)]
 mod tests {
     use crate::plonk_challenger::{Challenger, RecursiveChallenger};
-    use crate::{CircuitBuilder, Curve, Field, PartialWitness, Target, Tweedledum};
+    use crate::{CircuitBuilder, Curve, Field, PartialWitness, Target, Tweedledee, Tweedledum};
 
     /// Tests for consistency between `Challenger` and `RecursiveChallenger`.
     #[test]
     fn test_consistency() {
         type C = Tweedledum;
+        type InnerC = Tweedledee;
         type SF = <C as Curve>::ScalarField;
 
         // These are mostly arbitrary, but we want to test some rounds with enough inputs/outputs to
@@ -256,7 +257,7 @@ mod tests {
             outputs_per_round.push(challenger.get_n_challenges(num_outputs_per_round[r]));
         }
 
-        let mut builder = CircuitBuilder::<C>::new(128);
+        let mut builder = CircuitBuilder::<C>::new::<InnerC>(128);
         let mut recursive_challenger = RecursiveChallenger::new(&mut builder);
         let mut recursive_outputs_per_round: Vec<Vec<Target<<C as Curve>::ScalarField>>> =
             Vec::new();

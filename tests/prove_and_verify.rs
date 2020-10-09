@@ -3,8 +3,10 @@ use plonky::{blake_hash_base_field_to_curve, msm_parallel, rescue_hash_1_to_1, v
 use rand::{thread_rng, Rng};
 use std::time::Instant;
 
-fn get_trivial_circuit<C: HaloCurve>(x: C::ScalarField) -> (Circuit<C>, Witness<C::ScalarField>) {
-    let mut builder = CircuitBuilder::<C>::new(128);
+fn get_trivial_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
+    x: C::ScalarField,
+) -> (Circuit<C>, Witness<C::ScalarField>) {
+    let mut builder = CircuitBuilder::<C>::new::<InnerC>(128);
     let t = builder.constant_wire(x);
     builder.assert_zero(t);
     let mut partial_witness = PartialWitness::new();
@@ -16,7 +18,8 @@ fn get_trivial_circuit<C: HaloCurve>(x: C::ScalarField) -> (Circuit<C>, Witness<
 
 #[test]
 fn test_proof_trivial() -> Result<()> {
-    let (circuit, witness) = get_trivial_circuit(<Tweedledee as Curve>::ScalarField::ZERO);
+    let (circuit, witness) =
+        get_trivial_circuit::<Tweedledee, Tweedledum>(<Tweedledee as Curve>::ScalarField::ZERO);
     let proof = circuit
         .generate_proof::<Tweedledum>(&witness, &[], true)
         .unwrap();
@@ -30,7 +33,8 @@ fn test_proof_trivial() -> Result<()> {
 fn test_proof_trivial_circuit_many_proofs() -> Result<()> {
     let mut old_proofs = Vec::new();
     for _ in 0..10 {
-        let (circuit, witness) = get_trivial_circuit(<Tweedledee as Curve>::ScalarField::ZERO);
+        let (circuit, witness) =
+            get_trivial_circuit::<Tweedledee, Tweedledum>(<Tweedledee as Curve>::ScalarField::ZERO);
         let proof = circuit
             .generate_proof::<Tweedledum>(&witness, &[], true)
             .unwrap();
@@ -40,7 +44,8 @@ fn test_proof_trivial_circuit_many_proofs() -> Result<()> {
             .unwrap();
         old_proofs.push(old_proof);
     }
-    let (circuit, witness) = get_trivial_circuit(<Tweedledee as Curve>::ScalarField::ZERO);
+    let (circuit, witness) =
+        get_trivial_circuit::<Tweedledee, Tweedledum>(<Tweedledee as Curve>::ScalarField::ZERO);
     let proof = circuit
         .generate_proof::<Tweedledum>(&witness, &old_proofs, true)
         .unwrap();
@@ -52,7 +57,7 @@ fn test_proof_trivial_circuit_many_proofs() -> Result<()> {
 
 #[test]
 fn test_proof_sum() -> Result<()> {
-    let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+    let mut builder = CircuitBuilder::<Tweedledee>::new::<Tweedledum>(128);
     let t1 = builder.constant_wire(<Tweedledee as Curve>::ScalarField::ZERO);
     let t2 = builder.constant_wire(<Tweedledee as Curve>::ScalarField::ZERO);
     let s = builder.add(t1, t2);
@@ -75,7 +80,7 @@ fn test_proof_sum() -> Result<()> {
 #[ignore]
 fn test_proof_sum_big() -> Result<()> {
     let now = Instant::now();
-    let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+    let mut builder = CircuitBuilder::<Tweedledee>::new::<Tweedledum>(128);
     let ts = (0..10_000)
         .map(|i| builder.constant_wire(<Tweedledee as Curve>::ScalarField::from_canonical_usize(i)))
         .collect::<Vec<_>>();
@@ -107,7 +112,7 @@ fn test_proof_sum_big() -> Result<()> {
 
 #[test]
 fn test_proof_quadratic() -> Result<()> {
-    let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+    let mut builder = CircuitBuilder::<Tweedledee>::new::<Tweedledum>(128);
     let one = builder.one_wire();
     let t = builder.add_virtual_target();
     let t_sq = builder.square(t);
@@ -131,7 +136,7 @@ fn test_proof_quadratic() -> Result<()> {
 #[test]
 fn test_proof_quadratic_public_input() -> Result<()> {
     type F = <Tweedledee as Curve>::ScalarField;
-    let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+    let mut builder = CircuitBuilder::<Tweedledee>::new::<Tweedledum>(128);
     let seven_pi = builder.add_public_input();
     let one = builder.one_wire();
     let t = builder.add_virtual_target();
@@ -156,7 +161,7 @@ fn test_proof_quadratic_public_input() -> Result<()> {
 #[test]
 fn test_proof_sum_public_input() -> Result<()> {
     type F = <Tweedledee as Curve>::ScalarField;
-    let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+    let mut builder = CircuitBuilder::<Tweedledee>::new::<Tweedledum>(128);
     let n = 100;
     let triangular_usize = (1..=n).sum();
     let triangular_pis = builder.add_public_inputs(n);
@@ -193,7 +198,7 @@ fn test_proof_sum_public_input() -> Result<()> {
 #[test]
 fn test_proof_factorial_public_input() -> Result<()> {
     type F = <Tweedledee as Curve>::ScalarField;
-    let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+    let mut builder = CircuitBuilder::<Tweedledee>::new::<Tweedledum>(128);
     let n = 20;
     let factorial_usize = (1..=n).product();
     let factors_pis = builder.add_public_inputs(n);
@@ -231,7 +236,7 @@ fn test_proof_public_input() -> Result<()> {
     let values = (0..n)
         .map(|_| <Tweedledee as Curve>::ScalarField::rand())
         .collect::<Vec<_>>();
-    let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+    let mut builder = CircuitBuilder::<Tweedledee>::new::<Tweedledum>(128);
     let pis = (0..n)
         .map(|_| builder.add_public_input())
         .collect::<Vec<_>>();
@@ -258,7 +263,7 @@ fn test_proof_public_input_copied() -> Result<()> {
     let values = (0..n)
         .map(|_| <Tweedledee as Curve>::ScalarField::rand())
         .collect::<Vec<_>>();
-    let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+    let mut builder = CircuitBuilder::<Tweedledee>::new::<Tweedledum>(128);
     let pis = (0..n)
         .map(|_| builder.add_public_input())
         .collect::<Vec<_>>();
@@ -287,7 +292,7 @@ fn test_rescue_hash() -> Result<()> {
     type F = <Tweedledee as Curve>::ScalarField;
     let x = F::rand();
     let h = rescue_hash_1_to_1(x, 128);
-    let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+    let mut builder = CircuitBuilder::<Tweedledee>::new::<Tweedledum>(128);
     let t = builder.add_virtual_target();
     let h_pur = builder.rescue_hash_n_to_1(&[t]);
     let c = builder.constant_wire(h);
@@ -314,7 +319,7 @@ fn test_curve_add() -> Result<()> {
     let b = blake_hash_base_field_to_curve::<Tweedledum>(F::rand());
     let sum = (a + b).to_affine();
 
-    let mut builder = CircuitBuilder::<Tweedledee>::new(128);
+    let mut builder = CircuitBuilder::<Tweedledee>::new::<Tweedledum>(128);
 
     let ta = builder.add_virtual_point_target();
     let tb = builder.add_virtual_point_target();
@@ -349,7 +354,7 @@ fn test_curve_msm() -> Result<()> {
         .map(|_| blake_hash_base_field_to_curve::<Tweedledee>(BF::rand()))
         .collect::<Vec<_>>();
     let res = msm_parallel(&xs, &AffinePoint::batch_to_projective(&ps), 8);
-    let mut builder = CircuitBuilder::<Tweedledum>::new(128);
+    let mut builder = CircuitBuilder::<Tweedledum>::new::<Tweedledee>(128);
     let txs = builder.add_virtual_targets(n);
     let tps = builder.add_virtual_point_targets(n);
     let tres_purported = builder.curve_msm::<Tweedledee>(
@@ -390,7 +395,7 @@ fn test_base_4_sum() -> Result<()> {
     type SF = <C as Curve>::ScalarField;
     type B4 = Base4SumGate<C>;
 
-    let mut builder = CircuitBuilder::<C>::new(128);
+    let mut builder = CircuitBuilder::<C>::new::<InnerC>(128);
 
     let mut rng = thread_rng();
     let limbs = (0..B4::NUM_LIMBS) //(0..B4::NUM_LIMBS)
@@ -451,7 +456,7 @@ fn test_curve_double_gate() -> Result<()> {
     type InnerC = Tweedledum;
     type SF = <C as Curve>::ScalarField;
 
-    let mut builder = CircuitBuilder::<C>::new(128);
+    let mut builder = CircuitBuilder::<C>::new::<InnerC>(128);
 
     let p = blake_hash_base_field_to_curve::<InnerC>(SF::rand());
     let t_p = builder.constant_affine_point(p);
