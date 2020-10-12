@@ -6,6 +6,7 @@ use std::time::Instant;
 use anyhow::Result;
 use rayon::prelude::*;
 
+use crate::gates::gate_collection::GateCollection;
 use crate::halo::batch_opening_proof;
 use crate::partition::{get_subgroup_shift, TargetPartitions};
 use crate::plonk_challenger::Challenger;
@@ -34,7 +35,7 @@ pub struct Circuit<C: HaloCurve> {
     pub num_gates_without_pis: usize,
     pub gate_constants: Vec<Vec<C::ScalarField>>,
     pub routing_target_partitions: TargetPartitions<C::ScalarField>,
-    pub gates: Vec<Box<dyn Gate<C>>>,
+    pub gates: GateCollection<C>,
     pub generators: Vec<Box<dyn WitnessGenerator<C::ScalarField>>>,
     /// A generator of `subgroup_n`.
     pub subgroup_generator_n: C::ScalarField,
@@ -545,7 +546,8 @@ impl<C: HaloCurve> Circuit<C> {
             for &generator_idx in &pending_generator_indices {
                 let generator: &dyn WitnessGenerator<C::ScalarField> =
                     self.generators[generator_idx].borrow();
-                let result = generator.generate(&self.gate_constants, &witness);
+                let result =
+                    generator.generate(&self.gates.prefixes, &self.gate_constants, &witness);
                 populated_targets.extend(result.all_populated_targets());
                 witness.extend(result);
                 completed_generator_indices.insert(generator_idx);

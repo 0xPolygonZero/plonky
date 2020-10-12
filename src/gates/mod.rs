@@ -27,6 +27,7 @@ pub use public_input::*;
 pub use rescue_a::*;
 pub use rescue_b::*;
 
+use crate::gates::gate_collection::GateCollection;
 use crate::{CircuitBuilder, Field, HaloCurve, Target, WitnessGenerator};
 
 mod arithmetic;
@@ -37,6 +38,7 @@ mod constant;
 mod curve_add;
 mod curve_dbl;
 mod curve_endo;
+pub(crate) mod gate_collection;
 mod public_input;
 mod rescue_a;
 mod rescue_b;
@@ -45,16 +47,18 @@ pub const RESCUE_SPONGE_WIDTH: usize = 4;
 pub const RESCUE_SPONGE_RATE: usize = RESCUE_SPONGE_WIDTH - 1;
 
 pub fn evaluate_all_constraints<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
-    gates: &[Box<dyn Gate<C>>],
+    gates: &GateCollection<C>,
     local_constant_values: &[C::ScalarField],
     local_wire_values: &[C::ScalarField],
     right_wire_values: &[C::ScalarField],
     below_wire_values: &[C::ScalarField],
 ) -> Vec<C::ScalarField> {
     let constraint_sets_per_gate = gates
+        .gates
         .iter()
         .map(|g| {
             g.evaluate_filtered(
+                gates,
                 local_constant_values,
                 local_wire_values,
                 right_wire_values,
@@ -142,17 +146,19 @@ pub fn evaluate_all_constraints_recursively<
     InnerC: HaloCurve<BaseField = C::ScalarField>,
 >(
     builder: &mut CircuitBuilder<C>,
-    gates: &[Box<dyn Gate<C>>],
+    gates: &GateCollection<C>,
     local_constant_values: &[Target<C::ScalarField>],
     local_wire_values: &[Target<C::ScalarField>],
     right_wire_values: &[Target<C::ScalarField>],
     below_wire_values: &[Target<C::ScalarField>],
 ) -> Vec<Target<C::ScalarField>> {
     let constraint_sets_per_gate = gates
+        .gates
         .iter()
         .map(|g| {
             g.evaluate_filtered_recursively(
                 builder,
+                gates,
                 local_constant_values,
                 local_wire_values,
                 right_wire_values,
@@ -266,21 +272,22 @@ fn assert_inverses_recursively<C: HaloCurve>(
     builder.sub(x_y, one)
 }
 
-pub trait Gate<C: HaloCurve>: WitnessGenerator<C::ScalarField> {
+pub trait Gate<C: HaloCurve>: WitnessGenerator<C::ScalarField> + Sync + Send {
     fn name(&self) -> &'static str;
     fn degree(&self) -> usize;
     fn num_constants(&self) -> usize;
-    fn prefix(&self) -> &'static [bool];
 
     fn evaluate_filtered(
         &self,
+        gates: &GateCollection<C>,
         local_constant_values: &[C::ScalarField],
         local_wire_values: &[C::ScalarField],
         right_wire_values: &[C::ScalarField],
         below_wire_values: &[C::ScalarField],
     ) -> Vec<C::ScalarField> {
-        let filter = self.evaluate_prefix_filter(local_constant_values);
+        let filter = self.evaluate_prefix_filter(gates, local_constant_values);
         let unfiltered = self.evaluate_unfiltered(
+            gates,
             local_constant_values,
             local_wire_values,
             right_wire_values,
@@ -292,14 +299,16 @@ pub trait Gate<C: HaloCurve>: WitnessGenerator<C::ScalarField> {
     fn evaluate_filtered_recursively(
         &self,
         builder: &mut CircuitBuilder<C>,
+        gates: &GateCollection<C>,
         local_constant_values: &[Target<C::ScalarField>],
         local_wire_values: &[Target<C::ScalarField>],
         right_wire_values: &[Target<C::ScalarField>],
         below_wire_values: &[Target<C::ScalarField>],
     ) -> Vec<Target<C::ScalarField>> {
-        let filter = self.evaluate_prefix_filter_recursively(builder, local_constant_values);
+        let filter = self.evaluate_prefix_filter_recursively(builder, gates, local_constant_values);
         let unfiltered = self.evaluate_unfiltered_recursively(
             builder,
+            gates,
             local_constant_values,
             local_wire_values,
             right_wire_values,
@@ -311,9 +320,13 @@ pub trait Gate<C: HaloCurve>: WitnessGenerator<C::ScalarField> {
             .collect()
     }
 
-    fn evaluate_prefix_filter(&self, local_constant_values: &[C::ScalarField]) -> C::ScalarField {
+    fn evaluate_prefix_filter(
+        &self,
+        gates: &GateCollection<C>,
+        local_constant_values: &[C::ScalarField],
+    ) -> C::ScalarField {
         let mut product = C::ScalarField::ONE;
-        for (i, &bit) in self.prefix().iter().enumerate() {
+        for (i, &bit) in gates.prefix_from_str(self.name()).iter().enumerate() {
             let c = local_constant_values[i];
             if bit {
                 product = product * c;
@@ -327,11 +340,12 @@ pub trait Gate<C: HaloCurve>: WitnessGenerator<C::ScalarField> {
     fn evaluate_prefix_filter_recursively(
         &self,
         builder: &mut CircuitBuilder<C>,
+        gates: &GateCollection<C>,
         local_constant_values: &[Target<C::ScalarField>],
     ) -> Target<C::ScalarField> {
         let one = builder.one_wire();
         let mut product = one;
-        for (i, &bit) in self.prefix().iter().enumerate() {
+        for (i, &bit) in gates.prefix_from_str(self.name()).iter().enumerate() {
             let c = local_constant_values[i];
             let term = if bit { c } else { builder.sub(one, c) };
             product = builder.mul(product, term);
@@ -345,6 +359,7 @@ pub trait Gate<C: HaloCurve>: WitnessGenerator<C::ScalarField> {
     /// where `x` is the challenge point.
     fn evaluate_unfiltered(
         &self,
+        gates: &GateCollection<C>,
         local_constant_values: &[C::ScalarField],
         local_wire_values: &[C::ScalarField],
         right_wire_values: &[C::ScalarField],
@@ -355,6 +370,7 @@ pub trait Gate<C: HaloCurve>: WitnessGenerator<C::ScalarField> {
     fn evaluate_unfiltered_recursively(
         &self,
         builder: &mut CircuitBuilder<C>,
+        gates: &GateCollection<C>,
         local_constant_values: &[Target<C::ScalarField>],
         local_wire_values: &[Target<C::ScalarField>],
         right_wire_values: &[Target<C::ScalarField>],
@@ -365,12 +381,14 @@ pub trait Gate<C: HaloCurve>: WitnessGenerator<C::ScalarField> {
 /// Test that a gate's constraints are within degree 8n, including the gate prefix filter.
 #[macro_export]
 macro_rules! test_gate_low_degree {
-    ($method:ident, $curve:ty, $gate:ty) => {
+    ($method:ident, $curve:ty, $inner_curve:ty, $gate:ty) => {
+        use crate::util::get_canonical_gates;
         #[test]
         #[ignore] // Too slow to run regularly.
         #[allow(non_snake_case)]
         fn $method() {
             type C = $curve;
+            type InnerC = $inner_curve;
             type SF = <C as $crate::curve::Curve>::ScalarField;
 
             let n = 256;
@@ -435,12 +453,14 @@ macro_rules! test_gate_low_degree {
             let constant_values_16n_t = $crate::util::transpose(&constant_values_16n);
             let wire_values_16n_t = $crate::util::transpose(&wire_values_16n);
 
+            let gates = get_canonical_gates::<C, InnerC>().into();
             let gate = <$gate>::new(0);
             // Evaluate constraints at each of our 16n points.
             let mut constraint_values_16n: Vec<Vec<SF>> = Vec::new();
             for i in 0..16 * n {
                 let constraints: Vec<SF> = <$gate as $crate::gates::Gate<C>>::evaluate_filtered(
                     &gate,
+                    &gates,
                     &constant_values_16n_t[i],
                     &wire_values_16n_t[i],
                     &wire_values_16n_t[(i + 16) % (16 * n)],

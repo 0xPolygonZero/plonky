@@ -523,7 +523,7 @@ fn verify_assumptions<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField
     let vanishing_z_1_term = builder.mul(o_z_minus_1, lagrange_1_eval);
     let constraint_terms = evaluate_all_constraints_recursively::<C, InnerC>(
         builder,
-        &get_canonical_gates::<C, InnerC>(),
+        &get_canonical_gates::<C, InnerC>().into(),
         &o_constants,
         &o_local_wires,
         &o_right_wires,

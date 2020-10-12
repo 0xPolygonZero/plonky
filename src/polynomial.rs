@@ -429,7 +429,15 @@ mod test {
         let mut m = a.mul(&b);
         m.drain(n..);
         m.trim();
-        assert_eq!(m, Polynomial(vec![F::ONE]));
+        assert_eq!(
+            m,
+            Polynomial(vec![F::ONE]),
+            "a: {:#?}, b:{:#?}, n:{:#?}, m:{:#?}",
+            a,
+            b,
+            n,
+            m
+        );
     }
 
     #[test]
@@ -535,10 +543,22 @@ mod test {
         assert_eq!(Polynomial::<F>(vec![F::ZERO]), Polynomial(vec![F::ZERO]));
         assert_eq!(Polynomial::<F>(vec![]), Polynomial(vec![F::ZERO]));
         assert_eq!(Polynomial::<F>(vec![F::ZERO]), Polynomial(vec![]));
-        assert_eq!(Polynomial::<F>(vec![F::ZERO]), Polynomial(vec![F::ZERO, F::ZERO]));
-        assert_eq!(Polynomial::<F>(vec![F::ONE]), Polynomial(vec![F::ONE, F::ZERO]));
+        assert_eq!(
+            Polynomial::<F>(vec![F::ZERO]),
+            Polynomial(vec![F::ZERO, F::ZERO])
+        );
+        assert_eq!(
+            Polynomial::<F>(vec![F::ONE]),
+            Polynomial(vec![F::ONE, F::ZERO])
+        );
         assert_ne!(Polynomial::<F>(vec![]), Polynomial(vec![F::ONE]));
-        assert_ne!(Polynomial::<F>(vec![F::ZERO]), Polynomial(vec![F::ZERO, F::ONE]));
-        assert_ne!(Polynomial::<F>(vec![F::ZERO]), Polynomial(vec![F::ONE, F::ZERO]));
+        assert_ne!(
+            Polynomial::<F>(vec![F::ZERO]),
+            Polynomial(vec![F::ZERO, F::ONE])
+        );
+        assert_ne!(
+            Polynomial::<F>(vec![F::ZERO]),
+            Polynomial(vec![F::ONE, F::ZERO])
+        );
     }
 }

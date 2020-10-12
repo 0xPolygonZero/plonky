@@ -68,7 +68,7 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
     let degree = vk.degree;
 
     let constraint_terms = evaluate_all_constraints::<C, InnerC>(
-        &get_canonical_gates::<C, InnerC>(),
+        &get_canonical_gates::<C, InnerC>().into(),
         &proof.o_local.o_constants,
         &proof.o_local.o_wires,
         &proof.o_right.o_wires,

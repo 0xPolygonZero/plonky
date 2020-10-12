@@ -1,4 +1,6 @@
 use crate::{ArithmeticGate, Base4SumGate, BufferGate, ConstantGate, CurveAddGate, CurveDblGate, CurveEndoGate, Gate, HaloCurve, PublicInputGate, RescueStepAGate, RescueStepBGate};
+use std::rc::Rc;
+use std::sync::Arc;
 
 // TODO: Can this impl usize?
 pub(crate) fn ceil_div_usize(a: usize, b: usize) -> usize {
@@ -47,24 +49,21 @@ impl<C: HaloCurve> GateContainer<C> {
     pub fn num_constants(&self) -> usize {
         self.gate.num_constants()
     }
-    pub fn prefix(&self) -> &'static [bool] {
-        self.gate.prefix()
-    }
 }
 
 pub fn get_canonical_gates<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
-) -> Vec<Box<dyn Gate<C>>> {
+) -> Vec<Arc<dyn Gate<C>>> {
     vec![
-        Box::new(CurveAddGate::<C, InnerC>::new(0)),
-        Box::new(CurveDblGate::<C, InnerC>::new(0)),
-        Box::new(CurveEndoGate::<C, InnerC>::new(0)),
-        Box::new(Base4SumGate::<C>::new(0)),
-        Box::new(PublicInputGate::<C>::new(0)),
-        Box::new(BufferGate::<C>::new(0)),
-        Box::new(ConstantGate::<C>::new(0)),
-        Box::new(ArithmeticGate::<C>::new(0)),
-        Box::new(RescueStepAGate::<C>::new(0)),
-        Box::new(RescueStepBGate::<C>::new(0)),
+        Arc::new(CurveAddGate::<C, InnerC>::new(0)),
+        Arc::new(CurveDblGate::<C, InnerC>::new(0)),
+        Arc::new(CurveEndoGate::<C, InnerC>::new(0)),
+        Arc::new(Base4SumGate::<C>::new(0)),
+        Arc::new(PublicInputGate::<C>::new(0)),
+        Arc::new(BufferGate::<C>::new(0)),
+        Arc::new(ConstantGate::<C>::new(0)),
+        Arc::new(ArithmeticGate::<C>::new(0)),
+        Arc::new(RescueStepAGate::<C>::new(0)),
+        Arc::new(RescueStepBGate::<C>::new(0)),
     ]
 }
 

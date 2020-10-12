@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
+use crate::gates::gate_collection::{GateCollection, GatePrefixes};
 use crate::gates::*;
 use crate::plonk_util::{commit_polynomials, polynomials_to_values_padded, sigma_polynomials, values_to_polynomials};
 use crate::util::{ceil_div_usize, get_canonical_gates, log2_strict, transpose};
@@ -15,7 +16,7 @@ pub struct CircuitBuilder<C: HaloCurve> {
     gate_counts: BTreeMap<&'static str, usize>,
     gate_constants: Vec<Vec<C::ScalarField>>,
     copy_constraints: Vec<(Target<C::ScalarField>, Target<C::ScalarField>)>,
-    gates: Vec<Box<dyn Gate<C>>>,
+    pub gates: GateCollection<C>,
     generators: Vec<Box<dyn WitnessGenerator<C::ScalarField>>>,
     constant_wires: HashMap<C::ScalarField, Target<C::ScalarField>>,
 }
@@ -29,7 +30,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             gate_counts: BTreeMap::new(),
             gate_constants: Vec::new(),
             copy_constraints: Vec::new(),
-            gates: get_canonical_gates::<C, InnerC>(),
+            gates: get_canonical_gates::<C, InnerC>().into(),
             generators: Vec::new(),
             constant_wires: HashMap::new(),
         }
@@ -138,6 +139,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
+                prefixes: &GatePrefixes,
                 _constants: &[Vec<F>],
                 _witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
@@ -225,6 +227,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
+                prefixes: &GatePrefixes,
                 _constants: &[Vec<F>],
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
@@ -491,6 +494,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
+                prefixes: &GatePrefixes,
                 _constants: &[Vec<F>],
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
@@ -617,6 +621,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
+                prefixes: &GatePrefixes,
                 _constants: &[Vec<F>],
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
@@ -788,6 +793,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
+                prefixes: &GatePrefixes,
                 _constants: &[Vec<F>],
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
@@ -979,11 +985,12 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     /// Adds a gate to the circuit, without doing any routing.
     pub fn add_gate<G: Gate<C>>(&mut self, gate: G, gate_constants: Vec<C::ScalarField>) {
         trace!("{} {}", self.num_gates(), gate.name());
-        debug_assert!(gate.prefix().len() + gate_constants.len() <= NUM_CONSTANTS);
+        let prefix = self.gates.prefix(&gate);
+        debug_assert!(prefix.len() + gate_constants.len() <= NUM_CONSTANTS);
 
         // Merge the gate type's prefix bits with the given gate config constants.
         let mut all_constants = Vec::new();
-        for &prefix_bit in gate.prefix() {
+        for &prefix_bit in &prefix {
             all_constants.push(C::ScalarField::from_canonical_bool(prefix_bit));
         }
         all_constants.extend(gate_constants);
@@ -1045,6 +1052,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
+                prefixes: &GatePrefixes,
                 _constants: &[Vec<F>],
                 _witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {

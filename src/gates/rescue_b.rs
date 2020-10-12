@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use crate::gates::gate_collection::{GateCollection, GatePrefixes};
 use crate::gates::Gate;
 use crate::{mds_matrix, CircuitBuilder, Field, HaloCurve, PartialWitness, Target, Wire, WitnessGenerator, RESCUE_SPONGE_WIDTH};
 
@@ -33,12 +34,10 @@ impl<C: HaloCurve> Gate<C> for RescueStepBGate<C> {
     fn num_constants(&self) -> usize {
         4
     }
-    fn prefix(&self) -> &'static [bool] {
-        &[false, true]
-    }
 
     fn evaluate_unfiltered(
         &self,
+        gates: &GateCollection<C>,
         local_constant_values: &[C::ScalarField],
         local_wire_values: &[C::ScalarField],
         right_wire_values: &[C::ScalarField],
@@ -56,9 +55,10 @@ impl<C: HaloCurve> Gate<C> for RescueStepBGate<C> {
 
         let mds = mds_matrix::<C::ScalarField>(RESCUE_SPONGE_WIDTH);
 
+        let prefix_len = gates.prefix(self).len();
         let mut constraints = Vec::new();
         for i in 0..RESCUE_SPONGE_WIDTH {
-            let mut computed_out_i = local_constant_values[self.prefix().len() + i];
+            let mut computed_out_i = local_constant_values[prefix_len + i];
             for j in 0..RESCUE_SPONGE_WIDTH {
                 computed_out_i = computed_out_i + mds.get(i, j) * exps[j];
             }
@@ -70,6 +70,7 @@ impl<C: HaloCurve> Gate<C> for RescueStepBGate<C> {
     fn evaluate_unfiltered_recursively(
         &self,
         builder: &mut CircuitBuilder<C>,
+        gates: &GateCollection<C>,
         local_constant_values: &[Target<C::ScalarField>],
         local_wire_values: &[Target<C::ScalarField>],
         right_wire_values: &[Target<C::ScalarField>],
@@ -90,9 +91,10 @@ impl<C: HaloCurve> Gate<C> for RescueStepBGate<C> {
 
         let mds = mds_matrix::<C::ScalarField>(RESCUE_SPONGE_WIDTH);
 
+        let prefix_len = gates.prefix(self).len();
         let mut constraints = Vec::new();
         for i in 0..RESCUE_SPONGE_WIDTH {
-            let mut computed_out_i = local_constant_values[self.prefix().len() + i];
+            let mut computed_out_i = local_constant_values[prefix_len + i];
             for j in 0..RESCUE_SPONGE_WIDTH {
                 let mds_entry = builder.constant_wire(mds.get(i, j));
                 computed_out_i = builder.mul_add(mds_entry, exps[i], computed_out_i);
@@ -117,6 +119,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for RescueStepBGate<C> {
 
     fn generate(
         &self,
+        prefixes: &GatePrefixes,
         constants: &[Vec<C::ScalarField>],
         witness: &PartialWitness<C::ScalarField>,
     ) -> PartialWitness<C::ScalarField> {
@@ -135,9 +138,13 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for RescueStepBGate<C> {
 
         let mds = mds_matrix::<C::ScalarField>(RESCUE_SPONGE_WIDTH);
 
+        let prefix_len = prefixes
+            .get(self.name())
+            .expect(&format!("Gate {} not found.", self.name()))
+            .len();
         let mut result = PartialWitness::new();
         for i in 0..RESCUE_SPONGE_WIDTH {
-            let mut out_i = constants[self.prefix().len() + i];
+            let mut out_i = constants[prefix_len + i];
             for j in 0..RESCUE_SPONGE_WIDTH {
                 out_i = out_i + mds.get(i, j) * exps[j];
             }
@@ -153,11 +160,12 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for RescueStepBGate<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{test_gate_low_degree, RescueStepBGate, Tweedledum};
+    use crate::{test_gate_low_degree, RescueStepBGate, Tweedledee, Tweedledum};
 
     test_gate_low_degree!(
         low_degree_RescueStepBGate,
         Tweedledum,
+        Tweedledee,
         RescueStepBGate<Tweedledum>
     );
 }

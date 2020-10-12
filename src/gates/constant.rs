@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use crate::gates::gate_collection::{GateCollection, GatePrefixes};
 use crate::gates::Gate;
 use crate::{CircuitBuilder, HaloCurve, PartialWitness, Target, Wire, WitnessGenerator};
 
@@ -30,18 +31,17 @@ impl<C: HaloCurve> Gate<C> for ConstantGate<C> {
     fn num_constants(&self) -> usize {
         1
     }
-    fn prefix(&self) -> &'static [bool] {
-        &[true, false, true, true, false]
-    }
 
     fn evaluate_unfiltered(
         &self,
+        gates: &GateCollection<C>,
         local_constant_values: &[C::ScalarField],
         local_wire_values: &[C::ScalarField],
         _right_wire_values: &[C::ScalarField],
         _below_wire_values: &[C::ScalarField],
     ) -> Vec<C::ScalarField> {
-        let c = local_constant_values[self.prefix().len()];
+        let prefix_len = gates.prefix(self).len();
+        let c = local_constant_values[prefix_len];
         let out = local_wire_values[Self::WIRE_OUTPUT];
         vec![c - out]
     }
@@ -49,12 +49,14 @@ impl<C: HaloCurve> Gate<C> for ConstantGate<C> {
     fn evaluate_unfiltered_recursively(
         &self,
         builder: &mut CircuitBuilder<C>,
+        gates: &GateCollection<C>,
         local_constant_values: &[Target<C::ScalarField>],
         local_wire_values: &[Target<C::ScalarField>],
         _right_wire_values: &[Target<C::ScalarField>],
         _below_wire_values: &[Target<C::ScalarField>],
     ) -> Vec<Target<C::ScalarField>> {
-        let c = local_constant_values[self.prefix().len()];
+        let prefix_len = gates.prefix(self).len();
+        let c = local_constant_values[prefix_len];
         let out = local_wire_values[Self::WIRE_OUTPUT];
         vec![builder.sub(c, out)]
     }
@@ -67,11 +69,16 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for ConstantGate<C> {
 
     fn generate(
         &self,
+        prefixes: &GatePrefixes,
         constants: &[Vec<C::ScalarField>],
         _witness: &PartialWitness<C::ScalarField>,
     ) -> PartialWitness<C::ScalarField> {
         let constants = &constants[self.index];
-        let c = constants[self.prefix().len()];
+        let prefix_len = prefixes
+            .get(self.name())
+            .expect(&format!("Gate {} not found.", self.name()))
+            .len();
+        let c = constants[prefix_len];
         let mut result = PartialWitness::new();
         result.set_wire(
             Wire {
@@ -86,11 +93,12 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for ConstantGate<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{test_gate_low_degree, ConstantGate, Tweedledum};
+    use crate::{test_gate_low_degree, ConstantGate, Tweedledee, Tweedledum};
 
     test_gate_low_degree!(
         low_degree_ConstantGate,
         Tweedledum,
+        Tweedledee,
         ConstantGate<Tweedledum>
     );
 }

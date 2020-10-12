@@ -1,3 +1,4 @@
+use crate::gates::gate_collection::GatePrefixes;
 use crate::{CircuitBuilder, Field, HaloCurve, PartialWitness, Target, WitnessGenerator};
 use std::cmp::Ordering;
 
@@ -82,6 +83,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
+                prefixes: &GatePrefixes,
                 _constants: &[Vec<F>],
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {

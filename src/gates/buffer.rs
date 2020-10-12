@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use crate::gates::gate_collection::{GateCollection, GatePrefixes};
 use crate::gates::Gate;
 use crate::{CircuitBuilder, HaloCurve, PartialWitness, Target, WitnessGenerator};
 
@@ -31,12 +32,10 @@ impl<C: HaloCurve> Gate<C> for BufferGate<C> {
     fn num_constants(&self) -> usize {
         0
     }
-    fn prefix(&self) -> &'static [bool] {
-        &[true, false, true, false, false, false]
-    }
 
     fn evaluate_unfiltered(
         &self,
+        gates: &GateCollection<C>,
         _local_constant_values: &[C::ScalarField],
         _local_wire_values: &[C::ScalarField],
         _right_wire_values: &[C::ScalarField],
@@ -48,6 +47,7 @@ impl<C: HaloCurve> Gate<C> for BufferGate<C> {
     fn evaluate_unfiltered_recursively(
         &self,
         _builder: &mut CircuitBuilder<C>,
+        gates: &GateCollection<C>,
         _local_constant_values: &[Target<C::ScalarField>],
         _local_wire_values: &[Target<C::ScalarField>],
         _right_wire_values: &[Target<C::ScalarField>],
@@ -64,6 +64,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for BufferGate<C> {
 
     fn generate(
         &self,
+        prefixes: &GatePrefixes,
         _constants: &[Vec<C::ScalarField>],
         _witness: &PartialWitness<C::ScalarField>,
     ) -> PartialWitness<C::ScalarField> {
@@ -73,7 +74,12 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for BufferGate<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{test_gate_low_degree, BufferGate, Tweedledum};
+    use crate::{test_gate_low_degree, BufferGate, Tweedledee, Tweedledum};
 
-    test_gate_low_degree!(low_degree_BufferGate, Tweedledum, BufferGate<Tweedledum>);
+    test_gate_low_degree!(
+        low_degree_BufferGate,
+        Tweedledum,
+        Tweedledee,
+        BufferGate<Tweedledum>
+    );
 }

@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use crate::gates::gate_collection::{GateCollection, GatePrefixes};
 use crate::gates::Gate;
 use crate::{CircuitBuilder, HaloCurve, PartialWitness, Target, Wire, WitnessGenerator};
 
@@ -37,19 +38,18 @@ impl<C: HaloCurve> Gate<C> for ArithmeticGate<C> {
     fn num_constants(&self) -> usize {
         2
     }
-    fn prefix(&self) -> &'static [bool] {
-        &[true, false, false, true]
-    }
 
     fn evaluate_unfiltered(
         &self,
+        gates: &GateCollection<C>,
         local_constant_values: &[C::ScalarField],
         local_wire_values: &[C::ScalarField],
         _right_wire_values: &[C::ScalarField],
         _below_wire_values: &[C::ScalarField],
     ) -> Vec<C::ScalarField> {
-        let const_0 = local_constant_values[self.prefix().len()];
-        let const_1 = local_constant_values[self.prefix().len() + 1];
+        let prefix_len = gates.prefix(self).len();
+        let const_0 = local_constant_values[prefix_len];
+        let const_1 = local_constant_values[prefix_len + 1];
         let multiplicand_0 = local_wire_values[Self::WIRE_MULTIPLICAND_0];
         let multiplicand_1 = local_wire_values[Self::WIRE_MULTIPLICAND_1];
         let addend = local_wire_values[Self::WIRE_ADDEND];
@@ -61,13 +61,15 @@ impl<C: HaloCurve> Gate<C> for ArithmeticGate<C> {
     fn evaluate_unfiltered_recursively(
         &self,
         builder: &mut CircuitBuilder<C>,
+        gates: &GateCollection<C>,
         local_constant_values: &[Target<C::ScalarField>],
         local_wire_values: &[Target<C::ScalarField>],
         _right_wire_values: &[Target<C::ScalarField>],
         _below_wire_values: &[Target<C::ScalarField>],
     ) -> Vec<Target<C::ScalarField>> {
-        let const_0 = local_constant_values[self.prefix().len()];
-        let const_1 = local_constant_values[self.prefix().len() + 1];
+        let prefix_len = gates.prefix(self).len();
+        let const_0 = local_constant_values[prefix_len];
+        let const_1 = local_constant_values[prefix_len + 1];
         let multiplicand_0 = local_wire_values[Self::WIRE_MULTIPLICAND_0];
         let multiplicand_1 = local_wire_values[Self::WIRE_MULTIPLICAND_1];
         let addend = local_wire_values[Self::WIRE_ADDEND];
@@ -100,6 +102,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for ArithmeticGate<C> {
 
     fn generate(
         &self,
+        prefixes: &GatePrefixes,
         constants: &[Vec<C::ScalarField>],
         witness: &PartialWitness<C::ScalarField>,
     ) -> PartialWitness<C::ScalarField> {
@@ -120,8 +123,12 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for ArithmeticGate<C> {
             input: Self::WIRE_OUTPUT,
         };
 
-        let const_0 = constants[self.index][self.prefix().len()];
-        let const_1 = constants[self.index][self.prefix().len() + 1];
+        let prefix_len = prefixes
+            .get(self.name())
+            .expect(&format!("Gate {} not found.", self.name()))
+            .len();
+        let const_0 = constants[self.index][prefix_len];
+        let const_1 = constants[self.index][prefix_len + 1];
 
         let multiplicand_0 = witness.get_wire(multiplicand_0_target);
         let multiplicand_1 = witness.get_wire(multiplicand_1_target);
@@ -137,11 +144,12 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for ArithmeticGate<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{test_gate_low_degree, ArithmeticGate, Tweedledum};
+    use crate::{test_gate_low_degree, ArithmeticGate, Tweedledee, Tweedledum};
 
     test_gate_low_degree!(
         low_degree_ArithmeticGate,
         Tweedledum,
+        Tweedledee,
         ArithmeticGate<Tweedledum>
     );
 }

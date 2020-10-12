@@ -1,3 +1,4 @@
+use crate::gates::gate_collection::GatePrefixes;
 use crate::util::ceil_div_usize;
 use crate::{biguint_to_field, field_to_biguint, util::pad_to_multiple_usize, Base4SumGate, BoundedTarget, CircuitBuilder, Field, HaloCurve, OrderingTarget, PartialWitness, Target, WitnessGenerator};
 use num::{BigUint, Integer, One, Zero};
@@ -301,6 +302,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
+                prefixes: &GatePrefixes,
                 _constants: &[Vec<F>],
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
@@ -426,6 +428,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
+                prefixes: &GatePrefixes,
                 _constants: &[Vec<F>],
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
