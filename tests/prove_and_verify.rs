@@ -1,6 +1,7 @@
 use anyhow::Result;
-use plonky::{blake_hash_base_field_to_curve, msm_parallel, rescue_hash_1_to_1, verify_proof, AffinePoint, Base4SumGate, Circuit, CircuitBuilder, Curve, CurveMulOp, Field, HaloCurve, PartialWitness, Target, Tweedledee, Tweedledum, Wire, Witness};
+use plonky::{blake_hash_base_field_to_curve, msm_parallel, rescue_hash_1_to_1, verify_proof, AffinePoint, ArithmeticGate, Base4SumGate, BufferGate, Circuit, CircuitBuilder, ConstantGate, Curve, CurveMulOp, Field, Gate, HaloCurve, PartialWitness, Target, Tweedledee, Tweedledum, Wire, Witness};
 use rand::{thread_rng, Rng};
+use std::sync::Arc;
 use std::time::Instant;
 
 fn get_trivial_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
@@ -57,6 +58,7 @@ fn test_proof_trivial_circuit_many_proofs() -> Result<()> {
 
 #[test]
 fn test_proof_sum() -> Result<()> {
+    pretty_env_logger::init();
     let mut builder = CircuitBuilder::<Tweedledee>::new::<Tweedledum>(128);
     let t1 = builder.constant_wire(<Tweedledee as Curve>::ScalarField::ZERO);
     let t2 = builder.constant_wire(<Tweedledee as Curve>::ScalarField::ZERO);
@@ -79,9 +81,11 @@ fn test_proof_sum() -> Result<()> {
 #[test]
 #[ignore]
 fn test_proof_sum_big() -> Result<()> {
+    pretty_env_logger::init();
     let now = Instant::now();
     let mut builder = CircuitBuilder::<Tweedledee>::new::<Tweedledum>(128);
-    let ts = (0..10_000)
+    let n = 10;
+    let ts = (0..n)
         .map(|i| builder.constant_wire(<Tweedledee as Curve>::ScalarField::from_canonical_usize(i)))
         .collect::<Vec<_>>();
     let s = builder.add_many(&ts);
@@ -91,7 +95,7 @@ fn test_proof_sum_big() -> Result<()> {
     let mut partial_witness = PartialWitness::new();
     partial_witness.set_target(
         x,
-        <Tweedledee as Curve>::ScalarField::from_canonical_usize((10_000 * 9_999) / 2),
+        <Tweedledee as Curve>::ScalarField::from_canonical_usize((n * (n - 1)) / 2),
     );
     dbg!(now.elapsed());
     let circuit = builder.build();
@@ -129,6 +133,48 @@ fn test_proof_quadratic() -> Result<()> {
         .unwrap();
     let vk = circuit.to_vk();
     verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
+
+    Ok(())
+}
+
+#[test]
+#[ignore]
+fn test_proof_sum_custom_gates() -> Result<()> {
+    pretty_env_logger::init();
+    type C = Tweedledee;
+    let now = Instant::now();
+    let gates: Vec<Arc<dyn Gate<C>>> = vec![
+        Arc::new(BufferGate::<C>::new(0)),
+        Arc::new(ConstantGate::<C>::new(0)),
+        Arc::new(ArithmeticGate::<C>::new(0)),
+    ];
+    let mut builder = CircuitBuilder::<C>::new_with_gates(gates.into(), 128);
+    let n = 10;
+    let ts = (0..n)
+        .map(|i| builder.constant_wire(<Tweedledee as Curve>::ScalarField::from_canonical_usize(i)))
+        .collect::<Vec<_>>();
+    let s = builder.add_many(&ts);
+    let x = builder.add_virtual_target();
+    let z = builder.sub(s, x);
+    builder.assert_zero(z);
+    let mut partial_witness = PartialWitness::new();
+    partial_witness.set_target(
+        x,
+        <Tweedledee as Curve>::ScalarField::from_canonical_usize((n * (n - 1)) / 2),
+    );
+    dbg!(now.elapsed());
+    let circuit = builder.build();
+    dbg!(now.elapsed());
+    let witness = circuit.generate_witness(partial_witness);
+    dbg!(now.elapsed());
+    let proof = circuit
+        .generate_proof::<Tweedledum>(&witness, &[], true)
+        .unwrap();
+    dbg!(now.elapsed());
+    let vk = circuit.to_vk();
+    dbg!(now.elapsed());
+    verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
+    dbg!(now.elapsed());
 
     Ok(())
 }

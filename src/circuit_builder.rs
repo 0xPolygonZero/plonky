@@ -36,6 +36,20 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         }
     }
 
+    pub fn new_with_gates(gates: GateCollection<C>, security_bits: usize) -> Self {
+        CircuitBuilder {
+            security_bits,
+            public_input_index: 0,
+            virtual_target_index: 0,
+            gate_counts: BTreeMap::new(),
+            gate_constants: Vec::new(),
+            copy_constraints: Vec::new(),
+            gates,
+            generators: Vec::new(),
+            constant_wires: HashMap::new(),
+        }
+    }
+
     pub fn add_public_input(&mut self) -> Target<C::ScalarField> {
         let index = self.public_input_index;
         self.public_input_index += 1;
