@@ -1,8 +1,19 @@
 use anyhow::Result;
+use plonky::gates::gate_collection::GateCollection;
+use plonky::util::get_canonical_gates;
 use plonky::{blake_hash_base_field_to_curve, msm_parallel, rescue_hash_1_to_1, verify_proof, AffinePoint, ArithmeticGate, Base4SumGate, BufferGate, Circuit, CircuitBuilder, ConstantGate, Curve, CurveMulOp, Field, Gate, HaloCurve, PartialWitness, Target, Tweedledee, Tweedledum, Wire, Witness};
 use rand::{thread_rng, Rng};
 use std::sync::Arc;
 use std::time::Instant;
+#[macro_use]
+extern crate lazy_static;
+
+lazy_static! {
+    static ref GATES_TWEEDLEDEE: GateCollection<Tweedledee> =
+        get_canonical_gates::<Tweedledee, Tweedledum>().into();
+    static ref GATES_TWEEDLEDUM: GateCollection<Tweedledum> =
+        get_canonical_gates::<Tweedledum, Tweedledee>().into();
+}
 
 fn get_trivial_circuit<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>(
     x: C::ScalarField,
@@ -24,7 +35,14 @@ fn test_proof_trivial() -> Result<()> {
     let proof = circuit
         .generate_proof::<Tweedledum>(&witness, &[], true)
         .unwrap();
-    verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &circuit.into(), true)?;
+    verify_proof::<Tweedledee, Tweedledum>(
+        &[],
+        &proof,
+        &[],
+        &circuit.into(),
+        true,
+        GATES_TWEEDLEDEE.clone(),
+    )?;
 
     Ok(())
 }
@@ -40,9 +58,16 @@ fn test_proof_trivial_circuit_many_proofs() -> Result<()> {
             .generate_proof::<Tweedledum>(&witness, &[], true)
             .unwrap();
         let vk = circuit.to_vk();
-        let old_proof = verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, false)
-            .expect("Invalid proof")
-            .unwrap();
+        let old_proof = verify_proof::<Tweedledee, Tweedledum>(
+            &[],
+            &proof,
+            &[],
+            &vk,
+            false,
+            GATES_TWEEDLEDEE.clone(),
+        )
+        .expect("Invalid proof")
+        .unwrap();
         old_proofs.push(old_proof);
     }
     let (circuit, witness) =
@@ -51,7 +76,14 @@ fn test_proof_trivial_circuit_many_proofs() -> Result<()> {
         .generate_proof::<Tweedledum>(&witness, &old_proofs, true)
         .unwrap();
     let vk = circuit.to_vk();
-    verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &old_proofs, &vk, true)?;
+    verify_proof::<Tweedledee, Tweedledum>(
+        &[],
+        &proof,
+        &old_proofs,
+        &vk,
+        true,
+        GATES_TWEEDLEDEE.clone(),
+    )?;
 
     Ok(())
 }
@@ -73,7 +105,7 @@ fn test_proof_sum() -> Result<()> {
         .generate_proof::<Tweedledum>(&witness, &[], true)
         .unwrap();
     let vk = circuit.to_vk();
-    verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
+    verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true, GATES_TWEEDLEDEE.clone())?;
 
     Ok(())
 }
@@ -108,7 +140,7 @@ fn test_proof_sum_big() -> Result<()> {
     dbg!(now.elapsed());
     let vk = circuit.to_vk();
     dbg!(now.elapsed());
-    verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
+    verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true, GATES_TWEEDLEDEE.clone())?;
     dbg!(now.elapsed());
 
     Ok(())
@@ -132,15 +164,13 @@ fn test_proof_quadratic() -> Result<()> {
         .generate_proof::<Tweedledum>(&witness, &[], true)
         .unwrap();
     let vk = circuit.to_vk();
-    verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
+    verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true, GATES_TWEEDLEDEE.clone())?;
 
     Ok(())
 }
 
 #[test]
-#[ignore]
 fn test_proof_sum_custom_gates() -> Result<()> {
-    pretty_env_logger::init();
     type C = Tweedledee;
     let now = Instant::now();
     let gates: Vec<Arc<dyn Gate<C>>> = vec![
@@ -148,7 +178,7 @@ fn test_proof_sum_custom_gates() -> Result<()> {
         Arc::new(ConstantGate::<C>::new(0)),
         Arc::new(ArithmeticGate::<C>::new(0)),
     ];
-    let mut builder = CircuitBuilder::<C>::new_with_gates(gates.into(), 128);
+    let mut builder = CircuitBuilder::<C>::new_with_gates(gates.clone().into(), 128);
     let n = 10;
     let ts = (0..n)
         .map(|i| builder.constant_wire(<Tweedledee as Curve>::ScalarField::from_canonical_usize(i)))
@@ -173,7 +203,7 @@ fn test_proof_sum_custom_gates() -> Result<()> {
     dbg!(now.elapsed());
     let vk = circuit.to_vk();
     dbg!(now.elapsed());
-    verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
+    verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true, gates.into())?;
     dbg!(now.elapsed());
 
     Ok(())
@@ -199,7 +229,14 @@ fn test_proof_quadratic_public_input() -> Result<()> {
         .generate_proof::<Tweedledum>(&witness, &[], true)
         .unwrap();
     let vk = circuit.to_vk();
-    verify_proof::<Tweedledee, Tweedledum>(&[F::from_canonical_usize(7)], &proof, &[], &vk, false)?;
+    verify_proof::<Tweedledee, Tweedledum>(
+        &[F::from_canonical_usize(7)],
+        &proof,
+        &[],
+        &vk,
+        false,
+        GATES_TWEEDLEDEE.clone(),
+    )?;
 
     Ok(())
 }
@@ -235,6 +272,7 @@ fn test_proof_sum_public_input() -> Result<()> {
         &[],
         &vk,
         false,
+        GATES_TWEEDLEDEE.clone(),
     )?;
     dbg!(now.elapsed());
 
@@ -270,6 +308,7 @@ fn test_proof_factorial_public_input() -> Result<()> {
         &[],
         &vk,
         true,
+        GATES_TWEEDLEDEE.clone(),
     )?;
 
     Ok(())
@@ -297,7 +336,14 @@ fn test_proof_public_input() -> Result<()> {
     // Check that the public inputs are set correctly in the proof.
     assert_eq!(values, pis);
     let vk = circuit.to_vk();
-    verify_proof::<Tweedledee, Tweedledum>(&values, &proof, &[], &vk, true)?;
+    verify_proof::<Tweedledee, Tweedledum>(
+        &values,
+        &proof,
+        &[],
+        &vk,
+        true,
+        GATES_TWEEDLEDEE.clone(),
+    )?;
 
     Ok(())
 }
@@ -328,7 +374,14 @@ fn test_proof_public_input_copied() -> Result<()> {
     // Check that the public inputs are set correctly in the proof.
     assert_eq!(values, pis);
     let vk = circuit.to_vk();
-    verify_proof::<Tweedledee, Tweedledum>(&values, &proof, &[], &vk, true)?;
+    verify_proof::<Tweedledee, Tweedledum>(
+        &values,
+        &proof,
+        &[],
+        &vk,
+        true,
+        GATES_TWEEDLEDEE.clone(),
+    )?;
 
     Ok(())
 }
@@ -352,7 +405,7 @@ fn test_rescue_hash() -> Result<()> {
         .generate_proof::<Tweedledum>(&witness, &[], true)
         .unwrap();
     let vk = circuit.to_vk();
-    verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
+    verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true, GATES_TWEEDLEDEE.clone())?;
 
     Ok(())
 }
@@ -385,7 +438,7 @@ fn test_curve_add() -> Result<()> {
         .unwrap();
 
     let vk = circuit.to_vk();
-    verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true)?;
+    verify_proof::<Tweedledee, Tweedledum>(&[], &proof, &[], &vk, true, GATES_TWEEDLEDEE.clone())?;
 
     Ok(())
 }
@@ -429,7 +482,7 @@ fn test_curve_msm() -> Result<()> {
         .unwrap();
 
     let vk = circuit.to_vk();
-    verify_proof::<Tweedledum, Tweedledee>(&[], &proof, &[], &vk, true)?;
+    verify_proof::<Tweedledum, Tweedledee>(&[], &proof, &[], &vk, true, GATES_TWEEDLEDUM.clone())?;
 
     Ok(())
 }
@@ -491,7 +544,14 @@ fn test_base_4_sum() -> Result<()> {
     partial_witness.set_targets(&t_limbs, &limbs);
     let witness = circuit.generate_witness(partial_witness);
     let proof = circuit.generate_proof::<Tweedledum>(&witness, &[], true)?;
-    verify_proof::<C, InnerC>(&[], &proof, &[], &circuit.into(), true)?;
+    verify_proof::<C, InnerC>(
+        &[],
+        &proof,
+        &[],
+        &circuit.into(),
+        true,
+        GATES_TWEEDLEDEE.clone(),
+    )?;
 
     Ok(())
 }
@@ -515,7 +575,14 @@ fn test_curve_double_gate() -> Result<()> {
     let circuit = builder.build();
     let witness = circuit.generate_witness(PartialWitness::new());
     let proof = circuit.generate_proof::<Tweedledum>(&witness, &[], true)?;
-    verify_proof::<C, InnerC>(&[], &proof, &[], &circuit.into(), true)?;
+    verify_proof::<C, InnerC>(
+        &[],
+        &proof,
+        &[],
+        &circuit.into(),
+        true,
+        GATES_TWEEDLEDEE.clone(),
+    )?;
 
     Ok(())
 }

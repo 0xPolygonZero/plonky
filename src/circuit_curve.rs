@@ -634,6 +634,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 mod tests {
     use anyhow::Result;
 
+    use crate::util::get_canonical_gates;
     use crate::{verify_proof, CircuitBuilder, Curve, CurveMulOp, Field, PartialWitness, Tweedledee, Tweedledum};
 
     #[test]
@@ -666,7 +667,14 @@ mod tests {
         let witness = circuit.generate_witness(PartialWitness::new());
         let proof = circuit.generate_proof::<InnerC>(&witness, &[], false)?;
         let vk = circuit.to_vk();
-        verify_proof::<C, InnerC>(&[], &proof, &[], &vk, true)?;
+        verify_proof::<C, InnerC>(
+            &[],
+            &proof,
+            &[],
+            &vk,
+            true,
+            get_canonical_gates::<C, InnerC>().into(),
+        )?;
 
         Ok(())
     }

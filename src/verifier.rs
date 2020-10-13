@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::partition::get_subgroup_shift;
 
 use crate::gates::evaluate_all_constraints;
+use crate::gates::gate_collection::GateCollection;
 use crate::halo::verify_ipa;
 use crate::plonk_proof::OldProof;
 use crate::plonk_util::{halo_g, halo_n, halo_n_mul, halo_s, pedersen_hash, powers, reduce_with_powers};
@@ -55,6 +56,7 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
     old_proofs: &[OldProof<C>],
     vk: &VerificationKey<C>,
     verify_g: bool,
+    gates: GateCollection<C>,
 ) -> Result<Option<OldProof<C>>> {
     // Verify that the proof parameters are valid.
     check_proof_parameters(proof)?;
@@ -68,7 +70,7 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
     let degree = vk.degree;
 
     let constraint_terms = evaluate_all_constraints::<C, InnerC>(
-        &get_canonical_gates::<C, InnerC>().into(),
+        &gates,
         &proof.o_local.o_constants,
         &proof.o_local.o_wires,
         &proof.o_right.o_wires,

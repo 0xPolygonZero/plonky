@@ -38,7 +38,7 @@ mod constant;
 mod curve_add;
 mod curve_dbl;
 mod curve_endo;
-pub(crate) mod gate_collection;
+pub mod gate_collection;
 mod public_input;
 mod rescue_a;
 mod rescue_b;

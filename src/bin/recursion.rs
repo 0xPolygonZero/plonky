@@ -1,11 +1,23 @@
 use anyhow::Result;
 use std::time::Instant;
 
+use plonky::gates::gate_collection::GateCollection;
+use plonky::util::get_canonical_gates;
 use plonky::{recursive_verification_circuit, verify_proof, BufferGate, Circuit, CircuitBuilder, PartialWitness, Tweedledee, Tweedledum};
 
 const INNER_PROOF_DEGREE_POW: usize = 14;
 const INNER_PROOF_DEGREE: usize = 1 << INNER_PROOF_DEGREE_POW;
 const SECURITY_BITS: usize = 128;
+
+#[macro_use]
+extern crate lazy_static;
+
+lazy_static! {
+    static ref GATES_TWEEDLEDEE: GateCollection<Tweedledee> =
+        get_canonical_gates::<Tweedledee, Tweedledum>().into();
+    static ref GATES_TWEEDLEDUM: GateCollection<Tweedledum> =
+        get_canonical_gates::<Tweedledum, Tweedledee>().into();
+}
 
 fn main() -> Result<()> {
     println!("Generating inner circuit");
@@ -32,7 +44,14 @@ fn main() -> Result<()> {
     println!("Verifying inner proof");
     let start = Instant::now();
     let inner_vk = inner_circuit.to_vk();
-    verify_proof::<Tweedledum, Tweedledee>(&[], &inner_proof, &old_proofs, &inner_vk, true)?;
+    verify_proof::<Tweedledum, Tweedledee>(
+        &[],
+        &inner_proof,
+        &old_proofs,
+        &inner_vk,
+        true,
+        GATES_TWEEDLEDUM.clone(),
+    )?;
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     println!();
 
@@ -92,7 +111,7 @@ fn main() -> Result<()> {
         recursion_circuit.circuit.num_public_inputs
     );
     let vk = recursion_circuit.circuit.to_vk();
-    verify_proof::<Tweedledee, Tweedledum>(&pis, &proof, &[], &vk, true)?;
+    verify_proof::<Tweedledee, Tweedledum>(&pis, &proof, &[], &vk, true, GATES_TWEEDLEDEE.clone())?;
     println!("Finished in {}s", start.elapsed().as_secs_f64());
     Ok(())
 }

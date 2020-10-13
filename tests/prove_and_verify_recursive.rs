@@ -1,5 +1,16 @@
 use anyhow::Result;
+use plonky::gates::gate_collection::GateCollection;
+use plonky::util::get_canonical_gates;
 use plonky::{recursive_verification_circuit, verify_proof, CircuitBuilder, Curve, Field, PartialWitness, Tweedledee, Tweedledum};
+#[macro_use]
+extern crate lazy_static;
+
+lazy_static! {
+    static ref GATES_TWEEDLEDEE: GateCollection<Tweedledee> =
+        get_canonical_gates::<Tweedledee, Tweedledum>().into();
+    static ref GATES_TWEEDLEDUM: GateCollection<Tweedledum> =
+        get_canonical_gates::<Tweedledum, Tweedledee>().into();
+}
 
 #[test]
 // TODO: Fails for the moment.
@@ -15,7 +26,14 @@ fn test_proof_trivial_recursive() -> Result<()> {
         .generate_proof::<Tweedledum>(&witness, &[], true)
         .unwrap();
     let inner_vk = inner_circuit.to_vk();
-    verify_proof::<Tweedledee, Tweedledum>(&[], &inner_proof, &[], &inner_vk, true)?;
+    verify_proof::<Tweedledee, Tweedledum>(
+        &[],
+        &inner_proof,
+        &[],
+        &inner_vk,
+        true,
+        GATES_TWEEDLEDEE.clone(),
+    )?;
 
     let recursion_circuit = recursive_verification_circuit::<Tweedledum, Tweedledee>(
         inner_circuit.degree_pow(),
@@ -36,7 +54,7 @@ fn test_proof_trivial_recursive() -> Result<()> {
         .generate_proof::<Tweedledee>(&recursion_witness, &[], true)
         .unwrap();
     let vk = recursion_circuit.circuit.to_vk();
-    verify_proof::<Tweedledum, Tweedledee>(&[], &proof, &[], &vk, true)?;
+    verify_proof::<Tweedledum, Tweedledee>(&[], &proof, &[], &vk, true, GATES_TWEEDLEDUM.clone())?;
 
     Ok(())
 }

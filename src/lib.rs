@@ -6,12 +6,10 @@
 #![feature(associated_type_bounds)]
 // This is annoying and often wrong.
 #![allow(clippy::needless_range_loop)]
-
 // Required for generic low-level functions on small arrays.
 #![feature(const_generics)]
 // Unfortunately it makes rustc complain, so we include
 #![allow(incomplete_features)]
-
 
 pub use bigint::*;
 pub use circuit_bigint::*;
@@ -47,9 +45,10 @@ mod circuit_foreign_field;
 mod circuit_ordering;
 mod conversions;
 mod curve;
+pub mod custom_gates;
 mod fft;
 mod field;
-mod gates;
+pub mod gates;
 pub mod halo;
 mod hash_to_curve;
 mod mds;
@@ -68,7 +67,6 @@ mod target;
 pub mod util;
 mod verifier;
 mod witness;
-pub mod custom_gates;
 
 #[macro_use]
 extern crate log;
