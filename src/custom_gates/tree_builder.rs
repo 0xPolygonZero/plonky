@@ -1,7 +1,5 @@
-use crate::{NUM_CONSTANTS, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER, CurveAddGate, RescueStepBGate, RescueStepAGate, ArithmeticGate, ConstantGate, BufferGate, PublicInputGate, Base4SumGate, CurveEndoGate, CurveDblGate, Tweedledum, Tweedledee, Gate };
+use crate::{NUM_CONSTANTS, QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER};
 use std::collections::HashMap;
-
-
 
 #[derive(Debug, Clone)]
 pub struct Tree {
@@ -25,11 +23,11 @@ impl Tree {
             node,
             left: left.map(Box::new),
             right: right.map(Box::new),
-
         }
     }
 
     /// Saves the tree to a `graph.dot` in Graphviz format.
+    #[allow(dead_code)]
     fn graph(&self) {
         let mut i = 0;
         let mut res = vec![];
@@ -51,9 +49,9 @@ impl Tree {
                 to_show.insert(0, rr);
             }
         }
-        let mut fin = (1..=i).map(|j| {
-            format!("X{} [label=\"\"]", j)
-        }).collect::<Vec<_>>();
+        let mut fin = (1..=i)
+            .map(|j| format!("X{} [label=\"\"]", j))
+            .collect::<Vec<_>>();
         fin.extend(res);
         let fin: String = fin.join("\n");
         let graph = format!("digraph G {{\ngraph [ordering=\"out\"]\n{}\n}}", fin);
@@ -90,11 +88,17 @@ fn construct_tree(gates: &[GateDesc], depth: usize, level: usize) -> Vec<(Tree, 
     if gates.is_empty() || gates[0].1 - 1 < level {
         return vec![];
     } else if depth == 0 {
-        return vec![(Tree::new(gates[0].0.clone(), None, None), gates[1..].to_vec())];
+        return vec![(
+            Tree::new(gates[0].0.clone(), None, None),
+            gates[1..].to_vec(),
+        )];
     }
 
     let mut left = construct_tree(gates, depth - 1, level + 1);
-    left.push((Tree::new(gates[0].0.clone(), None, None), gates[1..].to_vec()));
+    left.push((
+        Tree::new(gates[0].0.clone(), None, None),
+        gates[1..].to_vec(),
+    ));
     let mut ans = vec![];
     for (l, gs) in left.into_iter() {
         if gs.is_empty() {
@@ -112,13 +116,15 @@ fn construct_tree(gates: &[GateDesc], depth: usize, level: usize) -> Vec<(Tree, 
 }
 
 pub fn gates_to_tree(gates: &[(&str, usize, usize)]) -> Tree {
-    let mut gates = gates.iter().map(|x| {
-        let max_prefix_len = (NUM_CONSTANTS - x.1).min(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER + 1 - x.2);
-        (x.0.to_string(), max_prefix_len, x.1, x.2)
-    }).collect::<Vec<_>>();
-    gates.sort_by(|x, y| {
-        x.1.cmp(&y.1)
-    });
+    let mut gates = gates
+        .iter()
+        .map(|x| {
+            let max_prefix_len =
+                (NUM_CONSTANTS - x.1).min(QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER + 1 - x.2);
+            (x.0.to_string(), max_prefix_len, x.1, x.2)
+        })
+        .collect::<Vec<_>>();
+    gates.sort_by(|x, y| x.1.cmp(&y.1));
 
     for d in 1..100 {
         let trees = construct_tree(&gates, d, 0);

@@ -1,4 +1,4 @@
-use crate::gates::gate_collection::{GateCollection, GatePrefixes};
+use crate::gates::gate_collection::GatePrefixes;
 use crate::util::transpose;
 use crate::{biguint_to_field, biguint_to_limbs, field_to_biguint, AffinePoint, AffinePointTarget, BigIntTarget, Curve, Field, ForeignFieldTarget, OrderingTarget, Target, Wire, LIMB_BITS, NUM_ADVICE_WIRES, NUM_ROUTED_WIRES, NUM_WIRES};
 use num::{BigUint, Zero};

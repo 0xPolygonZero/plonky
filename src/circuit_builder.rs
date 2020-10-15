@@ -153,7 +153,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                prefixes: &GatePrefixes,
+                _prefixes: &GatePrefixes,
                 _constants: &[Vec<F>],
                 _witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
@@ -241,7 +241,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                prefixes: &GatePrefixes,
+                _prefixes: &GatePrefixes,
                 _constants: &[Vec<F>],
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
@@ -508,7 +508,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                prefixes: &GatePrefixes,
+                _prefixes: &GatePrefixes,
                 _constants: &[Vec<F>],
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
@@ -635,7 +635,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                prefixes: &GatePrefixes,
+                _prefixes: &GatePrefixes,
                 _constants: &[Vec<F>],
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
@@ -807,7 +807,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                prefixes: &GatePrefixes,
+                _prefixes: &GatePrefixes,
                 _constants: &[Vec<F>],
                 witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {
@@ -1066,7 +1066,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                prefixes: &GatePrefixes,
+                _prefixes: &GatePrefixes,
                 _constants: &[Vec<F>],
                 _witness: &PartialWitness<F>,
             ) -> PartialWitness<F> {

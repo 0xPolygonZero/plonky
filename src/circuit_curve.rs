@@ -239,7 +239,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
 
             fn generate(
                 &self,
-                prefixes: &GatePrefixes,
+                _prefixes: &GatePrefixes,
                 _constants: &[Vec<InnerC::BaseField>],
                 witness: &PartialWitness<InnerC::BaseField>,
             ) -> PartialWitness<InnerC::BaseField> {

@@ -1,5 +1,4 @@
 use crate::{ArithmeticGate, Base4SumGate, BufferGate, ConstantGate, CurveAddGate, CurveDblGate, CurveEndoGate, Gate, HaloCurve, PublicInputGate, RescueStepAGate, RescueStepBGate};
-use std::rc::Rc;
 use std::sync::Arc;
 
 // TODO: Can this impl usize?

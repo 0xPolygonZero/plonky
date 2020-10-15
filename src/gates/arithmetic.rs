@@ -125,7 +125,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for ArithmeticGate<C> {
 
         let prefix_len = prefixes
             .get(self.name())
-            .expect(&format!("Gate {} not found.", self.name()))
+            .unwrap_or_else(|| panic!("Gate {} not found.", self.name()))
             .len();
         let const_0 = constants[self.index][prefix_len];
         let const_1 = constants[self.index][prefix_len + 1];

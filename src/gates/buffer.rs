@@ -35,7 +35,7 @@ impl<C: HaloCurve> Gate<C> for BufferGate<C> {
 
     fn evaluate_unfiltered(
         &self,
-        gates: &GateCollection<C>,
+        _gates: &GateCollection<C>,
         _local_constant_values: &[C::ScalarField],
         _local_wire_values: &[C::ScalarField],
         _right_wire_values: &[C::ScalarField],
@@ -47,7 +47,7 @@ impl<C: HaloCurve> Gate<C> for BufferGate<C> {
     fn evaluate_unfiltered_recursively(
         &self,
         _builder: &mut CircuitBuilder<C>,
-        gates: &GateCollection<C>,
+        _gates: &GateCollection<C>,
         _local_constant_values: &[Target<C::ScalarField>],
         _local_wire_values: &[Target<C::ScalarField>],
         _right_wire_values: &[Target<C::ScalarField>],
@@ -64,7 +64,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for BufferGate<C> {
 
     fn generate(
         &self,
-        prefixes: &GatePrefixes,
+        _prefixes: &GatePrefixes,
         _constants: &[Vec<C::ScalarField>],
         _witness: &PartialWitness<C::ScalarField>,
     ) -> PartialWitness<C::ScalarField> {

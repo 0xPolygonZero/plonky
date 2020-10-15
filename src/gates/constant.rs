@@ -76,7 +76,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for ConstantGate<C> {
         let constants = &constants[self.index];
         let prefix_len = prefixes
             .get(self.name())
-            .expect(&format!("Gate {} not found.", self.name()))
+            .unwrap_or_else(|| panic!("Gate {} not found.", self.name()))
             .len();
         let c = constants[prefix_len];
         let mut result = PartialWitness::new();

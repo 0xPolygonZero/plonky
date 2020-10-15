@@ -1,67 +1,16 @@
 use crate::{CircuitBuilder, Field, HaloCurve, Target};
-use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::iter::FromIterator;
-use std::ops::{Index, IndexMut, RangeBounds};
-use std::slice::{Iter, IterMut, SliceIndex};
 
 /// Struct holding a multivariate polynomial \sum c_e.x^e as the map `e => c`.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct MultivariatePolynomial<F: Field, const N: usize>(HashMap<[usize; N], F>);
-
-// impl<F: Field, const N: usize> Parti
-//     fn eq(&self, other: &Self) -> bool {
-//         self.hashmap() == other.hashmap()
-//     }
-// }
-
-// impl<F: Field, const N: usize> Eq for MultivariatePolynomial<F, N> {}
-//
-// impl<F, I, const N: usize> Index<I> for MultivariatePolynomial<F, N>
-// where
-//     F: Field,
-//     I: SliceIndex<[(F, [usize; N])]>,
-// {
-//     type Output = I::Output;
-//
-//     /// Indexing on the coefficients.
-//     fn index(&self, index: I) -> &Self::Output {
-//         &self.0[index]
-//     }
-// }
-
-// impl<F, I, const N: usize> IndexMut<I> for MultivariatePolynomial<F, N>
-// where
-//     F: Field,
-//     I: SliceIndex<[(F, [usize; N])]>,
-// {
-//     fn index_mut(&mut self, index: I) -> &mut <Self as Index<I>>::Output {
-//         &mut self.0[index]
-//     }
-// }
-
-// impl<F: Field, const N: usize> From<Vec<(F, [usize; N])>> for MultivariatePolynomial<F, N> {
-//     /// Takes a vector of coefficients and returns the corresponding polynomial.
-//     fn from(coeffs: Vec<(F, [usize; N])>) -> Self {
-//         Self(coeffs)
-//     }
-// }
 
 impl<F: Field, const N: usize> MultivariatePolynomial<F, N> {
     /// Takes a slice of coefficients and returns the corresponding polynomial.
     pub fn from_coeffs(coeffs: &[([usize; N], F)]) -> Self {
         Self(HashMap::from_iter(coeffs.iter().copied()))
     }
-    //
-    // /// Returns the coefficient vector.
-    // pub fn coeffs(&self) -> &[([usize; N], F)] {
-    //     &self.0.iter().copied().collect::<Vec<_>>()
-    // }
-    //
-    // /// Empty polynomial;
-    // pub fn empty() -> Self {
-    //     Self(HashMap::new())
-    // }
 
     /// Zero polynomial with length `len`.
     /// `len = 1` is the standard representation, but sometimes it's useful to set `len > 1`
@@ -93,6 +42,7 @@ impl<F: Field, const N: usize> MultivariatePolynomial<F, N> {
     }
 
     /// Degree of the polynomial + 1.
+    #[allow(dead_code)]
     fn degree_plus_one(&self) -> usize {
         self.0
             .keys()
@@ -137,36 +87,11 @@ impl<F: Field, const N: usize> MultivariatePolynomial<F, N> {
         })
     }
 
-    // /// Evaluates the polynomial at a point `x`, given the list of powers of `x`.
-    // /// Assumes that `self.len() == x_pow.len()`.
-    // pub fn eval_from_power(&self, x_pow: &[F]) -> F {
-    //     F::inner_product(&self[..], x_pow)
-    // }
-
-    // /// Evaluates the polynomial on subgroup of `F^*` with a given FFT precomputation.
-    // pub fn eval_domain(&self, fft_precomputation: &FftPrecomputation<F>) -> Vec<F> {
-    //     let domain_size = fft_precomputation.size();
-    //     if self.len() < domain_size {
-    //         // Need to pad the polynomial to have the same length as the domain.
-    //         fft_with_precomputation(&self.padded(domain_size).coeffs(), fft_precomputation)
-    //     } else {
-    //         fft_with_precomputation(&self.coeffs(), fft_precomputation)
-    //     }
-    // }
-
-    // /// Computes the interpolating polynomial of a list of `values` on a subgroup of `F^*`.
-    // pub fn from_evaluations(values: &[F], fft_precomputation: &FftPrecomputation<F>) -> Self {
-    //     Self(ifft_with_precomputation_power_of_2(
-    //         values,
-    //         fft_precomputation,
-    //     ))
-    // }
-
     /// Leading coefficient.
     pub fn lead(&self) -> F {
         self.iter()
             .max_by(|x, y| x.0.iter().sum::<usize>().cmp(&y.0.iter().sum::<usize>()))
-            .map(|(e, &c)| c)
+            .map(|(_e, &c)| c)
             .unwrap_or(F::ZERO)
     }
 
@@ -176,13 +101,14 @@ impl<F: Field, const N: usize> MultivariatePolynomial<F, N> {
     }
 
     /// Multiply the polynomial's coefficients by a scalar.
+    #[allow(dead_code)]
     fn scalar_mul(&self, c: F) -> Self {
         Self::from_coeffs(&self.iter().map(|(&e, &x)| (e, c * x)).collect::<Vec<_>>())
     }
 
     /// Removes all zero coefficients.
     pub fn trim(&mut self) {
-        self.0.retain(|e, c| c.is_nonzero());
+        self.0.retain(|_e, c| c.is_nonzero());
     }
 
     /// Polynomial addition.
@@ -243,7 +169,3 @@ impl<F: Field, const N: usize> MultivariatePolynomial<F, N> {
         Self::from_coeffs(&[([0; N], c)])
     }
 }
-
-// fn compose<F: Field, const M: usize, const N: usize>(p: MultivariatePolynomial<F, M>, polys: [MultivariatePolynomial<F, N>; M]) -> MultivariatePolynomial<F, N> {
-//     todo!()
-// }

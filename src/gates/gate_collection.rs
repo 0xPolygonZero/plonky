@@ -1,7 +1,6 @@
 use crate::custom_gates::tree_builder::gates_to_tree;
 use crate::{Gate, HaloCurve};
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::sync::Arc;
 
 pub type GatePrefixes = HashMap<String, Vec<bool>>;
@@ -45,13 +44,13 @@ impl<C: HaloCurve> GateCollection<C> {
     pub fn prefix<G: Gate<C>>(&self, gate: &G) -> Vec<bool> {
         self.prefixes
             .get(gate.name())
-            .expect(&format!("Gate {} not found", gate.name()))
+            .unwrap_or_else(|| panic!("Gate {} not found.", gate.name()))
             .clone()
     }
     pub fn prefix_from_str(&self, gate_name: &str) -> Vec<bool> {
         self.prefixes
             .get(gate_name)
-            .expect(&format!("Gate {} not found", gate_name))
+            .unwrap_or_else(|| panic!("Gate {} not found.", gate_name))
             .clone()
     }
 }

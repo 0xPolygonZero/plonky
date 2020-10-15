@@ -149,7 +149,7 @@ impl<C: HaloCurve> WitnessGenerator<C::ScalarField> for RescueStepAGate<C> {
 
         let prefix_len = prefixes
             .get(self.name())
-            .expect(&format!("Gate {} not found.", self.name()))
+            .unwrap_or_else(|| panic!("Gate {} not found.", self.name()))
             .len();
         let mut result = PartialWitness::new();
         for i in 0..RESCUE_SPONGE_WIDTH {

@@ -17,7 +17,7 @@ use crate::polynomial::Polynomial;
 use crate::target::Target;
 use crate::util::{ceil_div_usize, log2_strict};
 use crate::witness::{PartialWitness, Witness, WitnessGenerator};
-use crate::{evaluate_all_constraints, fft_with_precomputation_power_of_2, AffinePoint, ArithmeticGate, Base4SumGate, BufferGate, ConstantGate, CurveAddGate, CurveDblGate, CurveEndoGate, FftPrecomputation, Field, Gate, HaloCurve, MsmPrecomputation, OpeningSet, PublicInputGate, RescueStepAGate, RescueStepBGate, VerificationKey};
+use crate::{evaluate_all_constraints, fft_with_precomputation_power_of_2, AffinePoint, FftPrecomputation, Field, HaloCurve, MsmPrecomputation, OpeningSet, VerificationKey};
 
 pub const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
