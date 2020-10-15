@@ -55,7 +55,7 @@ impl<Fp: Field> Target<Fp> {
             Target::PublicInput(pi) => pi.index,
             Target::VirtualTarget(v) => v.index,
             Target::Wire(w) => w.gate,
-            Target::_Field(_, _) => unreachable!()
+            Target::_Field(_, _) => unreachable!(),
         }
     }
 }
@@ -77,7 +77,10 @@ pub struct PublicInput<F: Field> {
 /// See `PublicInputGate` for an explanation of how we make public inputs routable.
 impl<F: Field> PublicInput<F> {
     pub fn new(index: usize) -> Self {
-        PublicInput { index, _field: PhantomData }
+        PublicInput {
+            index,
+            _field: PhantomData,
+        }
     }
 
     pub(crate) fn original_wire(&self, offset: usize) -> Wire {
@@ -99,6 +102,9 @@ impl<F: Field> PublicInput<F> {
     }
 
     pub fn convert<Fq: Field>(self) -> PublicInput<Fq> {
-        PublicInput { index: self.index, _field: PhantomData }
+        PublicInput {
+            index: self.index,
+            _field: PhantomData,
+        }
     }
 }

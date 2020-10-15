@@ -34,6 +34,9 @@ impl<C: HaloCurve> From<Vec<Arc<dyn Gate<C>>>> for GateCollection<C> {
                 .collect::<Vec<_>>(),
         );
         let prefixes = tree.prefixes();
+        prefixes
+            .iter()
+            .for_each(|(s, p)| trace!("Prefix for gate {}: {:?}", s, p));
         GateCollection { gates, prefixes }
     }
 }

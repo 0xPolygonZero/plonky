@@ -1,11 +1,11 @@
-use crate::Field;
+use crate::{CircuitBuilder, Field, HaloCurve, Target};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
 use std::ops::{Index, IndexMut, RangeBounds};
 use std::slice::{Iter, IterMut, SliceIndex};
 
-/// Struct holding a mulivariate polynomial \sum c_e.x^e as the map `e => c`.
+/// Struct holding a multivariate polynomial \sum c_e.x^e as the map `e => c`.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct MultivariatePolynomial<F: Field, const N: usize>(HashMap<[usize; N], F>);
 
@@ -116,6 +116,27 @@ impl<F: Field, const N: usize> MultivariatePolynomial<F, N> {
         })
     }
 
+    /// Evaluates the polynomial at a target `t`.
+    /// TODO: This isn't optimal at all. A multivariate Horner's method would be better.
+    pub fn eval_recursively<C: HaloCurve<ScalarField = F>>(
+        &self,
+        builder: &mut CircuitBuilder<C>,
+        ts: [Target<F>; N],
+    ) -> Target<F> {
+        let zero = builder.constant_wire(F::ZERO);
+        self.iter().fold(zero, |acc, (es, &c)| {
+            let terms = ts
+                .iter()
+                .zip(es)
+                .map(|(&t, &e)| builder.exp_constant(t, F::from_canonical_usize(e)))
+                .collect::<Vec<_>>();
+            let monomial = builder.mul_many(&terms);
+            let c_target = builder.constant_wire(c);
+            let scaled_monomial = builder.mul(c_target, monomial);
+            builder.add(acc, scaled_monomial)
+        })
+    }
+
     // /// Evaluates the polynomial at a point `x`, given the list of powers of `x`.
     // /// Assumes that `self.len() == x_pow.len()`.
     // pub fn eval_from_power(&self, x_pow: &[F]) -> F {
@@ -149,10 +170,10 @@ impl<F: Field, const N: usize> MultivariatePolynomial<F, N> {
             .unwrap_or(F::ZERO)
     }
 
-    // /// Negates the polynomial's coefficients.
-    // fn neg(&self) -> Self {
-    //     Self(self.iter().map(|&x| -x).collect())
-    // }
+    /// Negates the polynomial's coefficients.
+    pub fn neg(&self) -> Self {
+        Self::from_coeffs(&self.iter().map(|(&e, &x)| (e, -x)).collect::<Vec<_>>())
+    }
 
     /// Multiply the polynomial's coefficients by a scalar.
     fn scalar_mul(&self, c: F) -> Self {
@@ -161,7 +182,7 @@ impl<F: Field, const N: usize> MultivariatePolynomial<F, N> {
 
     /// Removes all zero coefficients.
     pub fn trim(&mut self) {
-        self.0.retain(|e,c| c.is_nonzero());
+        self.0.retain(|e, c| c.is_nonzero());
     }
 
     /// Polynomial addition.
@@ -170,6 +191,16 @@ impl<F: Field, const N: usize> MultivariatePolynomial<F, N> {
         other.iter().for_each(|(&e, &c)| {
             let v = coeffs.entry(e).or_insert(F::ZERO);
             *v = *v + c;
+        });
+        Self(coeffs)
+    }
+
+    /// Polynomial substraction.
+    pub fn sub(&self, other: &Self) -> Self {
+        let mut coeffs = self.0.clone();
+        other.iter().for_each(|(&e, &c)| {
+            let v = coeffs.entry(e).or_insert(F::ZERO);
+            *v = *v - c;
         });
         Self(coeffs)
     }
@@ -188,11 +219,28 @@ impl<F: Field, const N: usize> MultivariatePolynomial<F, N> {
         for (e1, &c1) in self.iter() {
             for (e2, &c2) in other.iter() {
                 let v = res.entry(add_coeffs(e1, e2)).or_insert(F::ZERO);
-                *v = *v + c1*c2;
+                *v = *v + c1 * c2;
             }
         }
 
         Self(res)
+    }
+
+    /// Returns `true` iff the polynomial uses the `i`-th variable.
+    pub fn has_var(&self, i: usize) -> bool {
+        self.0.iter().any(|(e, c)| (e[i] > 0) && c.is_nonzero())
+    }
+
+    /// Returns the `i`-th variable, i.e., the polynomial `X_i`.
+    pub fn var(i: usize) -> Self {
+        let mut e = [0; N];
+        e[i] = 1;
+        Self::from_coeffs(&[(e, F::ONE)])
+    }
+
+    /// Returns the constant polynomial with coefficient `c`.
+    pub fn constant(c: F) -> Self {
+        Self::from_coeffs(&[([0; N], c)])
     }
 }
 

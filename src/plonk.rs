@@ -19,11 +19,11 @@ use crate::util::{ceil_div_usize, log2_strict};
 use crate::witness::{PartialWitness, Witness, WitnessGenerator};
 use crate::{evaluate_all_constraints, fft_with_precomputation_power_of_2, AffinePoint, ArithmeticGate, Base4SumGate, BufferGate, ConstantGate, CurveAddGate, CurveDblGate, CurveEndoGate, FftPrecomputation, Field, Gate, HaloCurve, MsmPrecomputation, OpeningSet, PublicInputGate, RescueStepAGate, RescueStepBGate, VerificationKey};
 
-pub(crate) const NUM_WIRES: usize = 9;
+pub const NUM_WIRES: usize = 9;
 pub(crate) const NUM_ROUTED_WIRES: usize = 6;
 pub(crate) const NUM_ADVICE_WIRES: usize = NUM_WIRES - NUM_ROUTED_WIRES;
-pub(crate) const NUM_CONSTANTS: usize = 6;
-pub(crate) const GRID_WIDTH: usize = 65;
+pub const NUM_CONSTANTS: usize = 6;
+pub const GRID_WIDTH: usize = 65;
 // This is currently dominated by Base4SumGate. It has degree-4n constraints, and its prefix is 4
 // bits long, so its filtered constraints are degree-8n. Dividing by Z_H makes t degree-7n.
 pub(crate) const QUOTIENT_POLYNOMIAL_DEGREE_MULTIPLIER: usize = 7;
