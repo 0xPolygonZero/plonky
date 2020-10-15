@@ -5,19 +5,6 @@ use std::sync::Arc;
 
 pub type GatePrefixes = HashMap<String, Vec<bool>>;
 
-// impl GatePrefixes {
-//     pub fn prefix<G: Gate<C>>(&self, gate: &G) -> Vec<bool> {
-//         self.get(gate.name())
-//             .expect(&format!("Gate {} not found", gate.name()))
-//             .clone()
-//     }
-//     pub fn prefix_from_str(&self, gate_name: &str) -> Vec<bool> {
-//         self.get(gate_name)
-//             .expect(&format!("Gate {} not found", gate_name))
-//             .clone()
-//     }
-// }
-
 #[derive(Clone)]
 pub struct GateCollection<C: HaloCurve> {
     pub gates: Vec<Arc<dyn Gate<C>>>,

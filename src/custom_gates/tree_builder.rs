@@ -136,3 +136,5 @@ pub fn gates_to_tree(gates: &[(&str, usize, usize)]) -> Tree {
     }
     panic!("No tree found.")
 }
+
+// TODO: Add tests
