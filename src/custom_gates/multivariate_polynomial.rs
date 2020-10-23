@@ -152,6 +152,29 @@ impl<F: Field, const N: usize> MultivariatePolynomial<F, N> {
         Self(res)
     }
 
+    pub fn exp(&self, power: F) -> Self {
+        let power_bits = power.num_bits();
+        let mut current = self.clone();
+        let mut product = Self::constant(F::ONE);
+
+        for (i, limb) in power.to_canonical_u64_vec().iter().enumerate() {
+            for j in 0..64 {
+                // If we've gone through all the 1 bits already, no need to keep squaring.
+                let bit_index = i * 64 + j;
+                if bit_index == power_bits {
+                    return product;
+                }
+
+                if (limb >> j & 1) != 0 {
+                    product = product.mul(&current);
+                }
+                current = current.mul(&current);
+            }
+        }
+
+        product
+    }
+
     /// Returns `true` iff the polynomial uses the `i`-th variable.
     pub fn has_var(&self, i: usize) -> bool {
         self.0.iter().any(|(e, c)| (e[i] > 0) && c.is_nonzero())
