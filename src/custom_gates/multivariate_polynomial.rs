@@ -95,6 +95,11 @@ impl<F: Field, const N: usize> MultivariatePolynomial<F, N> {
             .unwrap_or(F::ZERO)
     }
 
+    /// Constant coefficient.
+    pub fn constant_coeff(&self) -> F {
+        self.0.get(&[0; N]).copied().unwrap_or(F::ZERO)
+    }
+
     /// Negates the polynomial's coefficients.
     pub fn neg(&self) -> Self {
         Self::from_coeffs(&self.iter().map(|(&e, &x)| (e, -x)).collect::<Vec<_>>())
