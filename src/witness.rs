@@ -34,8 +34,13 @@ impl<F: Field> PartialWitness<F> {
         self.contains_target(Target::Wire(wire))
     }
 
-    pub fn contains_all_targets(&self, targets: &[Target<F>]) -> bool {
-        targets.iter().all(|&t| self.contains_target(t))
+    pub fn contains_all_targets(&self, targets: &[Target<F>], offset: usize) -> bool {
+        targets.iter().all(|&t| match t {
+            Target::PublicInput(pi) => {
+                self.contains_target(t) || self.contains_target(pi.routable_target(offset))
+            }
+            _ => self.contains_target(t),
+        })
     }
 
     pub fn all_populated_targets(&self) -> Vec<Target<F>> {
@@ -191,8 +196,6 @@ impl<F: Field> PartialWitness<F> {
             })
             .collect::<Vec<_>>();
 
-        self.wire_values
-            .retain(|t, _| !matches!(t, Target::PublicInput(_)));
         self.wire_values.extend(new_pis);
     }
 

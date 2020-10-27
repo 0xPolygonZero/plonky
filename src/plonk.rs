@@ -527,7 +527,7 @@ impl<C: HaloCurve> Circuit<C> {
         let mut pending_generator_indices = HashSet::new();
         for (i, generator) in self.generators.iter().enumerate() {
             let generator: &dyn WitnessGenerator<C::ScalarField> = generator.borrow();
-            if witness.contains_all_targets(&generator.dependencies()) {
+            if witness.contains_all_targets(&generator.dependencies(), self.num_gates_without_pis) {
                 pending_generator_indices.insert(i);
             }
         }
@@ -573,7 +573,10 @@ impl<C: HaloCurve> Circuit<C> {
                         self.generators[generator_idx].borrow();
                     if !pending_generator_indices.contains(&generator_idx)
                         && !completed_generator_indices.contains(&generator_idx)
-                        && witness.contains_all_targets(&generator.dependencies())
+                        && witness.contains_all_targets(
+                            &generator.dependencies(),
+                            self.num_gates_without_pis,
+                        )
                     {
                         pending_generator_indices.insert(generator_idx);
                     }
@@ -611,7 +614,10 @@ impl<C: HaloCurve> Circuit<C> {
     ) -> PartialWitness<C::ScalarField> {
         let mut result = PartialWitness::new();
 
-        for &target in targets {
+        for &target in targets
+            .iter()
+            .filter(|t| !matches!(t, Target::PublicInput(_)))
+        {
             let value = witness.get_target(target);
             let partition = self.routing_target_partitions.get_partition(target);
 

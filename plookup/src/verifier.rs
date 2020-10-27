@@ -99,6 +99,7 @@ pub fn verify<C: HaloCurve>(t: &[C::ScalarField], proof: &PlookupProof<C>) -> Re
 }
 
 /// Verify all IPAs in the given proof using a reduction to a single polynomial.
+#[allow(clippy::too_many_arguments)]
 fn verify_all_ipas<C: HaloCurve>(
     c_all: &[AffinePoint<C>],
     subgroup_generator_n: C::ScalarField,

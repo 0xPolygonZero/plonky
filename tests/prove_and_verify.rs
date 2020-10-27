@@ -1,10 +1,16 @@
 use anyhow::Result;
-use plonky::gates::gate_collection::GateCollection;
+use plonky::gates::gate_collection::{GateCollection, GatePrefixes};
 use plonky::util::get_canonical_gates;
-use plonky::{blake_hash_base_field_to_curve, msm_parallel, rescue_hash_1_to_1, verify_proof, AffinePoint, ArithmeticGate, Base4SumGate, BufferGate, Circuit, CircuitBuilder, ConstantGate, Curve, CurveMulOp, Field, Gate, HaloCurve, PartialWitness, Target, Tweedledee, Tweedledum, Wire, Witness};
+use plonky::{
+    blake_hash_base_field_to_curve, msm_parallel, rescue_hash_1_to_1, verify_proof, AffinePoint,
+    ArithmeticGate, Base4SumGate, BufferGate, Circuit, CircuitBuilder, ConstantGate, Curve,
+    CurveMulOp, Field, Gate, HaloCurve, PartialWitness, Target, Tweedledee, Tweedledum, Wire,
+    Witness, WitnessGenerator,
+};
 use rand::{thread_rng, Rng};
 use std::sync::Arc;
 use std::time::Instant;
+
 #[macro_use]
 extern crate lazy_static;
 
@@ -577,6 +583,62 @@ fn test_curve_double_gate() -> Result<()> {
     let proof = circuit.generate_proof::<Tweedledum>(&witness, &[], true)?;
     verify_proof::<C, InnerC>(
         &[],
+        &proof,
+        &[],
+        &circuit.into(),
+        true,
+        GATES_TWEEDLEDEE.clone(),
+    )?;
+
+    Ok(())
+}
+
+#[test]
+fn test_public_input_as_generator_dependency() -> Result<()> {
+    type C = Tweedledee;
+    type InnerC = Tweedledum;
+    type SF = <C as Curve>::ScalarField;
+
+    let mut builder = CircuitBuilder::<C>::new::<InnerC>(128);
+    let mut pw = PartialWitness::new();
+    let b = builder.add_public_input();
+    pw.set_target(b, SF::from_canonical_usize(13));
+    let t = builder.add_virtual_target();
+
+    struct SomeGen<C: HaloCurve> {
+        pub t: Target<C::ScalarField>,
+        pub v: Target<C::ScalarField>,
+    }
+    impl WitnessGenerator<SF> for SomeGen<C> {
+        fn dependencies(&self) -> Vec<Target<SF>> {
+            vec![self.t]
+        }
+
+        fn generate(
+            &self,
+            _prefixes: &GatePrefixes,
+            _constants: &[Vec<SF>],
+            witness: &PartialWitness<SF>,
+        ) -> PartialWitness<SF> {
+            let x = witness.get_target(self.t);
+            let mut result = PartialWitness::new();
+            result.set_target(self.v, x);
+            result
+        }
+    }
+
+    let gen = SomeGen { t: b, v: t };
+    builder.add_generator(gen);
+    let one = builder.one_wire();
+    let x = builder.add(t, one);
+    let fourteen = builder.constant_wire(SF::from_canonical_usize(14));
+    builder.copy(x, fourteen);
+
+    let circuit = builder.build();
+    let witness = circuit.generate_witness(pw);
+    let proof = circuit.generate_proof::<Tweedledum>(&witness, &[], true)?;
+    verify_proof::<C, InnerC>(
+        &[SF::from_canonical_usize(13)],
         &proof,
         &[],
         &circuit.into(),

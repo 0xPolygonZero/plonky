@@ -28,6 +28,7 @@ impl<C: HaloCurve>
         usize,
     )> for PlookupProof<C>
 {
+    #[allow(clippy::too_many_arguments)]
     fn from(
         mut t: (
             Vec<PolynomialCommitment<C>>,
