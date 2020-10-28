@@ -1,4 +1,47 @@
+use unroll::unroll_for_loops;
+use crate::{add_no_overflow, sub, cmp, mul2};
+
+// FIXME: These functions are copypasta from monty.rs
 #[inline]
+fn mul_add_cy_in(a: u64, b: u64, c: u64, cy_in: u64) -> (u64, u64) {
+    let t = (a as u128) * (b as u128) + (c as u128) + (cy_in as u128);
+    ((t >> 64) as u64, t as u64)
+}
+
+#[inline]
+fn mul_add(a: u64, b: u64, c: u64) -> (u64, u64) {
+    let t = (a as u128) * (b as u128) + (c as u128);
+    ((t >> 64) as u64, t as u64)
+}
+
+#[unroll_for_loops]
+fn sqr_4(a: [u64; 4]) -> [u64; 8] {
+    let mut res = [u64; 8];
+
+    // Calculate the off-diagonal part of the square
+    for i in 0 .. 4 {
+        let mut hi_in = 0u64;
+        for j in i+1 .. 4 {
+            let (hi_out, lo) = mul_add(a[j], a[i], hi_in);
+            res[i + j] = lo;
+            hi_in = hi_out;
+        }
+        res[i + 4] = hi_in;
+    }
+    res = mul2(res); // NB: Top and bottom words are zero
+
+    // Calculate and add in the diagonal part
+    let mut hi_in = 0u64;
+    for i in 0 .. 4 {
+        let (hi_out, lo) = mul_add_cy_in(a[i], a[i], res[2*i], hi_in);
+        res[2*i] = lo;
+        let (t, cy) = res[2*i + 1].overflowing_add(hi_out);
+        res[2*i + 1] = t;
+        hi_in = cy as u64;
+    }
+    res
+}
+
 #[unroll_for_loops]
 fn mul_4_4(a: [u64; 4], b: [u64; 4]) -> [u64; 8] {
     // Grade school multiplication. To avoid carrying at each of
