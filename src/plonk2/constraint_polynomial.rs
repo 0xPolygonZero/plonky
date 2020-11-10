@@ -1,15 +1,15 @@
 use std::hash::{Hash, Hasher};
 use std::ptr;
 use std::rc::Rc;
-use crate::Field;
+use crate::{Field, Wire};
 use std::collections::HashMap;
-use std::ops::{Add, Sub, Mul};
+use std::ops::{Add, Sub, Mul, Neg};
 
-struct EvaluationVars<'a, F: Field> {
-    local_constants: &'a [F],
-    next_constants: &'a [F],
-    local_wire_values: &'a [F],
-    next_wire_values: &'a [F],
+pub(crate) struct EvaluationVars<'a, F: Field> {
+    pub(crate) local_constants: &'a [F],
+    pub(crate) next_constants: &'a [F],
+    pub(crate) local_wire_values: &'a [F],
+    pub(crate) next_wire_values: &'a [F],
 }
 
 /// A polynomial over all the variables that are subject to constraints (local constants, next
@@ -43,10 +43,6 @@ impl<F: Field> ConstraintPolynomial<F> {
         Self::from_inner(ConstraintPolynomialInner::NextWireValue(index))
     }
 
-    fn neg(self) -> Self {
-        todo!()
-    }
-
     fn add(self, rhs: Self) -> Self {
         Self::from_inner(ConstraintPolynomialInner::Sum {
             lhs: self.0,
@@ -76,20 +72,35 @@ impl<F: Field> ConstraintPolynomial<F> {
         (self.0).0.degree()
     }
 
+    /// Returns the set of wires that this constraint would depend on if it were applied at `index`.
+    pub(crate) fn dependencies(&self, index: usize) -> Vec<Wire> {
+        todo!()
+    }
+
+    /// Find the largest input index among the wires this constraint depends on.
+    pub(crate) fn max_wire_input_index(&self) -> Option<usize> {
+        self.dependencies(0)
+            .into_iter()
+            .map(|wire| wire.input)
+            .max()
+    }
+
+    pub(crate) fn max_constant_index(&self) -> Option<usize> {
+        todo!()
+    }
+
+    pub(crate) fn evaluate(&self, vars: EvaluationVars<F>) -> F {
+        let results = Self::evaluate_all(&[self.clone()], vars);
+        assert_eq!(results.len(), 1);
+        results[0]
+    }
+
+    /// Evaluate multiple constraint polynomials simultaneously. This can be more efficient than
+    /// evaluating them sequentially, since shared intermediate results will only be computed once.
     pub(crate) fn evaluate_all(
         polynomials: &[ConstraintPolynomial<F>],
-        local_constants: &[F],
-        next_constants: &[F],
-        local_wire_values: &[F],
-        next_wire_values: &[F],
+        vars: EvaluationVars<F>,
     ) -> Vec<F> {
-        let vars = EvaluationVars {
-            local_constants,
-            next_constants,
-            local_wire_values,
-            next_wire_values,
-        };
-
         let mut mem = HashMap::new();
         polynomials.iter()
             .map(|p| p.0.evaluate_memoized(&vars, &mut mem))
@@ -98,6 +109,22 @@ impl<F: Field> ConstraintPolynomial<F> {
 
     fn from_inner(inner: ConstraintPolynomialInner<F>) -> Self {
         Self(ConstraintPolynomialRef::new(inner))
+    }
+}
+
+impl<F: Field> Neg for ConstraintPolynomial<F> {
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        self * ConstraintPolynomial::constant(F::NEG_ONE)
+    }
+}
+
+impl<F: Field> Neg for &ConstraintPolynomial<F> {
+    type Output = ConstraintPolynomial<F>;
+
+    fn neg(self) -> ConstraintPolynomial<F> {
+        self.clone().neg()
     }
 }
 

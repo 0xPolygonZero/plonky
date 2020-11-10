@@ -1,56 +1,96 @@
-use std::marker::PhantomData;
 use std::rc::Rc;
 
 use crate::{CircuitBuilder2, ConstraintPolynomial, DeterministicGate, Field, Gate2, GateInstance, Target2};
 
-pub const ID: &'static str = "ARITHMETIC";
-pub const CONST_PRODUCT_WEIGHT: usize = 0;
-pub const CONST_ADDEND_WEIGHT: usize = 1;
-pub const WIRE_MULTIPLICAND_0: usize = 0;
-pub const WIRE_MULTIPLICAND_1: usize = 1;
-pub const WIRE_ADDEND: usize = 2;
-pub const WIRE_OUTPUT: usize = 3;
-
 /// A gate which can be configured to perform various arithmetic. In particular, it computes
 ///
 /// ```text
-/// output := const_product_weight * multiplicand_0 * multiplicand_1
-///         + const_addend_weight * addend
+/// output := product_weight * multiplicand_0 * multiplicand_1
+///         + addend_weight * addend
 /// ```
-struct ArithmeticGate<F: Field> {
-    _phantom: PhantomData<F>
+///
+/// where `product_weight` and `addend_weight` are constants, and the other variables are wires.
+struct ArithmeticGate2 {
 }
 
-impl<F: Field> DeterministicGate<F> for ArithmeticGate<F> {
+impl ArithmeticGate2 {
+    pub const ID: &'static str = "ArithmeticGate";
+    pub const CONST_PRODUCT_WEIGHT: usize = 0;
+    pub const CONST_ADDEND_WEIGHT: usize = 1;
+    pub const WIRE_MULTIPLICAND_0: usize = 0;
+    pub const WIRE_MULTIPLICAND_1: usize = 1;
+    pub const WIRE_ADDEND: usize = 2;
+    pub const WIRE_OUTPUT: usize = 3;
+
+    /// Computes `x y + z`.
+    pub fn mul_add<F: Field>(
+        builder: &mut CircuitBuilder2<F>,
+        x: Target2<F>,
+        y: Target2<F>,
+        z: Target2<F>,
+    ) -> Target2<F> {
+        let gate_type = gate_type();
+        let constants = vec![F::ONE, F::ONE];
+        let gate = builder.add_gate(GateInstance { gate_type, constants });
+
+        builder.copy(x, Target2::wire(gate, Self::WIRE_MULTIPLICAND_0));
+        builder.copy(y, Target2::wire(gate, Self::WIRE_MULTIPLICAND_1));
+        builder.copy(z, Target2::wire(gate, Self::WIRE_ADDEND));
+
+        Target2::wire(gate, Self::WIRE_OUTPUT)
+    }
+
+    /// Computes `x y`.
+    pub fn mul<F: Field>(
+        builder: &mut CircuitBuilder2<F>,
+        x: Target2<F>,
+        y: Target2<F>,
+    ) -> Target2<F> {
+        let zero = builder.zero();
+        Self::mul_add(builder, x, y, zero)
+    }
+
+    /// Computes `x + y`.
+    pub fn add<F: Field>(
+        builder: &mut CircuitBuilder2<F>,
+        x: Target2<F>,
+        y: Target2<F>,
+    ) -> Target2<F> {
+        let one = builder.one();
+        Self::mul_add(builder, x, one, y)
+    }
+}
+
+impl<F: Field> DeterministicGate<F> for ArithmeticGate2 {
     fn id(&self) -> String {
         "ArithmeticGate".into()
     }
 
     fn outputs(&self) -> Vec<(usize, ConstraintPolynomial<F>)> {
-        let const_0 = ConstraintPolynomial::local_constant(CONST_PRODUCT_WEIGHT);
-        let const_1 = ConstraintPolynomial::local_constant(CONST_ADDEND_WEIGHT);
-        let multiplicand_0 = ConstraintPolynomial::local_wire_value(WIRE_MULTIPLICAND_0);
-        let multiplicand_1 = ConstraintPolynomial::local_wire_value(WIRE_MULTIPLICAND_1);
-        let addend = ConstraintPolynomial::local_wire_value(WIRE_ADDEND);
+        let const_0 = ConstraintPolynomial::local_constant(Self::CONST_PRODUCT_WEIGHT);
+        let const_1 = ConstraintPolynomial::local_constant(Self::CONST_ADDEND_WEIGHT);
+        let multiplicand_0 = ConstraintPolynomial::local_wire_value(Self::WIRE_MULTIPLICAND_0);
+        let multiplicand_1 = ConstraintPolynomial::local_wire_value(Self::WIRE_MULTIPLICAND_1);
+        let addend = ConstraintPolynomial::local_wire_value(Self::WIRE_ADDEND);
 
         let out = const_0 * multiplicand_0 * &multiplicand_1 + const_1 * &addend;
-        vec![(WIRE_OUTPUT, out)]
+        vec![(Self::WIRE_OUTPUT, out)]
     }
 }
 
-fn gate_type<F: Field>() -> Rc<Gate2<F>> {
+fn gate_type<F: Field>() -> Rc<dyn Gate2<F>> {
     todo!()
 }
 
-fn add<F: Field>(builder: &mut CircuitBuilder2<F>, x: Target2<F>, y: Target2<F>) -> Target2<F> {
-    let gate_type = gate_type();
-    let constants = vec![F::ONE, F::ONE];
-    let gate = builder.add_gate(GateInstance { gate_type, constants });
-    let one = builder.one();
+#[cfg(test)]
+mod tests {
+    use crate::{CircuitBuilder2, TweedledumBase};
+    use crate::gates2::arithmetic_gate::ArithmeticGate2;
 
-    builder.copy(x, Target2::wire(gate, WIRE_MULTIPLICAND_0));
-    builder.copy(one, Target2::wire(gate, WIRE_MULTIPLICAND_1));
-    builder.copy(y, Target2::wire(gate, WIRE_ADDEND));
-
-    Target2::wire(gate, WIRE_OUTPUT)
+    fn add() {
+        let mut builder = CircuitBuilder2::<TweedledumBase>::new();
+        let one = builder.one();
+        let two = builder.two();
+        let sum = ArithmeticGate2::add(&mut builder, one, one);
+    }
 }

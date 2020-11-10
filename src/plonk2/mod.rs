@@ -26,6 +26,13 @@ pub struct CircuitBuilder2<F: Field> {
 }
 
 impl<F: Field> CircuitBuilder2<F> {
+    pub fn new() -> Self {
+        CircuitBuilder2 {
+            gates: Vec::new(),
+            gate_instances: Vec::new(),
+        }
+    }
+
     /// Adds a gate to the circuit, and returns its index.
     pub fn add_gate(&mut self, gate_instance: GateInstance<F>) -> usize {
         let index = self.gate_instances.len();
@@ -52,14 +59,19 @@ impl<F: Field> CircuitBuilder2<F> {
         assert!(y.is_routable());
     }
 
-    /// Returns a routable target with a value of zero.
+    /// Returns a routable target with a value of 0.
     pub fn zero(&mut self) -> Target2<F> {
         self.constant(F::ZERO)
     }
 
-    /// Returns a routable target with a value of one.
+    /// Returns a routable target with a value of 1.
     pub fn one(&mut self) -> Target2<F> {
         self.constant(F::ONE)
+    }
+
+    /// Returns a routable target with a value of 2.
+    pub fn two(&mut self) -> Target2<F> {
+        self.constant(F::TWO)
     }
 
     /// Returns a routable target with a value of `ORDER - 1`.

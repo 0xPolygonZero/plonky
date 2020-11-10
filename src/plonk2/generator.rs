@@ -20,7 +20,7 @@ pub trait SimpleGenerator<F: Field> {
     fn run_once(&mut self, witness: &PartialWitness2<F>) -> PartialWitness2<F>;
 }
 
-impl<F: Field> WitnessGenerator2<F> for dyn SimpleGenerator<F> {
+impl<F: Field, SG: SimpleGenerator<F>> WitnessGenerator2<F> for SG {
     fn watch_list(&self) -> Vec<Target2<F>> {
         self.dependencies()
     }
