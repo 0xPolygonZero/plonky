@@ -2,7 +2,7 @@ use std::hash::{Hash, Hasher};
 use std::ptr;
 use std::rc::Rc;
 use crate::{Field, Wire};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::{Add, Sub, Mul, Neg};
 
 pub(crate) struct EvaluationVars<'a, F: Field> {
@@ -72,9 +72,12 @@ impl<F: Field> ConstraintPolynomial<F> {
         (self.0).0.degree()
     }
 
-    /// Returns the set of wires that this constraint would depend on if it were applied at `index`.
-    pub(crate) fn dependencies(&self, index: usize) -> Vec<Wire> {
-        todo!()
+    /// Returns the set of wires that this constraint would depend on if it were applied at a
+    /// certain gate index.
+    pub(crate) fn dependencies(&self, gate: usize) -> Vec<Wire> {
+        let mut deps = HashSet::new();
+        self.0.0.add_dependencies(gate, &mut deps);
+        deps.into_iter().collect()
     }
 
     /// Find the largest input index among the wires this constraint depends on.
@@ -86,7 +89,9 @@ impl<F: Field> ConstraintPolynomial<F> {
     }
 
     pub(crate) fn max_constant_index(&self) -> Option<usize> {
-        todo!()
+        let mut indices = HashSet::new();
+        self.0.0.add_constant_indices(&mut indices);
+        indices.into_iter().max()
     }
 
     pub(crate) fn evaluate(&self, vars: EvaluationVars<F>) -> F {
@@ -238,6 +243,50 @@ enum ConstraintPolynomialInner<F: Field> {
 }
 
 impl<F: Field> ConstraintPolynomialInner<F> {
+    fn add_dependencies(&self, gate: usize, deps: &mut HashSet<Wire>) {
+        match self {
+            ConstraintPolynomialInner::Constant(_) => (),
+            ConstraintPolynomialInner::LocalConstant(_) => (),
+            ConstraintPolynomialInner::NextConstant(_) => (),
+            ConstraintPolynomialInner::LocalWireValue(i) =>
+                { deps.insert(Wire { gate, input: *i }); },
+            ConstraintPolynomialInner::NextWireValue(i) =>
+                { deps.insert(Wire { gate: gate + 1, input: *i }); }
+            ConstraintPolynomialInner::Sum { lhs, rhs } => {
+                lhs.0.add_dependencies(gate, deps);
+                rhs.0.add_dependencies(gate, deps);
+            },
+            ConstraintPolynomialInner::Product { lhs, rhs } => {
+                lhs.0.add_dependencies(gate, deps);
+                rhs.0.add_dependencies(gate, deps);
+            },
+            ConstraintPolynomialInner::Exponentiation { base, exponent: _ } => {
+                base.0.add_dependencies(gate, deps);
+            },
+        }
+    }
+
+    fn add_constant_indices(&self, indices: &mut HashSet<usize>) {
+        match self {
+            ConstraintPolynomialInner::Constant(_) => (),
+            ConstraintPolynomialInner::LocalConstant(i) => { indices.insert(*i); },
+            ConstraintPolynomialInner::NextConstant(i) => { indices.insert(*i); },
+            ConstraintPolynomialInner::LocalWireValue(_) => (),
+            ConstraintPolynomialInner::NextWireValue(_) => (),
+            ConstraintPolynomialInner::Sum { lhs, rhs } => {
+                lhs.0.add_constant_indices(indices);
+                rhs.0.add_constant_indices(indices);
+            },
+            ConstraintPolynomialInner::Product { lhs, rhs } => {
+                lhs.0.add_constant_indices(indices);
+                rhs.0.add_constant_indices(indices);
+            },
+            ConstraintPolynomialInner::Exponentiation { base, exponent: _ } => {
+                base.0.add_constant_indices(indices);
+            },
+        }
+    }
+
     fn evaluate(
         &self,
         vars: &EvaluationVars<F>,
