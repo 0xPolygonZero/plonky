@@ -1,7 +1,7 @@
 use crate::{Field, Target2, PartialWitness2};
 
 /// A generator participates in the generation of the witness.
-pub trait WitnessGenerator2<F: Field> {
+pub trait WitnessGenerator2<F: Field>: 'static {
     /// Targets to be "watched" by this generator. Whenever a target in the watch list is populated,
     /// the generator will be queued to run.
     fn watch_list(&self) -> Vec<Target2<F>>;
@@ -14,7 +14,7 @@ pub trait WitnessGenerator2<F: Field> {
 }
 
 /// A generator which runs once after a list of dependencies is present in the witness.
-pub trait SimpleGenerator<F: Field> {
+pub trait SimpleGenerator<F: Field>: 'static {
     fn dependencies(&self) -> Vec<Target2<F>>;
 
     fn run_once(&mut self, witness: &PartialWitness2<F>) -> PartialWitness2<F>;

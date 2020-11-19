@@ -10,7 +10,8 @@ pub use prover::*;
 pub use verifier::*;
 pub use witness::*;
 
-use crate::{Field, GateInstance, Gate2, Wire};
+use crate::{Field, GateInstance, Gate2, Wire, GateWrapper};
+use std::collections::HashSet;
 
 mod constraint_polynomial;
 mod gate;
@@ -21,15 +22,17 @@ mod witness;
 mod verifier;
 
 pub struct CircuitBuilder2<F: Field> {
-    gates: Vec<Rc<dyn Gate2<F>>>,
+    gates: HashSet<GateWrapper<F>>,
     gate_instances: Vec<GateInstance<F>>,
+    generators: Vec<Box<dyn WitnessGenerator2<F>>>,
 }
 
 impl<F: Field> CircuitBuilder2<F> {
     pub fn new() -> Self {
         CircuitBuilder2 {
-            gates: Vec::new(),
+            gates: HashSet::new(),
             gate_instances: Vec::new(),
+            generators: Vec::new(),
         }
     }
 
@@ -42,14 +45,30 @@ impl<F: Field> CircuitBuilder2<F> {
 
     /// Shorthand for `generate_copy` and `assert_equal`.
     /// Both elements must be routable, otherwise this method will panic.
-    pub fn copy(&mut self, x: Target2<F>, y: Target2<F>) {
+    pub fn route(&mut self, x: Target2<F>, y: Target2<F>) {
         self.generate_copy(x, y);
         self.assert_equal(x, y);
     }
 
     /// Adds a generator which will copy `x` to `y`.
     pub fn generate_copy(&mut self, x: Target2<F>, y: Target2<F>) {
-        todo!();
+        struct CopyGenerator<F: Field> {
+            x: Target2<F>,
+            y: Target2<F>,
+        }
+
+        impl<F: Field> SimpleGenerator<F> for CopyGenerator<F> {
+            fn dependencies(&self) -> Vec<Target2<F>> {
+                vec![self.x]
+            }
+
+            fn run_once(&mut self, witness: &PartialWitness2<F>) -> PartialWitness2<F> {
+                let value = witness.get(self.x);
+                PartialWitness2::singleton(self.y, value)
+            }
+        }
+
+        self.add_generator(CopyGenerator { x, y });
     }
 
     /// Uses Plonk's permutation argument to require that two elements be equal.
@@ -57,6 +76,10 @@ impl<F: Field> CircuitBuilder2<F> {
     pub fn assert_equal(&mut self, x: Target2<F>, y: Target2<F>) {
         assert!(x.is_routable());
         assert!(y.is_routable());
+    }
+
+    pub fn add_generator<G: WitnessGenerator2<F>>(&mut self, generator: G) {
+        self.generators.push(Box::new(generator));
     }
 
     /// Returns a routable target with a value of 0.

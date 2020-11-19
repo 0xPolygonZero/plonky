@@ -1,11 +1,36 @@
+use std::hash::{Hash, Hasher};
+use std::iter;
 use std::rc::Rc;
 
-use crate::{Field, ConstraintPolynomial, WitnessGenerator2, Target2, PartialWitness2, EvaluationVars, SimpleGenerator, Wire};
-use std::iter;
+mod arithmetic_gate;
 
-pub mod arithmetic_gate;
+pub use arithmetic_gate::*;
 
-pub trait Gate2<F: Field> {
+use crate::{ConstraintPolynomial, EvaluationVars, Field, PartialWitness2, SimpleGenerator, Target2, Wire, WitnessGenerator2};
+
+pub(crate) struct GateWrapper<F: Field>(Rc<dyn Gate2<F>>);
+
+impl<F: Field> GateWrapper<F> {
+    pub fn new<G: Gate2<F>>(gate: G) -> GateWrapper<F> {
+        GateWrapper(Rc::new(gate))
+    }
+}
+
+impl<F: Field> PartialEq for GateWrapper<F> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.id() == other.0.id()
+    }
+}
+
+impl<F: Field> Hash for GateWrapper<F> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.id().hash(state)
+    }
+}
+
+impl<F: Field> Eq for GateWrapper<F> {}
+
+pub trait Gate2<F: Field>: 'static {
     fn id(&self) -> String;
 
     fn constraints(&self) -> Vec<ConstraintPolynomial<F>>;
@@ -24,13 +49,13 @@ pub trait Gate2<F: Field> {
 
 /// A deterministic gate. Each entry in `outputs()` describes how that output is evaluated; this is
 /// used to create both the constraint set and the generator set.
-pub trait DeterministicGate<F: Field> {
+pub trait DeterministicGate<F: Field>: 'static {
     fn id(&self) -> String;
 
     fn outputs(&self) -> Vec<(usize, ConstraintPolynomial<F>)>;
 }
 
-impl<F: Field> Gate2<F> for dyn DeterministicGate<F> {
+impl<F: Field, DG: DeterministicGate<F>> Gate2<F> for DG {
     fn id(&self) -> String {
         self.id()
     }
@@ -94,9 +119,7 @@ impl<F: Field> Gate2<F> for dyn DeterministicGate<F> {
 
                 let result_wire = Wire { gate: self.gate_index, input: self.input_index };
                 let result_value = self.out.evaluate(vars);
-                let mut witness = PartialWitness2::new();
-                witness.set(Target2::Wire(result_wire), result_value);
-                witness
+                PartialWitness2::singleton(Target2::Wire(result_wire), result_value)
             }
         }
 
@@ -120,7 +143,7 @@ impl<F: Field> Gate2<F> for dyn DeterministicGate<F> {
 
     fn max_constant_index(&self) -> Option<usize> {
         self.outputs().into_iter()
-            .map(|(i, out)| out.max_constant_index())
+            .map(|(_i, out)| out.max_constant_index())
             .filter_map(|out_max| out_max)
             .max()
     }
@@ -136,6 +159,6 @@ impl<F: Field> Gate2<F> for dyn DeterministicGate<F> {
 }
 
 pub struct GateInstance<F: Field> {
-    gate_type: Rc<dyn Gate2<F>>,
+    gate_type: GateWrapper<F>,
     constants: Vec<F>,
 }

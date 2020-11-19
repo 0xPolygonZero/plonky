@@ -1,6 +1,5 @@
+use crate::{CircuitBuilder2, ConstraintPolynomial, DeterministicGate, Field, GateInstance, Target2, GateWrapper};
 use std::rc::Rc;
-
-use crate::{CircuitBuilder2, ConstraintPolynomial, DeterministicGate, Field, Gate2, GateInstance, Target2};
 
 /// A gate which can be configured to perform various arithmetic. In particular, it computes
 ///
@@ -10,11 +9,10 @@ use crate::{CircuitBuilder2, ConstraintPolynomial, DeterministicGate, Field, Gat
 /// ```
 ///
 /// where `product_weight` and `addend_weight` are constants, and the other variables are wires.
-struct ArithmeticGate2 {
-}
+#[derive(Eq, PartialEq, Hash)]
+struct ArithmeticGate2;
 
 impl ArithmeticGate2 {
-    pub const ID: &'static str = "ArithmeticGate";
     pub const CONST_PRODUCT_WEIGHT: usize = 0;
     pub const CONST_ADDEND_WEIGHT: usize = 1;
     pub const WIRE_MULTIPLICAND_0: usize = 0;
@@ -29,13 +27,13 @@ impl ArithmeticGate2 {
         y: Target2<F>,
         z: Target2<F>,
     ) -> Target2<F> {
-        let gate_type = gate_type();
+        let gate_type = GateWrapper::new(ArithmeticGate2);
         let constants = vec![F::ONE, F::ONE];
         let gate = builder.add_gate(GateInstance { gate_type, constants });
 
-        builder.copy(x, Target2::wire(gate, Self::WIRE_MULTIPLICAND_0));
-        builder.copy(y, Target2::wire(gate, Self::WIRE_MULTIPLICAND_1));
-        builder.copy(z, Target2::wire(gate, Self::WIRE_ADDEND));
+        builder.route(x, Target2::wire(gate, Self::WIRE_MULTIPLICAND_0));
+        builder.route(y, Target2::wire(gate, Self::WIRE_MULTIPLICAND_1));
+        builder.route(z, Target2::wire(gate, Self::WIRE_ADDEND));
 
         Target2::wire(gate, Self::WIRE_OUTPUT)
     }
@@ -78,9 +76,9 @@ impl<F: Field> DeterministicGate<F> for ArithmeticGate2 {
     }
 }
 
-fn gate_type<F: Field>() -> Rc<dyn Gate2<F>> {
-    todo!()
-}
+// fn gate_type<F: Field>() -> Rc<dyn Gate2<F>> {
+//     todo!()
+// }
 
 #[cfg(test)]
 mod tests {
