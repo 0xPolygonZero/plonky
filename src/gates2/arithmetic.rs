@@ -1,5 +1,4 @@
-use crate::{CircuitBuilder2, ConstraintPolynomial, DeterministicGate, Field, GateInstance, Target2, GateWrapper};
-use std::rc::Rc;
+use crate::{CircuitBuilder2, ConstraintPolynomial, DeterministicGate, Field, GateInstance, GateWrapper, Target2};
 
 /// A gate which can be configured to perform various arithmetic. In particular, it computes
 ///
@@ -76,19 +75,16 @@ impl<F: Field> DeterministicGate<F> for ArithmeticGate2 {
     }
 }
 
-// fn gate_type<F: Field>() -> Rc<dyn Gate2<F>> {
-//     todo!()
-// }
-
 #[cfg(test)]
 mod tests {
     use crate::{CircuitBuilder2, TweedledumBase};
-    use crate::gates2::arithmetic_gate::ArithmeticGate2;
+    use crate::gates2::arithmetic::ArithmeticGate2;
 
     fn add() {
         let mut builder = CircuitBuilder2::<TweedledumBase>::new();
         let one = builder.one();
         let two = builder.two();
         let sum = ArithmeticGate2::add(&mut builder, one, one);
+        todo!()
     }
 }

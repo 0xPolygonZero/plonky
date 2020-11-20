@@ -1,7 +1,6 @@
 use std::convert::Infallible;
 use std::hash::Hash;
 use std::marker::PhantomData;
-use std::rc::Rc;
 
 pub use constraint_polynomial::*;
 pub use gate::*;
@@ -10,7 +9,7 @@ pub use prover::*;
 pub use verifier::*;
 pub use witness::*;
 
-use crate::{Field, GateInstance, Gate2, Wire, GateWrapper};
+use crate::{Field, GateInstance, Wire, GateWrapper};
 use std::collections::HashSet;
 
 mod constraint_polynomial;

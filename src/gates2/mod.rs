@@ -2,9 +2,11 @@ use std::hash::{Hash, Hasher};
 use std::iter;
 use std::rc::Rc;
 
-mod arithmetic_gate;
+mod arithmetic;
+mod limb_sum;
 
-pub use arithmetic_gate::*;
+pub use arithmetic::*;
+pub use limb_sum::*;
 
 use crate::{ConstraintPolynomial, EvaluationVars, Field, PartialWitness2, SimpleGenerator, Target2, Wire, WitnessGenerator2};
 
@@ -33,6 +35,7 @@ impl<F: Field> Eq for GateWrapper<F> {}
 pub trait Gate2<F: Field>: 'static {
     fn id(&self) -> String;
 
+    /// A set of expressions which must evaluate to zero.
     fn constraints(&self) -> Vec<ConstraintPolynomial<F>>;
 
     fn generators(
@@ -50,9 +53,16 @@ pub trait Gate2<F: Field>: 'static {
 /// A deterministic gate. Each entry in `outputs()` describes how that output is evaluated; this is
 /// used to create both the constraint set and the generator set.
 pub trait DeterministicGate<F: Field>: 'static {
+    /// A unique identifier for this gate.
     fn id(&self) -> String;
 
     fn outputs(&self) -> Vec<(usize, ConstraintPolynomial<F>)>;
+
+    /// Additional constraints to be enforced, besides the (automatically generated) ones that
+    /// constraint output values.
+    fn additional_constraints(&self) -> Vec<ConstraintPolynomial<F>> {
+        Vec::new()
+    }
 }
 
 impl<F: Field, DG: DeterministicGate<F>> Gate2<F> for DG {
@@ -61,8 +71,11 @@ impl<F: Field, DG: DeterministicGate<F>> Gate2<F> for DG {
     }
 
     fn constraints(&self) -> Vec<ConstraintPolynomial<F>> {
+        // For each output, we add a constraint of the form `out - expression = 0`,
+        // then we append any additional constraints that the gate defines.
         self.outputs().into_iter()
             .map(|(i, out)| out - ConstraintPolynomial::local_wire_value(i))
+            .chain(self.additional_constraints().into_iter())
             .collect()
     }
 
@@ -158,6 +171,7 @@ impl<F: Field, DG: DeterministicGate<F>> Gate2<F> for DG {
     }
 }
 
+/// A gate along with any constants used to configure it.
 pub struct GateInstance<F: Field> {
     gate_type: GateWrapper<F>,
     constants: Vec<F>,

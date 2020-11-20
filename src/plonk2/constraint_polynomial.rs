@@ -4,6 +4,7 @@ use std::rc::Rc;
 use crate::{Field, Wire};
 use std::collections::{HashMap, HashSet};
 use std::ops::{Add, Sub, Mul, Neg};
+use std::iter::{Sum, Product};
 
 pub(crate) struct EvaluationVars<'a, F: Field> {
     pub(crate) local_constants: &'a [F],
@@ -27,6 +28,14 @@ impl<F: Field> ConstraintPolynomial<F> {
         Self::from_inner(ConstraintPolynomialInner::Constant(c))
     }
 
+    pub fn zero() -> Self {
+        Self::constant(F::ZERO)
+    }
+
+    pub fn one() -> Self {
+        Self::constant(F::ONE)
+    }
+
     pub fn local_constant(index: usize) -> Self {
         Self::from_inner(ConstraintPolynomialInner::LocalConstant(index))
     }
@@ -43,7 +52,9 @@ impl<F: Field> ConstraintPolynomial<F> {
         Self::from_inner(ConstraintPolynomialInner::NextWireValue(index))
     }
 
+    // TODO: Have these take references?
     fn add(self, rhs: Self) -> Self {
+        // TODO: Special case for either operand being 0.
         Self::from_inner(ConstraintPolynomialInner::Sum {
             lhs: self.0,
             rhs: rhs.0,
@@ -51,10 +62,14 @@ impl<F: Field> ConstraintPolynomial<F> {
     }
 
     fn sub(self, rhs: Self) -> Self {
+        // TODO: Special case for either operand being 0.
+        // TODO: Faster to have a dedicated ConstraintPolynomialInner::Difference?
+        // TODO: `self + -rhs`?
         self.add(rhs.neg())
     }
 
     fn mul(self, rhs: Self) -> Self {
+        // TODO: Special case for either operand being 1.
         Self::from_inner(ConstraintPolynomialInner::Product {
             lhs: self.0,
             rhs: rhs.0,
@@ -121,6 +136,7 @@ impl<F: Field> Neg for ConstraintPolynomial<F> {
     type Output = Self;
 
     fn neg(self) -> Self {
+        // TODO: Faster to have a dedicated ConstraintPolynomialInner::Negation?
         self * ConstraintPolynomial::constant(F::NEG_ONE)
     }
 }
@@ -219,6 +235,22 @@ macro_rules! binop_variants {
 binop_variants!(Add, add);
 binop_variants!(Sub, sub);
 binop_variants!(Mul, mul);
+
+impl<F: Field> Sum for ConstraintPolynomial<F> {
+    fn sum<I: Iterator<Item=Self>>(iter: I) -> Self {
+        iter.fold(
+            ConstraintPolynomial::zero(),
+            |sum, x| sum + x)
+    }
+}
+
+impl<F: Field> Product for ConstraintPolynomial<F> {
+    fn product<I: Iterator<Item=Self>>(iter: I) -> Self {
+        iter.fold(
+            ConstraintPolynomial::one(),
+            |product, x| product * x)
+    }
+}
 
 enum ConstraintPolynomialInner<F: Field> {
     Constant(F),
