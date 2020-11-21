@@ -3,10 +3,24 @@ use std::iter;
 use std::rc::Rc;
 
 mod arithmetic;
+mod buffer;
+mod constant;
+mod curve_add;
+mod curve_dbl;
+mod curve_endo;
 mod limb_sum;
+mod public_input;
+mod rescue;
 
 pub use arithmetic::*;
+pub use buffer::*;
+pub use constant::*;
+pub use curve_add::*;
+pub use curve_dbl::*;
+pub use curve_endo::*;
 pub use limb_sum::*;
+pub use public_input::*;
+pub use rescue::*;
 
 use crate::{ConstraintPolynomial, EvaluationVars, Field, PartialWitness2, SimpleGenerator, Target2, Wire, WitnessGenerator2};
 
@@ -48,6 +62,14 @@ pub trait Gate2<F: Field>: 'static {
     fn max_constant_index(&self) -> Option<usize>;
 
     fn max_wire_input_index(&self) -> Option<usize>;
+
+    fn degree(&self) -> usize {
+        self.constraints()
+            .into_iter()
+            .map(|c| c.degree())
+            .max()
+            .unwrap_or(0)
+    }
 }
 
 /// A deterministic gate. Each entry in `outputs()` describes how that output is evaluated; this is

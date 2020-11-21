@@ -12,7 +12,6 @@
 // Unfortunately it makes rustc complain, so we include
 #![allow(incomplete_features)]
 
-
 pub use bigint::*;
 pub use circuit_bigint::*;
 pub use circuit_builder::*;
@@ -23,6 +22,7 @@ pub use conversions::*;
 pub use curve::*;
 pub use fft::*;
 pub use field::*;
+pub use gadgets::*;
 pub use gates::*;
 pub use gates2::*;
 pub use hash_to_curve::*;
@@ -51,6 +51,7 @@ mod conversions;
 mod curve;
 mod fft;
 mod field;
+mod gadgets;
 mod gates;
 mod gates2;
 pub mod halo;
