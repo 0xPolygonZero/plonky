@@ -1,4 +1,4 @@
-use crate::{CircuitBuilder2, ConstraintPolynomial, DeterministicGate, Field, GateInstance, GateWrapper, Target2};
+use crate::{CircuitBuilder2, ConstraintPolynomial, DeterministicGate, DeterministicGateAdapter, Field, GateInstance, GateRef, Target2, CircuitConfig};
 
 /// A gate which can be configured to perform various arithmetic. In particular, it computes
 ///
@@ -10,6 +10,12 @@ use crate::{CircuitBuilder2, ConstraintPolynomial, DeterministicGate, Field, Gat
 /// where `product_weight` and `addend_weight` are constants, and the other variables are wires.
 #[derive(Eq, PartialEq, Hash)]
 struct ArithmeticGate2;
+
+impl ArithmeticGate2 {
+    pub fn get_ref<F: Field>() -> GateRef<F> {
+        GateRef::new(DeterministicGateAdapter::new(ArithmeticGate2))
+    }
+}
 
 impl ArithmeticGate2 {
     pub const CONST_PRODUCT_WEIGHT: usize = 0;
@@ -26,7 +32,7 @@ impl ArithmeticGate2 {
         y: Target2<F>,
         z: Target2<F>,
     ) -> Target2<F> {
-        let gate_type = GateWrapper::new(ArithmeticGate2);
+        let gate_type = ArithmeticGate2::get_ref();
         let constants = vec![F::ONE, F::ONE];
         let gate = builder.add_gate(GateInstance { gate_type, constants });
 
@@ -63,7 +69,7 @@ impl<F: Field> DeterministicGate<F> for ArithmeticGate2 {
         "ArithmeticGate".into()
     }
 
-    fn outputs(&self) -> Vec<(usize, ConstraintPolynomial<F>)> {
+    fn outputs(&self, _config: CircuitConfig) -> Vec<(usize, ConstraintPolynomial<F>)> {
         let const_0 = ConstraintPolynomial::local_constant(Self::CONST_PRODUCT_WEIGHT);
         let const_1 = ConstraintPolynomial::local_constant(Self::CONST_ADDEND_WEIGHT);
         let multiplicand_0 = ConstraintPolynomial::local_wire_value(Self::WIRE_MULTIPLICAND_0);
@@ -77,11 +83,12 @@ impl<F: Field> DeterministicGate<F> for ArithmeticGate2 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{CircuitBuilder2, TweedledumBase};
+    use crate::{CircuitBuilder2, CircuitConfig, TweedledumBase};
     use crate::gates2::arithmetic::ArithmeticGate2;
 
     fn add() {
-        let mut builder = CircuitBuilder2::<TweedledumBase>::new();
+        let config = CircuitConfig { num_wires: 3, num_routed_wires: 3 };
+        let mut builder = CircuitBuilder2::<TweedledumBase>::new(config);
         let one = builder.one();
         let two = builder.two();
         let sum = ArithmeticGate2::add(&mut builder, one, one);

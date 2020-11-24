@@ -1,4 +1,4 @@
-use crate::{DeterministicGate, Field, ConstraintPolynomial};
+use crate::{ConstraintPolynomial, DeterministicGate, Field, CircuitConfig};
 
 /// A gate which doesn't perform any arithmetic, but just acts as a buffer for receiving data.
 /// Some gates, such as the Rescue round gate, "output" their results using one of the next gate's
@@ -11,7 +11,7 @@ impl<F: Field> DeterministicGate<F> for BufferGate2 {
         "Buffer".into()
     }
 
-    fn outputs(&self) -> Vec<(usize, ConstraintPolynomial<F>)> {
+    fn outputs(&self, _config: CircuitConfig) -> Vec<(usize, ConstraintPolynomial<F>)> {
         Vec::new()
     }
 }

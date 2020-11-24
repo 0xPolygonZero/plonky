@@ -1,4 +1,4 @@
-use crate::{Field, Target2, PartialWitness2};
+use crate::{Field, PartialWitness2, Target2};
 
 /// A generator participates in the generation of the witness.
 pub trait WitnessGenerator2<F: Field>: 'static {

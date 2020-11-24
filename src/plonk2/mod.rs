@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::convert::Infallible;
 use std::hash::Hash;
 use std::marker::PhantomData;
@@ -9,8 +10,7 @@ pub use prover::*;
 pub use verifier::*;
 pub use witness::*;
 
-use crate::{Field, GateInstance, Wire, GateWrapper};
-use std::collections::HashSet;
+use crate::{Field, GateInstance, GateRef, Wire};
 
 mod constraint_polynomial;
 mod gate;
@@ -20,15 +20,29 @@ mod prover;
 mod witness;
 mod verifier;
 
+#[derive(Copy, Clone)]
+pub struct CircuitConfig {
+    pub num_wires: usize,
+    pub num_routed_wires: usize,
+}
+
+impl CircuitConfig {
+    pub fn advice_wires(&self) -> usize {
+        self.num_wires - self.num_routed_wires
+    }
+}
+
 pub struct CircuitBuilder2<F: Field> {
-    gates: HashSet<GateWrapper<F>>,
+    config: CircuitConfig,
+    gates: HashSet<GateRef<F>>,
     gate_instances: Vec<GateInstance<F>>,
     generators: Vec<Box<dyn WitnessGenerator2<F>>>,
 }
 
 impl<F: Field> CircuitBuilder2<F> {
-    pub fn new() -> Self {
+    pub fn new(config: CircuitConfig) -> Self {
         CircuitBuilder2 {
+            config,
             gates: HashSet::new(),
             gate_instances: Vec::new(),
             generators: Vec::new(),
@@ -37,37 +51,33 @@ impl<F: Field> CircuitBuilder2<F> {
 
     /// Adds a gate to the circuit, and returns its index.
     pub fn add_gate(&mut self, gate_instance: GateInstance<F>) -> usize {
+        // If we haven't seen a gate of this type before, check that it's compatible with our
+        // circuit configuration, then register it.
+        if !self.gates.contains(&gate_instance.gate_type) {
+            let gate = gate_instance.gate_type.clone();
+            self.check_gate_compatibility(&gate);
+            self.gates.insert(gate);
+        }
+
         let index = self.gate_instances.len();
         self.gate_instances.push(gate_instance);
         index
     }
 
-    /// Shorthand for `generate_copy` and `assert_equal`.
-    /// Both elements must be routable, otherwise this method will panic.
-    pub fn route(&mut self, x: Target2<F>, y: Target2<F>) {
-        self.generate_copy(x, y);
-        self.assert_equal(x, y);
+    fn check_gate_compatibility(&self, gate: &GateRef<F>) {
+        assert!(gate.0.min_wires(self.config) <= self.config.num_wires);
     }
 
-    /// Adds a generator which will copy `x` to `y`.
-    pub fn generate_copy(&mut self, x: Target2<F>, y: Target2<F>) {
-        struct CopyGenerator<F: Field> {
-            x: Target2<F>,
-            y: Target2<F>,
-        }
+    /// Shorthand for `generate_copy` and `assert_equal`.
+    /// Both elements must be routable, otherwise this method will panic.
+    pub fn route(&mut self, src: Target2<F>, dst: Target2<F>) {
+        self.generate_copy(src, dst);
+        self.assert_equal(src, dst);
+    }
 
-        impl<F: Field> SimpleGenerator<F> for CopyGenerator<F> {
-            fn dependencies(&self) -> Vec<Target2<F>> {
-                vec![self.x]
-            }
-
-            fn run_once(&mut self, witness: &PartialWitness2<F>) -> PartialWitness2<F> {
-                let value = witness.get(self.x);
-                PartialWitness2::singleton(self.y, value)
-            }
-        }
-
-        self.add_generator(CopyGenerator { x, y });
+    /// Adds a generator which will copy `src` to `dst`.
+    pub fn generate_copy(&mut self, src: Target2<F>, dst: Target2<F>) {
+        self.add_generator(CopyGenerator { src, dst });
     }
 
     /// Uses Plonk's permutation argument to require that two elements be equal.
@@ -129,5 +139,22 @@ impl<F: Field> Target2<F> {
             Target2::VirtualAdviceTarget { .. } => false,
             Target2::_Field(_, _) => unreachable!(),
         }
+    }
+}
+
+/// A generator which copies one wire to another.
+pub(crate) struct CopyGenerator<F: Field> {
+    src: Target2<F>,
+    dst: Target2<F>,
+}
+
+impl<F: Field> SimpleGenerator<F> for CopyGenerator<F> {
+    fn dependencies(&self) -> Vec<Target2<F>> {
+        vec![self.src]
+    }
+
+    fn run_once(&mut self, witness: &PartialWitness2<F>) -> PartialWitness2<F> {
+        let value = witness.get(self.src);
+        PartialWitness2::singleton(self.dst, value)
     }
 }

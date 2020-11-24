@@ -1,4 +1,4 @@
-use crate::{DeterministicGate, Field, ConstraintPolynomial};
+use crate::{ConstraintPolynomial, DeterministicGate, Field, DeterministicGateAdapter, GateRef, CircuitConfig};
 
 /// A gate which takes as inputs limbs of sum small base, verifies that each limb is in `[0, base)`,
 /// and outputs the weighted sum `limb[0] + base limb[1] + base^2 limb[2] + ...`.
@@ -7,12 +7,19 @@ pub struct LimbSumGate {
     num_limbs: usize,
 }
 
+impl LimbSumGate {
+    fn get_ref<F: Field>(base: usize, num_limbs: usize) -> GateRef<F> {
+        let gate = LimbSumGate { base, num_limbs };
+        GateRef::new(DeterministicGateAdapter::new(gate))
+    }
+}
+
 impl<F: Field> DeterministicGate<F> for LimbSumGate {
     fn id(&self) -> String {
         format!("LimbSumGate-{}x{}", self.base, self.num_limbs)
     }
 
-    fn outputs(&self) -> Vec<(usize, ConstraintPolynomial<F>)> {
+    fn outputs(&self, _config: CircuitConfig) -> Vec<(usize, ConstraintPolynomial<F>)> {
         // We compute `out = limb[0] + base * limb[1] + base^2 * limb[2] + ...`.
         let out = (0..self.num_limbs).map(|i| {
             let limb = ConstraintPolynomial::local_wire_value(i);
@@ -23,7 +30,7 @@ impl<F: Field> DeterministicGate<F> for LimbSumGate {
         vec![(self.num_limbs, out)]
     }
 
-    fn additional_constraints(&self) -> Vec<ConstraintPolynomial<F>> {
+    fn additional_constraints(&self, _config: CircuitConfig) -> Vec<ConstraintPolynomial<F>> {
         // For each limb,
         (0..self.num_limbs).map(|i| {
             let limb = ConstraintPolynomial::local_wire_value(i);
@@ -39,10 +46,11 @@ impl<F: Field> DeterministicGate<F> for LimbSumGate {
 
 #[cfg(test)]
 mod tests {
-    use crate::{CircuitBuilder2, TweedledumBase};
+    use crate::{CircuitBuilder2, CircuitConfig, TweedledumBase};
 
     fn valid() {
-        let mut builder = CircuitBuilder2::<TweedledumBase>::new();
+        let config = CircuitConfig { num_wires: 3, num_routed_wires: 3 };
+        let mut builder = CircuitBuilder2::<TweedledumBase>::new(config);
         let zero = builder.zero();
         let one = builder.one();
         let two = builder.two();

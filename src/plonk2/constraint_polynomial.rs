@@ -1,10 +1,11 @@
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
+use std::iter::{Product, Sum};
+use std::ops::{Add, Mul, Neg, Sub};
 use std::ptr;
 use std::rc::Rc;
+
 use crate::{Field, Wire};
-use std::collections::{HashMap, HashSet};
-use std::ops::{Add, Sub, Mul, Neg};
-use std::iter::{Sum, Product};
 
 pub(crate) struct EvaluationVars<'a, F: Field> {
     pub(crate) local_constants: &'a [F],

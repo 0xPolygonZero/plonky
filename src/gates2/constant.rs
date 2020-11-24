@@ -1,4 +1,4 @@
-use crate::{Field, DeterministicGate, ConstraintPolynomial};
+use crate::{ConstraintPolynomial, DeterministicGate, Field, CircuitConfig};
 
 /// A gate which takes a single constant parameter and outputs that value.
 pub struct ConstantGate2;
@@ -8,7 +8,7 @@ impl<F: Field> DeterministicGate<F> for ConstantGate2 {
         "ConstantGate".into()
     }
 
-    fn outputs(&self) -> Vec<(usize, ConstraintPolynomial<F>)> {
+    fn outputs(&self, config: CircuitConfig) -> Vec<(usize, ConstraintPolynomial<F>)> {
         let out = ConstraintPolynomial::local_constant(0);
         vec![(0, out)]
     }
