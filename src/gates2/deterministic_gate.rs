@@ -1,6 +1,6 @@
 use serde::export::PhantomData;
 
-use crate::{ConstraintPolynomial, EvaluationVars, Field, Gate2, PartialWitness2, SimpleGenerator, Target2, Wire, WitnessGenerator2, CircuitConfig};
+use crate::{CircuitConfig, ConstraintPolynomial, EvaluationVars, Field, Gate2, PartialWitness2, SimpleGenerator, Target2, Wire, WitnessGenerator2};
 
 /// A deterministic gate. Each entry in `outputs()` describes how that output is evaluated; this is
 /// used to create both the constraint set and the generator set.

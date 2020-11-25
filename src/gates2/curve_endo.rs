@@ -1,1 +1,1 @@
-struct CurveEndoGate2;
+pub struct CurveEndoGate2;

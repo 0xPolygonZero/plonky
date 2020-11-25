@@ -8,7 +8,7 @@ use crate::{CircuitConfig, ConstraintPolynomial, Field, Gate2, GateRef, WitnessG
 /// it gets a bit more complex. We place a `BufferGate` after each `PublicInputGate`, then "copy"
 /// any non-routed public inputs from the `PublicInputGate` to the routed wires of the following
 /// `BufferGate`. These routed `BufferGate` wires can then be used to route public inputs elsewhere.
-struct PublicInputGate2;
+pub struct PublicInputGate2;
 
 impl<F: Field> Gate2<F> for PublicInputGate2 {
     fn id(&self) -> String {

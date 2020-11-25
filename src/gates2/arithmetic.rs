@@ -9,7 +9,7 @@ use crate::{CircuitBuilder2, ConstraintPolynomial, DeterministicGate, Determinis
 ///
 /// where `product_weight` and `addend_weight` are constants, and the other variables are wires.
 #[derive(Eq, PartialEq, Hash)]
-struct ArithmeticGate2;
+pub struct ArithmeticGate2;
 
 impl ArithmeticGate2 {
     pub fn get_ref<F: Field>() -> GateRef<F> {

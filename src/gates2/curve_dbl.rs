@@ -1,1 +1,1 @@
-struct CurveDblGate2;
+pub struct CurveDblGate2;

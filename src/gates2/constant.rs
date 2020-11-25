@@ -8,7 +8,7 @@ impl<F: Field> DeterministicGate<F> for ConstantGate2 {
         "ConstantGate".into()
     }
 
-    fn outputs(&self, config: CircuitConfig) -> Vec<(usize, ConstraintPolynomial<F>)> {
+    fn outputs(&self, _config: CircuitConfig) -> Vec<(usize, ConstraintPolynomial<F>)> {
         let out = ConstraintPolynomial::local_constant(0);
         vec![(0, out)]
     }
