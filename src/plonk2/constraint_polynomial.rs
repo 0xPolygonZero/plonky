@@ -58,30 +58,30 @@ impl<F: Field> ConstraintPolynomial<F> {
     }
 
     // TODO: Have these take references?
-    pub fn add(self, rhs: Self) -> Self {
+    pub fn add(&self, rhs: &Self) -> Self {
         // TODO: Special case for either operand being 0.
         Self::from_inner(ConstraintPolynomialInner::Sum {
-            lhs: self.0,
-            rhs: rhs.0,
+            lhs: self.0.clone(),
+            rhs: rhs.0.clone(),
         })
     }
 
-    pub fn sub(self, rhs: Self) -> Self {
+    pub fn sub(&self, rhs: &Self) -> Self {
         // TODO: Special case for either operand being 0.
         // TODO: Faster to have a dedicated ConstraintPolynomialInner::Difference?
         // TODO: `self + -rhs`?
-        self.add(rhs.neg())
+        self.add(&rhs.neg())
     }
 
-    pub fn double(self) -> Self {
+    pub fn double(&self) -> Self {
         self.clone().add(self)
     }
 
-    pub fn mul(self, rhs: Self) -> Self {
+    pub fn mul(&self, rhs: &Self) -> Self {
         // TODO: Special case for either operand being 1.
         Self::from_inner(ConstraintPolynomialInner::Product {
-            lhs: self.0,
-            rhs: rhs.0,
+            lhs: self.0.clone(),
+            rhs: rhs.0.clone(),
         })
     }
 
@@ -183,7 +183,7 @@ macro_rules! binop_variants {
             type Output = Self;
 
             fn $method(self, rhs: Self) -> Self {
-                ConstraintPolynomial::$method(self, rhs)
+                ConstraintPolynomial::$method(&self, &rhs)
             }
         }
 
@@ -191,7 +191,7 @@ macro_rules! binop_variants {
             type Output = Self;
 
             fn $method(self, rhs: &Self) -> Self {
-                ConstraintPolynomial::$method(self, rhs.clone())
+                ConstraintPolynomial::$method(&self, rhs)
             }
         }
 
@@ -199,7 +199,7 @@ macro_rules! binop_variants {
             type Output = ConstraintPolynomial<F>;
 
             fn $method(self, rhs: ConstraintPolynomial<F>) -> Self::Output {
-                ConstraintPolynomial::$method(self.clone(), rhs)
+                ConstraintPolynomial::$method(self, &rhs)
             }
         }
 
@@ -207,7 +207,7 @@ macro_rules! binop_variants {
             type Output = ConstraintPolynomial<F>;
 
             fn $method(self, rhs: Self) -> Self::Output {
-                ConstraintPolynomial::$method(self.clone(), rhs.clone())
+                ConstraintPolynomial::$method(self, rhs)
             }
         }
 
@@ -215,7 +215,7 @@ macro_rules! binop_variants {
             type Output = Self;
 
             fn $method(self, rhs: F) -> Self {
-                ConstraintPolynomial::$method(self, ConstraintPolynomial::constant(rhs))
+                ConstraintPolynomial::$method(&self, &ConstraintPolynomial::constant(rhs))
             }
         }
 
@@ -223,7 +223,7 @@ macro_rules! binop_variants {
             type Output = ConstraintPolynomial<F>;
 
             fn $method(self, rhs: F) -> Self::Output {
-                ConstraintPolynomial::$method(self.clone(), ConstraintPolynomial::constant(rhs))
+                ConstraintPolynomial::$method(self, &ConstraintPolynomial::constant(rhs))
             }
         }
 
@@ -231,7 +231,7 @@ macro_rules! binop_variants {
             type Output = Self;
 
             fn $method(self, rhs: usize) -> Self {
-                ConstraintPolynomial::$method(self, ConstraintPolynomial::constant(F::from_canonical_usize(rhs)))
+                ConstraintPolynomial::$method(&self, &ConstraintPolynomial::constant_usize(rhs))
             }
         }
 
@@ -239,7 +239,7 @@ macro_rules! binop_variants {
             type Output = ConstraintPolynomial<F>;
 
             fn $method(self, rhs: usize) -> Self::Output {
-                ConstraintPolynomial::$method(self.clone(), ConstraintPolynomial::constant(F::from_canonical_usize(rhs)))
+                ConstraintPolynomial::$method(self, &ConstraintPolynomial::constant_usize(rhs))
             }
         }
     };
