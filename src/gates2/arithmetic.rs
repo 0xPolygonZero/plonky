@@ -15,9 +15,7 @@ impl ArithmeticGate2 {
     pub fn get_ref<F: Field>() -> GateRef<F> {
         GateRef::new(DeterministicGateAdapter::new(ArithmeticGate2))
     }
-}
 
-impl ArithmeticGate2 {
     pub const CONST_PRODUCT_WEIGHT: usize = 0;
     pub const CONST_ADDEND_WEIGHT: usize = 1;
 
@@ -35,7 +33,7 @@ impl ArithmeticGate2 {
     ) -> Target2<F> {
         let gate_type = ArithmeticGate2::get_ref();
         let constants = vec![F::ONE, F::ONE];
-        let gate = builder.add_gate(GateInstance { gate_type, constants });
+        let gate = builder.add_gate(gate_type, constants);
 
         builder.route(x, Target2::wire(gate, Self::WIRE_MULTIPLICAND_0));
         builder.route(y, Target2::wire(gate, Self::WIRE_MULTIPLICAND_1));

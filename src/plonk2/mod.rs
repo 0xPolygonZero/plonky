@@ -10,7 +10,7 @@ pub use prover::*;
 pub use verifier::*;
 pub use witness::*;
 
-use crate::{Field, GateInstance, GateRef, Wire};
+use crate::{Field, GateInstance, GateRef, Wire, ConstantGate2};
 
 mod constraint_polynomial;
 mod gate;
@@ -50,17 +50,16 @@ impl<F: Field> CircuitBuilder2<F> {
     }
 
     /// Adds a gate to the circuit, and returns its index.
-    pub fn add_gate(&mut self, gate_instance: GateInstance<F>) -> usize {
+    pub fn add_gate(&mut self, gate_type: GateRef<F>, constants: Vec<F>) -> usize {
         // If we haven't seen a gate of this type before, check that it's compatible with our
         // circuit configuration, then register it.
-        if !self.gates.contains(&gate_instance.gate_type) {
-            let gate = gate_instance.gate_type.clone();
-            self.check_gate_compatibility(&gate);
-            self.gates.insert(gate);
+        if !self.gates.contains(&gate_type) {
+            self.check_gate_compatibility(&gate_type);
+            self.gates.insert(gate_type.clone());
         }
 
         let index = self.gate_instances.len();
-        self.gate_instances.push(gate_instance);
+        self.gate_instances.push(GateInstance { gate_type, constants });
         index
     }
 
@@ -113,7 +112,8 @@ impl<F: Field> CircuitBuilder2<F> {
 
     /// Returns a routable target with the given constant value.
     pub fn constant(&mut self, c: F) -> Target2<F> {
-        todo!()
+        let gate = self.add_gate(ConstantGate2::get_ref(), vec![c]);
+        Target2::Wire(Wire { gate, input: ConstantGate2::WIRE_OUTPUT })
     }
 }
 
