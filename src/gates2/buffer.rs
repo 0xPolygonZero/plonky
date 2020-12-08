@@ -1,4 +1,4 @@
-use crate::{ConstraintPolynomial, DeterministicGate, Field, CircuitConfig};
+use crate::{CircuitConfig, ConstraintPolynomial, DeterministicGate, Field};
 
 /// A gate which doesn't perform any arithmetic, but just acts as a buffer for receiving data.
 /// Some gates, such as the Rescue round gate, "output" their results using one of the next gate's

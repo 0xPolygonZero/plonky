@@ -1,4 +1,4 @@
-use crate::{CircuitBuilder2, ConstraintPolynomial, DeterministicGate, DeterministicGateAdapter, Field, GateInstance, GateRef, Target2, CircuitConfig};
+use crate::{CircuitBuilder2, CircuitConfig, ConstraintPolynomial, DeterministicGate, DeterministicGateAdapter, Field, GateRef, Target2};
 
 /// A gate which can be configured to perform various arithmetic. In particular, it computes
 ///

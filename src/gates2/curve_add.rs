@@ -25,7 +25,7 @@ impl<C: Curve> Gate2<C::BaseField> for CurveAddGate2<C> {
 
     fn constraints(
         &self,
-        config: CircuitConfig,
+        _config: CircuitConfig,
     ) -> Vec<ConstraintPolynomial<<C as Curve>::BaseField>> {
         // Notation:
         // - p1 is the accumulator;
@@ -68,10 +68,10 @@ impl<C: Curve> Gate2<C::BaseField> for CurveAddGate2<C> {
 
     fn generators(
         &self,
-        config: CircuitConfig,
+        _config: CircuitConfig,
         gate_index: usize,
-        local_constants: Vec<<C as Curve>::BaseField>,
-        next_constants: Vec<<C as Curve>::BaseField>,
+        _local_constants: Vec<<C as Curve>::BaseField>,
+        _next_constants: Vec<<C as Curve>::BaseField>,
     ) -> Vec<Box<dyn WitnessGenerator2<C::BaseField>>> {
         let gen = CurveAddGateGenerator::<C> { gate_index, _phantom: PhantomData };
         vec![Box::new(gen)]

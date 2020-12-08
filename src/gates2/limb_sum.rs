@@ -1,4 +1,4 @@
-use crate::{ConstraintPolynomial, DeterministicGate, Field, DeterministicGateAdapter, GateRef, CircuitConfig};
+use crate::{CircuitConfig, ConstraintPolynomial, DeterministicGate, DeterministicGateAdapter, Field, GateRef};
 
 /// A gate which takes as inputs limbs of sum small base, verifies that each limb is in `[0, base)`,
 /// and outputs the weighted sum `limb[0] + base limb[1] + base^2 limb[2] + ...`.

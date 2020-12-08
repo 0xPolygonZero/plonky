@@ -1,4 +1,4 @@
-use crate::{ConstraintPolynomial, DeterministicGate, Field, CircuitConfig, GateRef, DeterministicGateAdapter};
+use crate::{CircuitConfig, ConstraintPolynomial, DeterministicGate, DeterministicGateAdapter, Field, GateRef};
 
 /// A gate which takes a single constant parameter and outputs that value.
 pub struct ConstantGate2;

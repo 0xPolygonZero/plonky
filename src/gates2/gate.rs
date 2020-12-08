@@ -1,7 +1,7 @@
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
-use crate::{ConstraintPolynomial, Field, WitnessGenerator2, CircuitConfig};
+use crate::{CircuitConfig, ConstraintPolynomial, Field, WitnessGenerator2};
 
 /// A custom gate.
 pub trait Gate2<F: Field>: 'static {

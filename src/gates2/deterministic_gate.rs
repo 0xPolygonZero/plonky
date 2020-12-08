@@ -17,7 +17,7 @@ pub trait DeterministicGate<F: Field>: 'static {
 
     /// Any additional constraints to be enforced, besides the (automatically provided) ones that
     /// constraint output values.
-    fn additional_constraints(&self, config: CircuitConfig) -> Vec<ConstraintPolynomial<F>> {
+    fn additional_constraints(&self, _config: CircuitConfig) -> Vec<ConstraintPolynomial<F>> {
         Vec::new()
     }
 
@@ -25,8 +25,8 @@ pub trait DeterministicGate<F: Field>: 'static {
     /// values.
     fn additional_generators(
         &self,
-        config: CircuitConfig,
-        gate_index: usize,
+        _config: CircuitConfig,
+        _gate_index: usize,
     ) -> Vec<Box<dyn WitnessGenerator2<F>>> {
         Vec::new()
     }
