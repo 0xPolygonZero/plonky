@@ -4,15 +4,30 @@ use crate::{CircuitConfig, ConstraintPolynomial, EvaluationVars, Field, Gate2, P
 
 /// A deterministic gate. Each entry in `outputs()` describes how that output is evaluated; this is
 /// used to create both the constraint set and the generator set.
+///
+/// `DeterministicGate`s do not automatically implement `Gate`; they should instead be wrapped in
+/// `DeterministicGateAdapter`.
 pub trait DeterministicGate<F: Field>: 'static {
     /// A unique identifier for this gate.
     fn id(&self) -> String;
 
+    /// A vector of `(i, c)` pairs, where `i` is the index of an output and `c` is the polynomial
+    /// defining how that output is evaluated.
     fn outputs(&self, config: CircuitConfig) -> Vec<(usize, ConstraintPolynomial<F>)>;
 
-    /// Additional constraints to be enforced, besides the (automatically generated) ones that
+    /// Any additional constraints to be enforced, besides the (automatically provided) ones that
     /// constraint output values.
     fn additional_constraints(&self, config: CircuitConfig) -> Vec<ConstraintPolynomial<F>> {
+        Vec::new()
+    }
+
+    /// Any additional generators, besides the (automatically provided) ones that generate output
+    /// values.
+    fn additional_generators(
+        &self,
+        config: CircuitConfig,
+        gate_index: usize,
+    ) -> Vec<Box<dyn WitnessGenerator2<F>>> {
         Vec::new()
     }
 }
@@ -67,6 +82,7 @@ impl<F: Field, DG: DeterministicGate<F>> Gate2<F> for DeterministicGateAdapter<F
                 let b: Box::<dyn WitnessGenerator2<F>> = Box::new(og);
                 b
             })
+            .chain(self.gate.additional_generators(config, gate_index))
             .collect()
     }
 }

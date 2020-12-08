@@ -33,3 +33,20 @@ impl<F: Field, SG: SimpleGenerator<F>> WitnessGenerator2<F> for SG {
         }
     }
 }
+
+/// A generator which copies one wire to another.
+pub(crate) struct CopyGenerator<F: Field> {
+    pub(crate) src: Target2<F>,
+    pub(crate) dst: Target2<F>,
+}
+
+impl<F: Field> SimpleGenerator<F> for CopyGenerator<F> {
+    fn dependencies(&self) -> Vec<Target2<F>> {
+        vec![self.src]
+    }
+
+    fn run_once(&mut self, witness: &PartialWitness2<F>) -> PartialWitness2<F> {
+        let value = witness.get(self.src);
+        PartialWitness2::singleton(self.dst, value)
+    }
+}

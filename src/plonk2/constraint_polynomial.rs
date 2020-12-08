@@ -29,6 +29,10 @@ impl<F: Field> ConstraintPolynomial<F> {
         Self::from_inner(ConstraintPolynomialInner::Constant(c))
     }
 
+    pub fn constant_usize(c: usize) -> Self {
+        Self::constant(F::from_canonical_usize(c))
+    }
+
     pub fn zero() -> Self {
         Self::constant(F::ZERO)
     }
@@ -54,7 +58,7 @@ impl<F: Field> ConstraintPolynomial<F> {
     }
 
     // TODO: Have these take references?
-    fn add(self, rhs: Self) -> Self {
+    pub fn add(self, rhs: Self) -> Self {
         // TODO: Special case for either operand being 0.
         Self::from_inner(ConstraintPolynomialInner::Sum {
             lhs: self.0,
@@ -62,14 +66,18 @@ impl<F: Field> ConstraintPolynomial<F> {
         })
     }
 
-    fn sub(self, rhs: Self) -> Self {
+    pub fn sub(self, rhs: Self) -> Self {
         // TODO: Special case for either operand being 0.
         // TODO: Faster to have a dedicated ConstraintPolynomialInner::Difference?
         // TODO: `self + -rhs`?
         self.add(rhs.neg())
     }
 
-    fn mul(self, rhs: Self) -> Self {
+    pub fn double(self) -> Self {
+        self.clone().add(self)
+    }
+
+    pub fn mul(self, rhs: Self) -> Self {
         // TODO: Special case for either operand being 1.
         Self::from_inner(ConstraintPolynomialInner::Product {
             lhs: self.0,
@@ -82,6 +90,10 @@ impl<F: Field> ConstraintPolynomial<F> {
             base: self.0.clone(),
             exponent,
         })
+    }
+
+    pub fn square(&self) -> Self {
+        self * self
     }
 
     pub(crate) fn degree(&self) -> usize {
@@ -154,7 +166,7 @@ impl<F: Field> Neg for &ConstraintPolynomial<F> {
 /// - `Self . Self`
 /// - `&Self . Self`
 /// - `Self . &Self`
-/// - `&Self . Self`
+/// - `&Self . &Self`
 /// - `Self . F`
 /// - `&Self . F`
 /// - `Self . usize`

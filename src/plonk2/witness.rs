@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{Field, Target2};
+use crate::{Field, Target2, Wire};
 
 #[derive(Debug)]
 pub struct PartialWitness2<F: Field> {
@@ -28,6 +28,10 @@ impl<F: Field> PartialWitness2<F> {
         self.target_values[&target]
     }
 
+    pub fn get_wire(&self, wire: Wire) -> F {
+        self.get(Target2::Wire(wire))
+    }
+
     pub fn try_get(&self, target: Target2<F>) -> Option<F> {
         self.target_values.get(&target).cloned()
     }
@@ -42,5 +46,9 @@ impl<F: Field> PartialWitness2<F> {
 
     pub fn set(&mut self, target: Target2<F>, value: F) {
         self.target_values.insert(target, value);
+    }
+
+    pub fn set_wire(&mut self, wire: Wire, value: F) {
+        self.set(Target2::Wire(wire), value)
     }
 }

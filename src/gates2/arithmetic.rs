@@ -20,6 +20,7 @@ impl ArithmeticGate2 {
 impl ArithmeticGate2 {
     pub const CONST_PRODUCT_WEIGHT: usize = 0;
     pub const CONST_ADDEND_WEIGHT: usize = 1;
+
     pub const WIRE_MULTIPLICAND_0: usize = 0;
     pub const WIRE_MULTIPLICAND_1: usize = 1;
     pub const WIRE_ADDEND: usize = 2;
