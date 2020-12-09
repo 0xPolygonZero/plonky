@@ -49,7 +49,7 @@ mod tests {
     use crate::{CircuitBuilder2, CircuitConfig, TweedledumBase};
 
     fn valid() {
-        let config = CircuitConfig { num_wires: 3, num_routed_wires: 3 };
+        let config = CircuitConfig { num_wires: 3, num_routed_wires: 3, security_bits: 128 };
         let mut builder = CircuitBuilder2::<TweedledumBase>::new(config);
         let zero = builder.zero();
         let one = builder.one();

@@ -86,7 +86,7 @@ mod tests {
     use crate::gates2::arithmetic::ArithmeticGate2;
 
     fn add() {
-        let config = CircuitConfig { num_wires: 3, num_routed_wires: 3 };
+        let config = CircuitConfig { num_wires: 3, num_routed_wires: 3, security_bits: 128 };
         let mut builder = CircuitBuilder2::<TweedledumBase>::new(config);
         let one = builder.one();
         let two = builder.two();

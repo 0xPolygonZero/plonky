@@ -1,3 +1,8 @@
-// use crate::Curve;
-//
-// pub struct Verifier<C: Curve> {}
+use crate::{Curve, VerifierOnlyCircuitData, CommonCircuitData};
+
+pub(crate) fn verify2<C: Curve>(
+    verifier_data: &VerifierOnlyCircuitData,
+    common_data: &CommonCircuitData<C>,
+) {
+    todo!()
+}

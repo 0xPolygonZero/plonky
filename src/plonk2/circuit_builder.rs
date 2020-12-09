@@ -1,17 +1,6 @@
-use crate::{Field, GateRef, GateInstance, WitnessGenerator2, Target2, ConstantGate2, Wire, CopyGenerator};
 use std::collections::HashSet;
 
-#[derive(Copy, Clone)]
-pub struct CircuitConfig {
-    pub num_wires: usize,
-    pub num_routed_wires: usize,
-}
-
-impl CircuitConfig {
-    pub fn advice_wires(&self) -> usize {
-        self.num_wires - self.num_routed_wires
-    }
-}
+use crate::{CircuitConfig, ConstantGate2, CopyGenerator, Field, GateInstance, GateRef, Target2, Wire, WitnessGenerator2};
 
 pub struct CircuitBuilder2<F: Field> {
     config: CircuitConfig,
