@@ -1,4 +1,4 @@
-use crate::{apply_mds, CircuitConfig, ConstraintPolynomial, Field, Gate2, PartialWitness2, SimpleGenerator, Target2, Wire, WitnessGenerator2};
+use crate::{apply_mds, CircuitConfig, ConstraintPolynomial, Field, Gate2, PartialWitness2, SimpleGenerator, Target2, Wire, WitnessGenerator2, apply_mds_constraint_polys};
 
 /// Implements a round of the Rescue permutation, modified with a different key schedule to reduce
 /// the number of constants involved.
@@ -9,13 +9,13 @@ pub struct ModifiedRescueGate {
 }
 
 impl ModifiedRescueGate {
-    /// Returns the index of the `i`th accumulator wire.
+    /// Returns the index of the `i`th accumulator wire. These act as both input and output wires.
     pub fn wire_acc(&self, i: usize) -> usize {
         debug_assert!(i < self.width);
         i
     }
 
-    /// Returns the index of the `i`th root wire.
+    /// Returns the index of the `i`th (purported) root wire.
     pub fn wire_root(&self, i: usize) -> usize {
         debug_assert!(i < self.width);
         self.width + i
@@ -28,7 +28,53 @@ impl<F: Field> Gate2<F> for ModifiedRescueGate {
     }
 
     fn constraints(&self, _config: CircuitConfig) -> Vec<ConstraintPolynomial<F>> {
-        unimplemented!()
+        let w = self.width;
+
+        // Load the input layer variables.
+        let layer_0 = (0..w)
+            .map(|i| ConstraintPolynomial::local_wire_value(self.wire_acc(i)))
+            .collect::<Vec<_>>();
+
+        // Load the (purported) alpha'th root layer variables.
+        let layer_1 = (0..w)
+            .map(|i| ConstraintPolynomial::local_wire_value(self.wire_root(i)))
+            .collect::<Vec<_>>();
+
+        // Compute the input layer from the alpha'th root layer, so that we can verify the
+        // (purported) roots.
+        let computed_inputs = layer_1.iter()
+            .map(|x| x.exp(self.alpha))
+            .collect::<Vec<_>>();
+
+        // Apply the MDS matrix.
+        let layer_2 = apply_mds_constraint_polys(layer_1);
+
+        // Add a constant to the first element.
+        let mut layer_3 = layer_2;
+        layer_3[0] = &layer_3[0] + ConstraintPolynomial::local_constant(0);
+
+        // Raise to the alpha'th power.
+        let layer_4 = layer_3.iter()
+            .map(|x| x.exp(self.alpha))
+            .collect::<Vec<_>>();
+
+        // Apply the MDS matrix.
+        let layer_5 = apply_mds_constraint_polys(layer_4);
+
+        // Add a constant to the first element.
+        let mut layer_6 = layer_5;
+        layer_6[0] = &layer_6[0] + ConstraintPolynomial::local_constant(1);
+
+        let mut constraints = Vec::new();
+        for i in 0..w {
+            // Check that the computed input matches the actual input.
+            constraints.push(&computed_inputs[i] - &layer_0[i]);
+
+            // Check that the computed output matches the actual output.
+            let actual_out = ConstraintPolynomial::next_wire_value(self.wire_acc(i));
+            constraints.push(&layer_6[i] - actual_out);
+        }
+        constraints
     }
 
     fn generators(
