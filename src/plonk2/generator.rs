@@ -46,7 +46,7 @@ impl<F: Field> SimpleGenerator<F> for CopyGenerator<F> {
     }
 
     fn run_once(&mut self, witness: &PartialWitness2<F>) -> PartialWitness2<F> {
-        let value = witness.get(self.src);
+        let value = witness.get_target(self.src);
         PartialWitness2::singleton(self.dst, value)
     }
 }

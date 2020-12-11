@@ -119,60 +119,60 @@ impl<C: Curve> SimpleGenerator<C::BaseField> for CurveAddGateGenerator<C> {
         // - p3 = p1 + p2;
         // - p4 = if scalar_bit { p3 } else { p1 }
 
-        let x1_target = Wire {
+        let x1_wire = Wire {
             gate: self.gate_index,
             input: CurveAddGate2::<C>::WIRE_GROUP_ACC_X,
         };
-        let y1_target = Wire {
+        let y1_wire = Wire {
             gate: self.gate_index,
             input: CurveAddGate2::<C>::WIRE_GROUP_ACC_Y,
         };
-        let x4_target = Wire {
+        let x4_wire = Wire {
             gate: self.gate_index + 1,
             input: CurveAddGate2::<C>::WIRE_GROUP_ACC_X,
         };
-        let y4_target = Wire {
+        let y4_wire = Wire {
             gate: self.gate_index + 1,
             input: CurveAddGate2::<C>::WIRE_GROUP_ACC_Y,
         };
-        let scalar_acc_old_target = Wire {
+        let scalar_acc_old_wire = Wire {
             gate: self.gate_index,
             input: CurveAddGate2::<C>::WIRE_SCALAR_ACC_OLD,
         };
-        let scalar_acc_new_target = Wire {
+        let scalar_acc_new_wire = Wire {
             gate: self.gate_index,
             input: CurveAddGate2::<C>::WIRE_SCALAR_ACC_NEW,
         };
-        let x2_target = Wire {
+        let x2_wire = Wire {
             gate: self.gate_index,
             input: CurveAddGate2::<C>::WIRE_ADDEND_X,
         };
-        let y2_target = Wire {
+        let y2_wire = Wire {
             gate: self.gate_index,
             input: CurveAddGate2::<C>::WIRE_ADDEND_Y,
         };
-        let scalar_bit_target = Wire {
+        let scalar_bit_wire = Wire {
             gate: self.gate_index,
             input: CurveAddGate2::<C>::WIRE_SCALAR_BIT,
         };
-        let inverse_target = Wire {
+        let inverse_wire = Wire {
             gate: self.gate_index,
             input: CurveAddGate2::<C>::WIRE_INVERSE,
         };
-        let lambda_target = Wire {
+        let lambda_wire = Wire {
             gate: self.gate_index,
             input: CurveAddGate2::<C>::WIRE_LAMBDA,
         };
 
-        let x1 = witness.get_wire(x1_target);
-        let y1 = witness.get_wire(y1_target);
+        let x1 = witness.get_wire(x1_wire);
+        let y1 = witness.get_wire(y1_wire);
 
-        let scalar_acc_old = witness.get_wire(scalar_acc_old_target);
+        let scalar_acc_old = witness.get_wire(scalar_acc_old_wire);
 
-        let x2 = witness.get_wire(x2_target);
-        let y2 = witness.get_wire(y2_target);
+        let x2 = witness.get_wire(x2_wire);
+        let y2 = witness.get_wire(y2_wire);
 
-        let scalar_bit = witness.get_wire(scalar_bit_target);
+        let scalar_bit = witness.get_wire(scalar_bit_wire);
         debug_assert!(scalar_bit.is_zero() || scalar_bit.is_one());
 
         let scalar_acc_new = scalar_acc_old.double() + scalar_bit;
@@ -191,11 +191,11 @@ impl<C: Curve> SimpleGenerator<C::BaseField> for CurveAddGateGenerator<C> {
         };
 
         let mut result = PartialWitness2::new();
-        result.set_wire(x4_target, x4);
-        result.set_wire(y4_target, y4);
-        result.set_wire(scalar_acc_new_target, scalar_acc_new);
-        result.set_wire(inverse_target, inverse);
-        result.set_wire(lambda_target, lambda);
+        result.set_wire(x4_wire, x4);
+        result.set_wire(y4_wire, y4);
+        result.set_wire(scalar_acc_new_wire, scalar_acc_new);
+        result.set_wire(inverse_wire, inverse);
+        result.set_wire(lambda_wire, lambda);
         result
     }
 }

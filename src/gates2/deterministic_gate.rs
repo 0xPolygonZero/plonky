@@ -118,8 +118,8 @@ impl<F: Field> SimpleGenerator<F> for OutputGenerator<F> {
             // Lookup the values if they exist. If not, we can just insert a zero, knowing
             // that it will not be used. (If it was used, it would have been included in our
             // dependencies, and this generator would not have run yet.)
-            let local_value = witness.try_get(Target2::Wire(local_wire)).unwrap_or(F::ZERO);
-            let next_value = witness.try_get(Target2::Wire(next_wire)).unwrap_or(F::ZERO);
+            let local_value = witness.try_get_target(Target2::Wire(local_wire)).unwrap_or(F::ZERO);
+            let next_value = witness.try_get_target(Target2::Wire(next_wire)).unwrap_or(F::ZERO);
 
             local_wire_values.push(local_value);
             next_wire_values.push(next_value);

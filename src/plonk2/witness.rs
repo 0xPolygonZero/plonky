@@ -16,7 +16,7 @@ impl<F: Field> PartialWitness2<F> {
 
     pub fn singleton(target: Target2<F>, value: F) -> Self {
         let mut witness = PartialWitness2::new();
-        witness.set(target, value);
+        witness.set_target(target, value);
         witness
     }
 
@@ -24,16 +24,16 @@ impl<F: Field> PartialWitness2<F> {
         self.target_values.is_empty()
     }
 
-    pub fn get(&self, target: Target2<F>) -> F {
+    pub fn get_target(&self, target: Target2<F>) -> F {
         self.target_values[&target]
     }
 
-    pub fn get_wire(&self, wire: Wire) -> F {
-        self.get(Target2::Wire(wire))
+    pub fn try_get_target(&self, target: Target2<F>) -> Option<F> {
+        self.target_values.get(&target).cloned()
     }
 
-    pub fn try_get(&self, target: Target2<F>) -> Option<F> {
-        self.target_values.get(&target).cloned()
+    pub fn get_wire(&self, wire: Wire) -> F {
+        self.get_target(Target2::Wire(wire))
     }
 
     pub fn contains(&self, target: Target2<F>) -> bool {
@@ -44,11 +44,11 @@ impl<F: Field> PartialWitness2<F> {
         targets.iter().all(|&t| self.contains(t))
     }
 
-    pub fn set(&mut self, target: Target2<F>, value: F) {
+    pub fn set_target(&mut self, target: Target2<F>, value: F) {
         self.target_values.insert(target, value);
     }
 
     pub fn set_wire(&mut self, wire: Wire, value: F) {
-        self.set(Target2::Wire(wire), value)
+        self.set_target(Target2::Wire(wire), value)
     }
 }
