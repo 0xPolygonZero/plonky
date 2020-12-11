@@ -24,7 +24,34 @@ impl<C: HaloCurve> Gate2<C::BaseField> for CurveEndoGate2<C> {
     }
 
     fn constraints(&self, _config: CircuitConfig) -> Vec<ConstraintPolynomial<C::BaseField>> {
-        unimplemented!()
+        let addend_x = ConstraintPolynomial::<C::BaseField>::local_wire_value(Self::WIRE_ADDEND_X);
+        let addend_y = ConstraintPolynomial::<C::BaseField>::local_wire_value(Self::WIRE_ADDEND_Y);
+        let scalar_bit_0 = ConstraintPolynomial::<C::BaseField>::local_wire_value(Self::WIRE_SCALAR_BIT_0);
+        let scalar_bit_1 = ConstraintPolynomial::<C::BaseField>::local_wire_value(Self::WIRE_SCALAR_BIT_1);
+        let group_acc_old_x = ConstraintPolynomial::<C::BaseField>::local_wire_value(Self::WIRE_GROUP_ACC_X);
+        let group_acc_old_y = ConstraintPolynomial::<C::BaseField>::local_wire_value(Self::WIRE_GROUP_ACC_Y);
+        let group_acc_new_x = ConstraintPolynomial::<C::BaseField>::next_wire_value(Self::WIRE_GROUP_ACC_X);
+        let group_acc_new_y = ConstraintPolynomial::<C::BaseField>::next_wire_value(Self::WIRE_GROUP_ACC_Y);
+        let inverse = ConstraintPolynomial::<C::BaseField>::local_wire_value(Self::WIRE_INVERSE);
+        let lambda = ConstraintPolynomial::<C::BaseField>::local_wire_value(Self::WIRE_LAMBDA);
+
+        // Conditionally apply the endo and conditionally negate in order to get S_i, which is
+        // the actual point we want to add to the accumulator.
+        let s_i_x = (&scalar_bit_1 * (C::ZETA - C::BaseField::ONE) + 1) * &addend_x;
+        let s_i_y = (scalar_bit_0.double() - 1) * &addend_y;
+
+        let computed_lambda = (&group_acc_old_y - &s_i_y) * &inverse;
+        let computed_group_acc_new_x = lambda.square() - &group_acc_old_x - &s_i_x;
+        let computed_group_acc_new_y = &lambda * (&group_acc_old_x - &group_acc_new_x) - &group_acc_old_y;
+
+        vec![
+            &computed_group_acc_new_x - &group_acc_new_x,
+            &computed_group_acc_new_y - &group_acc_new_y,
+            &scalar_bit_0 * (&scalar_bit_0 - 1),
+            &scalar_bit_1 * (&scalar_bit_1 - 1),
+            &inverse * (&group_acc_old_x - &s_i_x) - 1,
+            &computed_lambda - &lambda,
+        ]
     }
 
     fn generators(
