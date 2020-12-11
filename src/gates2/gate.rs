@@ -4,6 +4,7 @@ use std::rc::Rc;
 use crate::{CircuitConfig, ConstraintPolynomial, Field, WitnessGenerator2};
 
 /// A custom gate.
+// TODO: Remove CircuitConfig params? Could just use fields within each struct.
 pub trait Gate2<F: Field>: 'static {
     fn id(&self) -> String;
 

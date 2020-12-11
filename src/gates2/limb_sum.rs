@@ -16,7 +16,7 @@ impl LimbSumGate {
 
 impl<F: Field> DeterministicGate<F> for LimbSumGate {
     fn id(&self) -> String {
-        format!("LimbSumGate-{}x{}", self.base, self.num_limbs)
+        format!("LimbSumGate[base={}, num_limbs={}]", self.base, self.num_limbs)
     }
 
     fn outputs(&self, _config: CircuitConfig) -> Vec<(usize, ConstraintPolynomial<F>)> {

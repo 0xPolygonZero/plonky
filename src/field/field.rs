@@ -340,6 +340,10 @@ pub trait Field:
         self.exp(Self::from_canonical_usize(power))
     }
 
+    fn kth_root_usize(&self, k: usize) -> Self {
+        self.kth_root(Self::from_canonical_usize(k))
+    }
+
     fn kth_root_u32(&self, k: u32) -> Self {
         self.kth_root(Self::from_canonical_u32(k))
     }
