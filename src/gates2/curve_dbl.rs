@@ -21,7 +21,28 @@ impl<C: Curve> Gate2<C::BaseField> for CurveDblGate2<C> {
     }
 
     fn constraints(&self, _config: CircuitConfig) -> Vec<ConstraintPolynomial<C::BaseField>> {
-        unimplemented!()
+        let x_old = ConstraintPolynomial::<C::BaseField>::local_wire_value(Self::WIRE_X_OLD);
+        let y_old = ConstraintPolynomial::<C::BaseField>::local_wire_value(Self::WIRE_Y_OLD);
+        let x_new = ConstraintPolynomial::<C::BaseField>::local_wire_value(Self::WIRE_X_NEW);
+        let y_new = ConstraintPolynomial::<C::BaseField>::local_wire_value(Self::WIRE_Y_NEW);
+        let inverse = ConstraintPolynomial::<C::BaseField>::local_wire_value(Self::WIRE_INVERSE);
+        let lambda = ConstraintPolynomial::<C::BaseField>::local_wire_value(Self::WIRE_LAMBDA);
+
+        let computed_lambda_numerator = x_old.square().triple() + C::A;
+        let computed_lambda = &computed_lambda_numerator * &inverse;
+        let computed_x_new = lambda.square() - x_old.double();
+        let computed_y_new = &lambda * (&x_old - &x_new) - &y_old;
+
+        vec![
+            // Verify that computed_lambda matches lambda.
+            &computed_lambda - &lambda,
+            // Verify that computed_x_new matches x_new.
+            &computed_x_new - &x_new,
+            // Verify that computed_y_new matches y_new.
+            &computed_y_new - &y_new,
+            // Verify that 2 * y_old times its purported inverse is 1.
+            y_old.double() * &inverse - 1,
+        ]
     }
 
     fn generators(
@@ -62,6 +83,7 @@ impl<C: Curve> SimpleGenerator<C::BaseField> for CurveDblGateGenerator<C> {
 
         let x_old = witness.get_wire(x_old_wire);
         let y_old = witness.get_wire(y_old_wire);
+
         let inverse = y_old.double().multiplicative_inverse().expect("y = 0");
         let lambda = x_old.square().triple() * inverse;
         let x_new = lambda.square() - x_old.double();

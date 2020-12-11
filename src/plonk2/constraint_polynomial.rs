@@ -77,6 +77,10 @@ impl<F: Field> ConstraintPolynomial<F> {
         self.clone().add(self)
     }
 
+    pub fn triple(&self) -> Self {
+        self * 3
+    }
+
     pub fn mul(&self, rhs: &Self) -> Self {
         // TODO: Special case for either operand being 1.
         Self::from_inner(ConstraintPolynomialInner::Product {
