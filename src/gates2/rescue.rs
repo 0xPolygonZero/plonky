@@ -1,4 +1,4 @@
-use crate::{apply_mds, CircuitConfig, ConstraintPolynomial, Field, Gate2, PartialWitness2, SimpleGenerator, Target2, Wire, WitnessGenerator2, apply_mds_constraint_polys};
+use crate::{apply_mds, apply_mds_constraint_polys, CircuitConfig, ConstraintPolynomial, Field, Gate2, GateRef, PartialWitness2, SimpleGenerator, Target2, Wire, WitnessGenerator2};
 
 /// Implements a round of the Rescue permutation, modified with a different key schedule to reduce
 /// the number of constants involved.
@@ -9,6 +9,10 @@ pub struct ModifiedRescueGate {
 }
 
 impl ModifiedRescueGate {
+    pub fn get_ref<F: Field>(width: usize, alpha: usize) -> GateRef<F> {
+        GateRef::new(ModifiedRescueGate { width, alpha })
+    }
+
     /// Returns the index of the `i`th accumulator wire. These act as both input and output wires.
     pub fn wire_acc(&self, i: usize) -> usize {
         debug_assert!(i < self.width);
@@ -152,5 +156,22 @@ impl<F: Field> SimpleGenerator<F> for ModifiedRescueGenerator<F> {
                 layer_6[i]);
         }
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{CircuitConfig, ModifiedRescueGate, TweedledumBase};
+
+    #[test]
+    fn rescue_gate_degree() {
+        let config = CircuitConfig {
+            num_wires: 10,
+            num_routed_wires: 10,
+            security_bits: 128,
+        };
+
+        let gate = ModifiedRescueGate::get_ref::<TweedledumBase>(4, 5);
+        assert_eq!(gate.0.degree(config), 5);
     }
 }

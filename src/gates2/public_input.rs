@@ -41,7 +41,7 @@ impl<F: Field> Gate2<F> for PublicInputGate2 {
 }
 
 impl PublicInputGate2 {
-    fn get_ref<F: Field>() -> GateRef<F> {
+    pub fn get_ref<F: Field>() -> GateRef<F> {
         GateRef::new(PublicInputGate2)
     }
 }

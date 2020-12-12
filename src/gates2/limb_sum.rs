@@ -8,7 +8,7 @@ pub struct LimbSumGate {
 }
 
 impl LimbSumGate {
-    fn get_ref<F: Field>(base: usize, num_limbs: usize) -> GateRef<F> {
+    pub fn get_ref<F: Field>(base: usize, num_limbs: usize) -> GateRef<F> {
         let gate = LimbSumGate { base, num_limbs };
         GateRef::new(DeterministicGateAdapter::new(gate))
     }
