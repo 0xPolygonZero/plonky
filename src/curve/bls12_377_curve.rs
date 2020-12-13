@@ -37,6 +37,17 @@ mod tests {
     use crate::{Bls12377, Bls12377Scalar, Curve, Field, ProjectivePoint};
 
     #[test]
+    fn test_double_affine_curve() {
+        let mut g = Bls12377::GENERATOR_AFFINE;
+        let mut g2;
+        for _ in 0..2000 {
+            g2 = g.double();
+            g = g.to_projective().double().to_affine();
+            assert_eq!(g, g2);
+        }
+    }
+
+    #[test]
     fn test_naive_multiplication() {
         let g = Bls12377::GENERATOR_PROJECTIVE;
         let ten = Bls12377Scalar::from_canonical_u64(10);
