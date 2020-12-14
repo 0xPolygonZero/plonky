@@ -54,6 +54,11 @@ pub trait Curve: 'static + Sync + Sized + Copy + Debug {
         }
         Ok(res)
     }
+
+    fn is_safe_curve() -> bool{
+        // Added additional check to prevent using vulnerabilties in case a discriminant is equal to 0.
+        (Self::A.cube().double().double() + Self::B.square().triple().triple().triple()).is_nonzero()
+    }
 }
 
 /// A curve with the endomorphism described in the Halo paper, i.e. `phi((x, y)) = (zeta_p x, y)`,
@@ -107,6 +112,7 @@ impl<C: Curve> AffinePoint<C> {
         // TODO: This is a very lazy implementation...
         self.to_projective().double().to_affine()
     }
+
 }
 
 impl<C: HaloCurve> AffinePoint<C> {
