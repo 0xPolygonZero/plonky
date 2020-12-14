@@ -35,6 +35,10 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("Bls12Scalar Rescue hash", move |b| b.iter(|| {
         rescue_hash_1_to_1(black_box(x), 128)
     }));
+
+    c.bench_function("Bls12Scalar field exp", move |b| b.iter(|| {
+        black_box(x).exp_(black_box(y))
+    }));
 }
 
 criterion_group!(benches, criterion_benchmark);
