@@ -316,8 +316,9 @@ pub trait Field:
 
         for limb in power.to_canonical_u64_vec().iter() {
             for j in 0..min(64, power_bits) {
-                // Check was initiated every time inside the loop,now it has moved out
-                // when creating the loop.
+                //The rust compiler does not unwrap a 64-range cycle,
+                // so a fixed check has no benefit. Thats ’why if statements
+                // has been taken out of the cycle to improve performance.
                 if (limb >> j & 1) != 0 {
                     product = product * current;
                 }
