@@ -357,6 +357,9 @@ pub trait Field:
         let k_bu = field_to_biguint(k);
         let mut n = field_to_biguint(Self::ZERO);
         let mut numerator_bu = &p_minus_1_bu + BigUint::one();
+        //Added an improvement to avoid regularly transformation field_to_biguint
+        // for each iteration under cycle by using field_to_biguint transformation
+        // once outside the cycle.
         while n < k_bu {
             numerator_bu = numerator_bu + &p_minus_1_bu;
             if numerator_bu.is_multiple_of(&k_bu) {
