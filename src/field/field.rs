@@ -390,6 +390,10 @@ pub trait Field:
 
     /// The number of bits in the binary encoding of this field element.
     fn num_bits(&self) -> usize {
+        // It isn’t required to check each bit from left to right of the number
+        // to calculate the number of bits. You just need to check bits from right
+        // to left until you meet zero limbs. The below is the changes that propose
+        // it including a little improvements without rewriting result output each time.
         let mut n = 0;
         let vec = self.to_canonical_u64_vec();
         for (i, limb) in vec.iter().rev().enumerate() {
