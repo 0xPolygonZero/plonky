@@ -280,12 +280,10 @@ pub trait Field:
 
     fn cyclic_subgroup_unknown_order(generator: Self) -> Vec<Self> {
         let mut subgroup_vec = Vec::new();
-        let mut subgroup_set = HashSet::new();
-        let mut current = Self::ONE;
-        loop {
-            if !subgroup_set.insert(current) {
-                break;
-            }
+        let mut current = generator;
+
+        subgroup_vec.push(Self::ONE);
+        while current != Self::ONE {
             subgroup_vec.push(current);
             current = current * generator;
         }
