@@ -354,16 +354,17 @@ pub trait Field:
         //    x^((p + n(p - 1))/k)^k = x,
         // implying that x^((p + n(p - 1))/k) is a k'th root of x.
         let p_minus_1_bu = field_to_biguint(Self::NEG_ONE);
-        let p_bu = &p_minus_1_bu + BigUint::one();
         let k_bu = field_to_biguint(k);
-        let mut n = Self::ZERO;
-        while n < k {
-            let numerator_bu = &p_bu + field_to_biguint(n) * &p_minus_1_bu;
+        let mut n = field_to_biguint(Self::ZERO);
+        let mut numerator_bu = &p_minus_1_bu + BigUint::one();
+        while n < k_bu {
+            numerator_bu = numerator_bu + &p_minus_1_bu;
             if numerator_bu.is_multiple_of(&k_bu) {
                 let power_bu = numerator_bu.div_floor(&k_bu).mod_floor(&p_minus_1_bu);
                 return self.exp(biguint_to_field(power_bu));
             }
-            n = n + Self::ONE;
+
+            n = n + BigUint::one();
         }
         panic!(
             "x^{} and x^(1/{}) are not permutations in this field, or we have a bug!",
