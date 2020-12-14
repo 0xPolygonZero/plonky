@@ -107,6 +107,10 @@ impl<C: Curve> AffinePoint<C> {
     pub fn double(&self) -> Self {
         // DONE: This is a very lazy implementation...
         // self.to_projective().double().to_affine()
+        // According to the fact that output of the double operation
+        // should be AffinePoint and affine->projective->affine
+        // transformation is resource-intensive the below is changes
+        // for double operation in initial Affine definitions.
         let AffinePoint {
             x: x1,
             y: y1,
