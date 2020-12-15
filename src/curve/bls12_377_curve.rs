@@ -34,16 +34,15 @@ const BLS12_377_GENERATOR_Y: Bls12377Base = Bls12377Base {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12377, Bls12377Scalar, Curve, Field, ProjectivePoint};
+    use crate::{Bls12377, Bls12377Scalar, Curve, Field, ProjectivePoint, hash_usize_to_curve};
 
     #[test]
-    fn test_double_affine_curve() {
-        let mut g = Bls12377::GENERATOR_AFFINE;
-        let mut g2;
-        for _ in 0..2000 {
-            g2 = g.double();
-            g = g.to_projective().double().to_affine();
-            assert_eq!(g, g2);
+    fn test_double_affine() {
+        for i in 0..100 {
+            let p = hash_usize_to_curve::<Bls12377>(i, 128);
+            assert_eq!(
+                p.double(),
+                p.to_projective().double().to_affine());
         }
     }
 
