@@ -6,11 +6,11 @@ use std::hash::Hash;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 use anyhow::{Error, Result};
-use num::{BigUint, Integer, One};
+use num::{BigUint, Integer, One, Zero};
 use rand::Rng;
-
-use crate::{biguint_to_field, field_to_biguint, Curve, ProjectivePoint};
 use serde::{de::DeserializeOwned, Serialize};
+
+use crate::{biguint_to_field, Curve, field_to_biguint, ProjectivePoint};
 
 pub trait Field:
     'static
@@ -351,18 +351,24 @@ pub trait Field:
         // we can rewrite the above as
         //    x^((p + n(p - 1))/k)^k = x,
         // implying that x^((p + n(p - 1))/k) is a k'th root of x.
+
         let p_minus_1_bu = field_to_biguint(Self::NEG_ONE);
-        let p_bu = &p_minus_1_bu + BigUint::one();
         let k_bu = field_to_biguint(k);
-        let mut n = Self::ZERO;
-        while n < k {
-            let numerator_bu = &p_bu + field_to_biguint(n) * &p_minus_1_bu;
+        let mut n = BigUint::zero();
+        let mut numerator_bu = &p_minus_1_bu + BigUint::one();
+
+        while n < k_bu {
+            // We can safely increment first, thus skipping the check for n=0, since n=0 will never
+            // satisfy the relation above.
+            n += BigUint::one();
+            numerator_bu += &p_minus_1_bu;
+
             if numerator_bu.is_multiple_of(&k_bu) {
                 let power_bu = numerator_bu.div_floor(&k_bu).mod_floor(&p_minus_1_bu);
                 return self.exp(biguint_to_field(power_bu));
             }
-            n = n + Self::ONE;
         }
+
         panic!(
             "x^{} and x^(1/{}) are not permutations in this field, or we have a bug!",
             k, k
@@ -479,10 +485,12 @@ pub trait Field:
 
 #[cfg(test)]
 pub mod field_tests {
-    use crate::util::ceil_div_usize;
-    use crate::{biguint_to_field, field_to_biguint, Field};
-    use num::{BigUint, One, Zero};
     use std::io::Result;
+
+    use num::{BigUint, One, Zero};
+
+    use crate::{biguint_to_field, Field, field_to_biguint};
+    use crate::util::ceil_div_usize;
 
     /// Generates a series of non-negative integers less than
     /// `modulus` which cover a range of values and which will
@@ -613,6 +621,7 @@ macro_rules! test_arithmetic {
     ($field:ty) => {
         mod arithmetic {
             use crate::{biguint_to_field, field_tests, field_to_biguint, Field};
+
             use num::{BigUint, Zero};
             use std::io::Result;
             use std::ops::{Add, Div, Mul, Neg, Sub};
@@ -732,6 +741,15 @@ macro_rules! test_arithmetic {
                     .collect::<Vec<_>>();
                 assert!(roots.iter().zip(inputs).all(|(&x, y)| x == y || x == -y));
                 Ok(())
+            }
+
+            #[test]
+            fn kth_root_consistent_with_exp() {
+                let degs = [5, 7, 11, 13, 17, 19, 23, 101];
+                for &deg in &degs {
+                    let num = <$field>::rand();
+                    assert_eq!(num, num.exp_u32(deg).kth_root_u32(deg));
+                }
             }
         }
     };
