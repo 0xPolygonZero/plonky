@@ -32,6 +32,10 @@ fn criterion_benchmark(c: &mut Criterion) {
         black_box(p1_projective).double()
     }));
 
+    c.bench_function("BLS12 G1 affine doubling", move |b| b.iter(|| {
+        black_box(p1_affine).double()
+    }));
+
     c.bench_function("BLS12 G1 projective multiplication", move |b| b.iter(|| {
         black_box(Bls12377::convert(s)) * black_box(p1_projective)
     }));
