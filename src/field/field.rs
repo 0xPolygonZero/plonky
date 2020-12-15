@@ -1,4 +1,4 @@
-use std::cmp::Ordering;
+use std::cmp::{Ordering, min};
 use std::cmp::Ordering::Equal;
 use std::collections::HashSet;
 use std::fmt::{Debug, Display};
@@ -308,25 +308,25 @@ pub trait Field:
     }
 
     fn exp(&self, power: Self) -> Self {
-        let power_bits = power.num_bits();
+        let mut power_bits = power.num_bits();
         let mut current = *self;
         let mut product = Self::ONE;
 
-        for (i, limb) in power.to_canonical_u64_vec().iter().enumerate() {
-            for j in 0..64 {
-                // If we've gone through all the 1 bits already, no need to keep squaring.
-                let bit_index = i * 64 + j;
-                if bit_index == power_bits {
-                    return product;
-                }
-
+        for limb in power.to_canonical_u64_vec().iter() {
+            // To minimize branching, it's better to iterate up to the min than to conditionally
+            // break inside the loop.
+            for j in 0..min(64, power_bits) {
                 if (limb >> j & 1) != 0 {
                     product = product * current;
                 }
                 current = current.square();
             }
+            if power_bits >= 64 {
+                power_bits -= 64;
+            } else {
+                break;
+            }
         }
-
         product
     }
 

@@ -31,6 +31,11 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("Bls12Base field inversion", move |b| b.iter(|| {
         black_box(x).multiplicative_inverse()
     }));
+
+    c.bench_function("Bls12Base field exp", move |b| b.iter(|| {
+        black_box(x).exp(black_box(y))
+    }));
+
 }
 
 criterion_group!(benches, criterion_benchmark);
