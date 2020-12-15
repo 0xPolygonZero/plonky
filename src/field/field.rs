@@ -315,17 +315,16 @@ pub trait Field:
         let mut product = Self::ONE;
 
         for limb in power.to_canonical_u64_vec().iter() {
+            // To minimize branching, it's better to iterate up to the min than to conditionally
+            // break inside the loop.
             for j in 0..min(64, power_bits) {
-                //The rust compiler does not unwrap a 64-range cycle,
-                // so a fixed check has no benefit. Thats ’why if statements
-                // has been taken out of the cycle to improve performance.
                 if (limb >> j & 1) != 0 {
                     product = product * current;
                 }
                 current = current.square();
             }
             if power_bits >= 64 {
-                power_bits = power_bits - 64;
+                power_bits -= 64;
             } else {
                 break;
             }
