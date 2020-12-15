@@ -6,11 +6,11 @@ use std::hash::Hash;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 use anyhow::{Error, Result};
-use num::{BigUint, Integer, One};
+use num::{BigUint, Integer, One, Zero};
 use rand::Rng;
-
-use crate::{biguint_to_field, field_to_biguint, Curve, ProjectivePoint};
 use serde::{de::DeserializeOwned, Serialize};
+
+use crate::{biguint_to_field, Curve, field_to_biguint, ProjectivePoint};
 
 pub trait Field:
     'static
@@ -353,22 +353,22 @@ pub trait Field:
         // we can rewrite the above as
         //    x^((p + n(p - 1))/k)^k = x,
         // implying that x^((p + n(p - 1))/k) is a k'th root of x.
+
         let p_minus_1_bu = field_to_biguint(Self::NEG_ONE);
         let k_bu = field_to_biguint(k);
-        let mut n = field_to_biguint(Self::ZERO);
+        let mut n = BigUint::zero();
         let mut numerator_bu = &p_minus_1_bu + BigUint::one();
-        //Added an improvement to avoid regularly transformation field_to_biguint
-        // for each iteration under cycle by using field_to_biguint transformation
-        // once outside the cycle.
+
         while n < k_bu {
-            numerator_bu = numerator_bu + &p_minus_1_bu;
+            numerator_bu += &p_minus_1_bu;
             if numerator_bu.is_multiple_of(&k_bu) {
                 let power_bu = numerator_bu.div_floor(&k_bu).mod_floor(&p_minus_1_bu);
                 return self.exp(biguint_to_field(power_bu));
             }
 
-            n = n + BigUint::one();
+            n += BigUint::one();
         }
+
         panic!(
             "x^{} and x^(1/{}) are not permutations in this field, or we have a bug!",
             k, k
@@ -483,10 +483,12 @@ pub trait Field:
 
 #[cfg(test)]
 pub mod field_tests {
-    use crate::util::ceil_div_usize;
-    use crate::{biguint_to_field, field_to_biguint, Field};
-    use num::{BigUint, One, Zero};
     use std::io::Result;
+
+    use num::{BigUint, One, Zero};
+
+    use crate::{biguint_to_field, Field, field_to_biguint};
+    use crate::util::ceil_div_usize;
 
     /// Generates a series of non-negative integers less than
     /// `modulus` which cover a range of values and which will

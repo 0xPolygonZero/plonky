@@ -266,11 +266,12 @@ mod tests {
 
     #[test]
     fn valid_exp_kth_root() {
-        let degs = [5,7,11,13,17,19,23,101];
-        for i in 0..degs.len() {
+        let degs = [5, 7, 11, 13, 17, 19, 23, 101];
+        for &deg in &degs {
             let num = TweedledeeBase::rand();
-            assert_eq!(num, num.exp_u32(degs[i]).kth_root_u32(degs[i]));
+            assert_eq!(num, num.exp_u32(deg).kth_root_u32(deg));
         }
     }
+
     test_arithmetic!(crate::TweedledeeBase);
 }
