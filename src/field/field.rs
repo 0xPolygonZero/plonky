@@ -387,15 +387,17 @@ pub trait Field:
 
     /// The number of bits in the binary encoding of this field element.
     fn num_bits(&self) -> usize {
-        let mut n = 0;
-        for (i, limb) in self.to_canonical_u64_vec().iter().enumerate() {
-            for j in 0..64 {
-                if (limb >> j & 1) != 0 {
-                    n = i * 64 + j + 1;
-                }
+        // Search for the most significant nonzero limb.
+        let limbs = self.to_canonical_u64_vec();
+        for (i, &limb) in limbs.iter().rev().enumerate() {
+            if limb != 0 {
+                // This can be understood as the size of all limbs (limbs.len() * 64), minus the
+                // leading zeros from all-zero limbs (i * 64), minus the leading zeros from this
+                // limb (limb.leading_zeros()).
+                return (limbs.len() - i) * 64 - limb.leading_zeros() as usize;
             }
         }
-        n
+        0
     }
 
     /// Like `Ord::cmp`. We can't implement `Ord` directly due to Rust's trait coherence rules, so
