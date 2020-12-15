@@ -371,7 +371,6 @@ pub trait Field:
         );
     }
 
-
     fn is_quadratic_residue(&self) -> bool {
         if self.is_zero() {
             return true;
@@ -390,20 +389,19 @@ pub trait Field:
 
     /// The number of bits in the binary encoding of this field element.
     fn num_bits(&self) -> usize {
-        // It isn’t required to check each bit from left to right of the number
-        // to calculate the number of bits. You just need to check bits from right
-        // to left until you meet zero limbs. The below is the changes that propose
-        // it including a little improvements without rewriting result output each time.
-        let mut n = 0;
-        let vec = self.to_canonical_u64_vec();
-        for (i, limb) in vec.iter().rev().enumerate() {
-            if *limb != 0 {
-                n = (vec.len() - i) * 64 - limb.leading_zeros() as usize;
-                break;
+        // Search for the most significant nonzero limb.
+        let limbs = self.to_canonical_u64_vec();
+        for (i, &limb) in limbs.iter().rev().enumerate() {
+            if limb != 0 {
+                // This can be understood as the size of all limbs (limbs.len() * 64), minus the
+                // leading zeros from all-zero limbs (i * 64), minus the leading zeros from this
+                // limb (limb.leading_zeros()).
+                return (limbs.len() - i) * 64 - limb.leading_zeros() as usize;
             }
         }
-        n
+        0
     }
+
     /// Like `Ord::cmp`. We can't implement `Ord` directly due to Rust's trait coherence rules, so
     /// instead we provide this helper which implementations can use to trivially implement `Ord`.
     fn cmp_helper(&self, other: &Self) -> Ordering {
