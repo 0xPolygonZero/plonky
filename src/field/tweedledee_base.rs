@@ -264,14 +264,5 @@ mod tests {
         assert_eq!(TweedledeeBase::is_valid_canonical_u64(&limbs), false);
     }
 
-    #[test]
-    fn valid_exp_kth_root() {
-        let degs = [5, 7, 11, 13, 17, 19, 23, 101];
-        for &deg in &degs {
-            let num = TweedledeeBase::rand();
-            assert_eq!(num, num.exp_u32(deg).kth_root_u32(deg));
-        }
-    }
-
     test_arithmetic!(crate::TweedledeeBase);
 }

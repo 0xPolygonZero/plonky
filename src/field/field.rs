@@ -621,6 +621,7 @@ macro_rules! test_arithmetic {
     ($field:ty) => {
         mod arithmetic {
             use crate::{biguint_to_field, field_tests, field_to_biguint, Field};
+
             use num::{BigUint, Zero};
             use std::io::Result;
             use std::ops::{Add, Div, Mul, Neg, Sub};
@@ -740,6 +741,15 @@ macro_rules! test_arithmetic {
                     .collect::<Vec<_>>();
                 assert!(roots.iter().zip(inputs).all(|(&x, y)| x == y || x == -y));
                 Ok(())
+            }
+
+            #[test]
+            fn kth_root_consistent_with_exp() {
+                let degs = [5, 7, 11, 13, 17, 19, 23, 101];
+                for &deg in &degs {
+                    let num = <$field>::rand();
+                    assert_eq!(num, num.exp_u32(deg).kth_root_u32(deg));
+                }
             }
         }
     };
