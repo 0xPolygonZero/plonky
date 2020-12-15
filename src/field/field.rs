@@ -360,13 +360,15 @@ pub trait Field:
         let mut numerator_bu = &p_minus_1_bu + BigUint::one();
 
         while n < k_bu {
+            // We can safely increment first, thus skipping the check for n=0, since n=0 will never
+            // satisfy the relation above.
+            n += BigUint::one();
             numerator_bu += &p_minus_1_bu;
+
             if numerator_bu.is_multiple_of(&k_bu) {
                 let power_bu = numerator_bu.div_floor(&k_bu).mod_floor(&p_minus_1_bu);
                 return self.exp(biguint_to_field(power_bu));
             }
-
-            n += BigUint::one();
         }
 
         panic!(
