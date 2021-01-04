@@ -87,7 +87,7 @@ impl<C: Curve> SimpleGenerator<C::BaseField> for CurveDblGateGenerator<C> {
         let inverse = y_old.double().multiplicative_inverse().expect("y = 0");
         let mut lambda_numerator = x_old.square().triple();
         if C::A.is_nonzero() {
-            lambda_numerator += C::A;
+            lambda_numerator = lambda_numerator + C::A;
         }
         let lambda = lambda_numerator * inverse;
         let x_new = lambda.square() - x_old.double();
