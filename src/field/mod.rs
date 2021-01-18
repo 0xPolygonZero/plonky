@@ -4,6 +4,7 @@ pub use field::*;
 pub use tweedledee_base::*;
 pub use tweedledum_base::*;
 pub use monty::*;
+pub use daira::*;
 
 mod bls12_377_base;
 mod bls12_377_scalar;
@@ -12,3 +13,4 @@ mod field;
 mod tweedledee_base;
 mod tweedledum_base;
 mod monty;
+mod daira;
