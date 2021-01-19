@@ -241,34 +241,31 @@ pub trait DairaRepr {
     // so reducing is not always necessary.
     fn daira_add(lhs: [u64; 4], rhs: [u64; 4]) -> [u64; 4] {
         let sum = add_no_overflow(lhs, rhs);
-        let res = if cmp(sum, Self::ORDER) == Less {
+        if cmp(sum, Self::ORDER) == Less {
             sum
         } else {
             sub(sum, Self::ORDER)
-        };
-        Self::daira_to_canonical(res)
+        }
     }
 
     // TODO: This is copypasta from monty.rs
     fn daira_sub(lhs: [u64; 4], rhs: [u64; 4]) -> [u64; 4] {
-        let res = if cmp(lhs, rhs) == Less {
+        if cmp(lhs, rhs) == Less {
             // Underflow occurs, so we compute the difference as `self + (-rhs)`.
             add_no_overflow(lhs, Self::daira_neg(rhs))
         } else {
             // No underflow, so it's faster to subtract directly.
             sub(lhs, rhs)
-        };
-        Self::daira_to_canonical(res)
+        }
     }
 
     // TODO: This is copypasta from monty.rs
     fn daira_neg(limbs: [u64; 4]) -> [u64; 4] {
-        let res = if limbs == Self::ZERO {
+        if limbs == Self::ZERO {
             Self::ZERO
         } else {
             sub(Self::ORDER, limbs)
-        };
-        Self::daira_to_canonical(res)
+        }
     }
 
     #[inline]
@@ -293,7 +290,6 @@ pub trait DairaRepr {
         let u = mul_2_2(Self::C, xp1);
 
         // return M - u + xp0
-        //Self::daira_to_canonical(add_no_overflow(sub(Self::ORDER, u), xp0))
         let res = add_no_overflow(sub(Self::ORDER, u), xp0);
         let max_expected = [Self::ORDER[0] - 1, Self::ORDER[1], Self::ORDER[2], Self::ORDER[3] << 1];
         debug_assert!(cmp(res, max_expected) != Greater);
@@ -315,30 +311,12 @@ pub trait DairaRepr {
     }
 
     fn daira_to_canonical(a: [u64; 4]) -> [u64; 4] {
-        let mut b = a;
-        let mut count = 0;
-        while cmp(b, Self::ORDER) != Less && count < 10 {
-            b = sub(b, Self::ORDER);
-            count += 1;
-        }
-        //println!("Reducing ({}) {:?} -> {:?}", count, a, b);
-        /*
-        if count > 1 {
-            println!("Expected at most one reduction loop but did {}", count);
-        }
-        */
-        debug_assert!(count < 2, "Expected at most one reduction loop");
-        b
-    }
-
-    /*
-    fn daira_to_canonical(a: [u64; 4]) -> [u64; 4] {
-        let mut b = a;
-        if cmp(b, Self::ORDER) != Less {
-            b = sub(b, Self::ORDER);
+        if cmp(a, Self::ORDER) == Less {
+            a
+        } else {
+            let b = sub(a, Self::ORDER);
             debug_assert!(cmp(b, Self::ORDER) == Less, "Expected at most one reduction loop");
+            b
         }
-        b
     }
-    */
 }
