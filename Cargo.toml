@@ -49,6 +49,10 @@ name = "tweedledee_base"
 harness = false
 
 [[bench]]
+name = "tweedledum_base"
+harness = false
+
+[[bench]]
 name = "bls12_g1"
 harness = false
 
@@ -66,6 +70,10 @@ harness = false
 
 [profile.release]
 opt-level = 3
+lto = "fat"
+codegen-units = 1
 
 [profile.bench]
 opt-level = 3
+lto = "fat"
+codegen-units = 1
