@@ -298,7 +298,10 @@ pub trait DairaRepr {
         ];
         debug_assert!(cmp(res, max_expected) != Greater,
                       "Semi-reduced value exceeds maximum expected");
-        res
+        // FIXME: This is not necessary in general and it wastes
+        // performance; only included to make tests of calling code
+        // pass (which require values to always be reduced).
+        Self::daira_to_canonical(res)
     }
 
     #[inline]
