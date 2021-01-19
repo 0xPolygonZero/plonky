@@ -11,8 +11,7 @@ use crate::{cmp, field_to_biguint,
             DairaRepr, Field};
 
 /// An element of the Tweedledee group's base field.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Default)]
-//#[derive(Copy, Clone, Hash, Default)]
+#[derive(Copy, Clone, Hash, Default)]
 pub struct TweedledeeBase {
     /// Daira representation, encoded with little-endian u64 limbs.
     pub limbs: [u64; 4],
@@ -185,7 +184,8 @@ impl PartialOrd for TweedledeeBase {
     }
 }
 
-/*
+/// NB: We need to implement this so that is_zero and == call
+/// to_canonical (via cmp_helper) before comparing numbers.
 impl PartialEq for TweedledeeBase {
     fn eq(&self, other: &Self) -> bool {
         self.cmp_helper(other) == Equal
@@ -193,7 +193,7 @@ impl PartialEq for TweedledeeBase {
 }
 
 impl Eq for TweedledeeBase { }
-*/
+
 
 impl Display for TweedledeeBase {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {

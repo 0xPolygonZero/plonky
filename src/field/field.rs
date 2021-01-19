@@ -409,10 +409,8 @@ pub trait Field:
     /// Like `Ord::cmp`. We can't implement `Ord` directly due to Rust's trait coherence rules, so
     /// instead we provide this helper which implementations can use to trivially implement `Ord`.
     fn cmp_helper(&self, other: &Self) -> Ordering {
-        //println!("Before");
         let self_limbs = self.to_canonical_u64_vec().into_iter();
         let other_limbs = other.to_canonical_u64_vec().into_iter();
-        //println!("After");
 
         let mut result = Equal;
         for (self_limb, other_limb) in self_limbs.zip(other_limbs) {

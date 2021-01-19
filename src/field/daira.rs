@@ -291,9 +291,14 @@ pub trait DairaRepr {
 
         // return M - u + xp0
         let res = add_no_overflow(sub(Self::ORDER, u), xp0);
-        let max_expected = [Self::ORDER[0] - 1, Self::ORDER[1], Self::ORDER[2], Self::ORDER[3] << 1];
-        debug_assert!(cmp(res, max_expected) != Greater);
-        Self::daira_to_canonical(res)
+        // max_expected = 2^254 + M - 1 = 2^255 + c - 1
+        let max_expected = [
+            Self::ORDER[0] - 1, Self::ORDER[1],
+            Self::ORDER[2], Self::ORDER[3] << 1
+        ];
+        debug_assert!(cmp(res, max_expected) != Greater,
+                      "Semi-reduced value exceeds maximum expected");
+        res
     }
 
     #[inline]
@@ -315,7 +320,8 @@ pub trait DairaRepr {
             a
         } else {
             let b = sub(a, Self::ORDER);
-            debug_assert!(cmp(b, Self::ORDER) == Less, "Expected at most one reduction loop");
+            debug_assert!(cmp(b, Self::ORDER) == Less,
+                          "Expected at most one reduction loop");
             b
         }
     }
