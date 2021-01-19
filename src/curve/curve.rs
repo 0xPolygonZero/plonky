@@ -1,4 +1,5 @@
 #![allow(clippy::many_single_char_names)]
+
 use std::ops::Neg;
 
 use anyhow::Result;
@@ -54,6 +55,11 @@ pub trait Curve: 'static + Sync + Sized + Copy + Debug {
         }
         Ok(res)
     }
+
+    fn is_safe_curve() -> bool{
+        // Added additional check to prevent using vulnerabilties in case a discriminant is equal to 0.
+        (Self::A.cube().double().double() + Self::B.square().triple().triple().triple()).is_nonzero()
+    }
 }
 
 /// A curve with the endomorphism described in the Halo paper, i.e. `phi((x, y)) = (zeta_p x, y)`,
@@ -104,9 +110,30 @@ impl<C: Curve> AffinePoint<C> {
     }
 
     pub fn double(&self) -> Self {
-        // TODO: This is a very lazy implementation...
-        self.to_projective().double().to_affine()
+        let AffinePoint {
+            x: x1,
+            y: y1,
+            zero,
+        } = *self;
+
+        if zero {
+            return AffinePoint::ZERO;
+        }
+
+        let double_y = y1.double();
+        let inv_double_y = double_y.multiplicative_inverse_assuming_nonzero(); // (2y)^(-1)
+        let triple_xx = x1.square().triple(); // 3x^2
+        let lambda = (triple_xx + C::A) * inv_double_y;
+        let x3 = lambda.square() - self.x.double();
+        let y3 = lambda * (x1 - x3) - y1;
+
+        Self {
+            x: x3,
+            y: y3,
+            zero: false,
+        }
     }
+
 }
 
 impl<C: HaloCurve> AffinePoint<C> {

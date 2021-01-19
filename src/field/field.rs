@@ -1,4 +1,4 @@
-use std::cmp::Ordering;
+use std::cmp::{Ordering, min};
 use std::cmp::Ordering::Equal;
 use std::collections::HashSet;
 use std::fmt::{Debug, Display};
@@ -6,11 +6,11 @@ use std::hash::Hash;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 use anyhow::{Error, Result};
-use num::{BigUint, Integer, One};
+use num::{BigUint, Integer, One, Zero};
 use rand::Rng;
-
-use crate::{biguint_to_field, field_to_biguint, Curve, ProjectivePoint};
 use serde::{de::DeserializeOwned, Serialize};
+
+use crate::{biguint_to_field, Curve, field_to_biguint, ProjectivePoint};
 
 pub trait Field:
     'static
@@ -279,17 +279,15 @@ pub trait Field:
     }
 
     fn cyclic_subgroup_unknown_order(generator: Self) -> Vec<Self> {
-        let mut subgroup_vec = Vec::new();
-        let mut subgroup_set = HashSet::new();
-        let mut current = Self::ONE;
-        loop {
-            if !subgroup_set.insert(current) {
-                break;
-            }
-            subgroup_vec.push(current);
+        let mut subgroup = Vec::new();
+        let mut current = generator;
+        // Start with the identity, thn add the generator until we reach the identity again.
+        subgroup.push(Self::ONE);
+        while current != Self::ONE {
+            subgroup.push(current);
             current = current * generator;
         }
-        subgroup_vec
+        subgroup
     }
 
     fn cyclic_subgroup_known_order(generator: Self, order: usize) -> Vec<Self> {
@@ -310,25 +308,25 @@ pub trait Field:
     }
 
     fn exp(&self, power: Self) -> Self {
-        let power_bits = power.num_bits();
+        let mut power_bits = power.num_bits();
         let mut current = *self;
         let mut product = Self::ONE;
 
-        for (i, limb) in power.to_canonical_u64_vec().iter().enumerate() {
-            for j in 0..64 {
-                // If we've gone through all the 1 bits already, no need to keep squaring.
-                let bit_index = i * 64 + j;
-                if bit_index == power_bits {
-                    return product;
-                }
-
+        for limb in power.to_canonical_u64_vec().iter() {
+            // To minimize branching, it's better to iterate up to the min than to conditionally
+            // break inside the loop.
+            for j in 0..min(64, power_bits) {
                 if (limb >> j & 1) != 0 {
                     product = product * current;
                 }
                 current = current.square();
             }
+            if power_bits >= 64 {
+                power_bits -= 64;
+            } else {
+                break;
+            }
         }
-
         product
     }
 
@@ -353,18 +351,24 @@ pub trait Field:
         // we can rewrite the above as
         //    x^((p + n(p - 1))/k)^k = x,
         // implying that x^((p + n(p - 1))/k) is a k'th root of x.
+
         let p_minus_1_bu = field_to_biguint(Self::NEG_ONE);
-        let p_bu = &p_minus_1_bu + BigUint::one();
         let k_bu = field_to_biguint(k);
-        let mut n = Self::ZERO;
-        while n < k {
-            let numerator_bu = &p_bu + field_to_biguint(n) * &p_minus_1_bu;
+        let mut n = BigUint::zero();
+        let mut numerator_bu = &p_minus_1_bu + BigUint::one();
+
+        while n < k_bu {
+            // We can safely increment first, thus skipping the check for n=0, since n=0 will never
+            // satisfy the relation above.
+            n += BigUint::one();
+            numerator_bu += &p_minus_1_bu;
+
             if numerator_bu.is_multiple_of(&k_bu) {
                 let power_bu = numerator_bu.div_floor(&k_bu).mod_floor(&p_minus_1_bu);
                 return self.exp(biguint_to_field(power_bu));
             }
-            n = n + Self::ONE;
         }
+
         panic!(
             "x^{} and x^(1/{}) are not permutations in this field, or we have a bug!",
             k, k
@@ -389,15 +393,17 @@ pub trait Field:
 
     /// The number of bits in the binary encoding of this field element.
     fn num_bits(&self) -> usize {
-        let mut n = 0;
-        for (i, limb) in self.to_canonical_u64_vec().iter().enumerate() {
-            for j in 0..64 {
-                if (limb >> j & 1) != 0 {
-                    n = i * 64 + j + 1;
-                }
+        // Search for the most significant nonzero limb.
+        let limbs = self.to_canonical_u64_vec();
+        for (i, &limb) in limbs.iter().rev().enumerate() {
+            if limb != 0 {
+                // This can be understood as the size of all limbs (limbs.len() * 64), minus the
+                // leading zeros from all-zero limbs (i * 64), minus the leading zeros from this
+                // limb (limb.leading_zeros()).
+                return (limbs.len() - i) * 64 - limb.leading_zeros() as usize;
             }
         }
-        n
+        0
     }
 
     /// Like `Ord::cmp`. We can't implement `Ord` directly due to Rust's trait coherence rules, so
@@ -484,10 +490,12 @@ pub trait Field:
 
 #[cfg(test)]
 pub mod field_tests {
-    use crate::util::ceil_div_usize;
-    use crate::{biguint_to_field, field_to_biguint, Field};
-    use num::{BigUint, One, Zero};
     use std::io::Result;
+
+    use num::{BigUint, One, Zero};
+
+    use crate::{biguint_to_field, Field, field_to_biguint};
+    use crate::util::ceil_div_usize;
 
     /// Generates a series of non-negative integers less than
     /// `modulus` which cover a range of values and which will
@@ -634,6 +642,7 @@ macro_rules! test_arithmetic {
     ($field:ty) => {
         mod arithmetic {
             use crate::{biguint_to_field, field_tests, field_to_biguint, Field};
+
             use num::{BigUint, Zero};
             use std::io::Result;
             use std::ops::{Add, Div, Mul, Neg, Sub};
@@ -753,6 +762,15 @@ macro_rules! test_arithmetic {
                     .collect::<Vec<_>>();
                 assert!(roots.iter().zip(inputs).all(|(&x, y)| x == y || x == -y));
                 Ok(())
+            }
+
+            #[test]
+            fn kth_root_consistent_with_exp() {
+                let degs = [5, 7, 11, 13, 17, 19, 23, 101];
+                for &deg in &degs {
+                    let num = <$field>::rand();
+                    assert_eq!(num, num.exp_u32(deg).kth_root_u32(deg));
+                }
             }
         }
     };

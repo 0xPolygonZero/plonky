@@ -34,7 +34,17 @@ const BLS12_377_GENERATOR_Y: Bls12377Base = Bls12377Base {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Bls12377, Bls12377Scalar, Curve, Field, ProjectivePoint};
+    use crate::{blake_hash_usize_to_curve, Bls12377, Bls12377Scalar, Curve, Field, ProjectivePoint};
+
+    #[test]
+    fn test_double_affine() {
+        for i in 0..100 {
+            let p = blake_hash_usize_to_curve::<Bls12377>(i);
+            assert_eq!(
+                p.double(),
+                p.to_projective().double().to_affine());
+        }
+    }
 
     #[test]
     fn test_naive_multiplication() {

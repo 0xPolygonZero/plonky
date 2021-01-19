@@ -87,4 +87,12 @@ mod tests {
             mul_naive(C::ZETA_SCALAR, g.to_projective()).to_affine()
         );
     }
+
+    #[test]
+    fn is_safe_curve() {
+        type C = Tweedledum;
+        assert!(
+            C::is_safe_curve()
+        );
+    }
 }
