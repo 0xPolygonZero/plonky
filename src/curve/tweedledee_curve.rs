@@ -21,10 +21,10 @@ impl Curve for Tweedledee {
 impl HaloCurve for Tweedledee {
     const ZETA: Self::BaseField = TweedledeeBase {
         limbs: [
-            1444470991491022206,
-            3301226169728360777,
-            72516509137424193,
-            708688398506307241,
+            4869731214443914493,
+            7624468717990391489,
+            9776623610414440446,
+            3946962219815967320
         ],
     };
     const ZETA_SCALAR: Self::ScalarField = TweedledumBase {
