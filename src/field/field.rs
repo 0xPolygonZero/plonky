@@ -743,10 +743,35 @@ macro_rules! test_arithmetic {
                 Ok(())
             }
 
+            /// Basic GCD algo; replace with Binary GCD for better performance.
+            fn gcd(x: BigUint, y: u32) -> u32 {
+                // TODO: This function probably belongs somewhere else, but at
+                // present is only used in kth_root_consistent_with_exp below.
+
+                use num::ToPrimitive;
+
+                let r = x % y;
+                if r.is_zero() {
+                    y
+                } else {
+                    let mut a = y;
+                    let mut b = r.to_u32().unwrap();
+                    while b != 0u32 {
+                        let t = a % b;
+                        a = b;
+                        b = t;
+                    }
+                    a
+                }
+            }
+
             #[test]
             fn kth_root_consistent_with_exp() {
-                let degs = [5, 7, 11, 13, 17, 19, 23, 101];
-                for &deg in &degs {
+                // We only test degrees that are coprime q-1 as these are
+                // the ones that give rise to permutations.
+                let degs = (3u32..101).step_by(2)
+                    .filter(|&x| gcd(field_to_biguint(<$field>::NEG_ONE), x) == 1u32);
+                for deg in degs {
                     let num = <$field>::rand();
                     assert_eq!(num, num.exp_u32(deg).kth_root_u32(deg));
                 }
