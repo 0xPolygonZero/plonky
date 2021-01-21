@@ -203,8 +203,7 @@ impl Display for TweedledeeBase {
 
 impl Debug for TweedledeeBase {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        //write!(f, "TweedledeeBase {}", field_to_biguint(*self))
-        write!(f, "TweedledeeBase{:?}", self.limbs)
+        write!(f, "TweedledeeBase {}", field_to_biguint(*self))
     }
 }
 

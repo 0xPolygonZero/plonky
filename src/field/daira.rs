@@ -222,7 +222,8 @@ fn rebase_6(x: [u64; 6]) -> ([u64; 4], [u64; 2]) {
 /// adaptation of the tricks for moduli of the form 2^n + C.
 /// Source: https://hackmd.io/drzN-z-_So28zDLhK2tegw
 pub trait DairaRepr {
-    /// Order of the field (i.e. modulus for operations)
+    /// Order of the field (i.e. modulus for operations); equals 2^n +
+    /// C for some n and C.
     const ORDER: [u64; 4];
 
     const ZERO: [u64; 4] = [0u64; 4];
@@ -238,7 +239,7 @@ pub trait DairaRepr {
 
     // TODO: This is copypasta from monty.rs
     // TODO: Daira's representation actually allows for some redundancy,
-    // so reducing is not always necessary.
+    // so reducing is not always necessary; same in sub
     fn daira_add(lhs: [u64; 4], rhs: [u64; 4]) -> [u64; 4] {
         let sum = add_no_overflow(lhs, rhs);
         if cmp(sum, Self::ORDER) == Less {
@@ -268,6 +269,11 @@ pub trait DairaRepr {
         }
     }
 
+    /// Given an 8-word number (usually the result of multiplying or
+    /// squaring), reduce it modulo 2^n + C.
+    ///
+    /// The implementation is a direct translation of the formulae at
+    /// the end of https://hackmd.io/drzN-z-_So28zDLhK2tegw
     #[inline]
     fn _reduce(x: [u64; 8]) -> [u64; 4] {
         // x = (x0, x1, x2)
@@ -298,9 +304,12 @@ pub trait DairaRepr {
         ];
         debug_assert!(cmp(res, max_expected) != Greater,
                       "Semi-reduced value exceeds maximum expected");
-        // FIXME: This is not necessary in general and it wastes
-        // performance; only included to make tests of calling code
-        // pass (which require values to always be reduced).
+        // NB: This is not necessary in general; a different interface
+        // could accommodate semi-reduced results.  Some performance
+        // testing suggested that the gain (as a proportion of
+        // mul/sqr) were too small to notice though. Must be included
+        // at the moment to make tests of calling code pass (which
+        // require values to always be reduced).
         Self::daira_to_canonical(res)
     }
 

@@ -388,7 +388,9 @@ pub trait Field:
         if exp == Self::NEG_ONE {
             return false;
         }
-        panic!("Number theory is a lie! Expected {:?}^{:?} == 1 or p-1 but got {:?}", self, power, exp)
+        panic!("Number theory is a lie! \
+                Expected {:?}^{:?} == 1 or p-1 \
+                but got {:?}", self, power, exp)
     }
 
     /// The number of bits in the binary encoding of this field element.
@@ -439,10 +441,7 @@ pub trait Field:
     /// roots, otherwise return `None`.
     /// Inspired by implementation in https://github.com/scipr-lab/zexe/blob/85bae796a411077733ddeefda042d02f4b4772e5/algebra-core/src/fields/arithmetic.rs
     fn square_root(&self) -> Option<Self> {
-        println!("square root input: {:?}", self);
-        let r = self.is_zero();
-        println!("  is zero? {}", r);
-        if r {
+        if self.is_zero() {
             Some(*self)
         } else if self.is_quadratic_residue() {
             let mut z = Self::MULTIPLICATIVE_SUBGROUP_GENERATOR.exp(Self::T);
@@ -569,14 +568,6 @@ pub mod field_tests {
         let output = inputs
             .iter()
             .map(|x| field_to_biguint(op(biguint_to_field(x.clone()))));
-        /*
-        for (x, y) in output.zip(expected) {
-            if x != y {
-                println!("got = {:?}; expected = {:?}", x, y);
-                assert!(false, "FAIL");
-            }
-        }
-        */
         // Compare expected outputs with actual outputs
         assert!(
             output.zip(expected).all(|(x, y)| x == y),
@@ -616,14 +607,6 @@ pub mod field_tests {
             let output = inputs.iter().zip(shifted_inputs).map(|(x, y)| {
                 field_to_biguint(op(biguint_to_field(x.clone()), biguint_to_field(y.clone())))
             });
-            /*
-            for (x, y) in output.zip(expected) {
-                if x != y {
-                    println!("got = {:?}; expected = {:?}", x, y);
-                    assert!(false, "FAIL");
-                }
-            }
-            */
             // Compare expected outputs with actual outputs
             assert!(
                 output.zip(expected).all(|(x, y)| x == y),
