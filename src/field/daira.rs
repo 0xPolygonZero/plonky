@@ -97,7 +97,7 @@ fn mul_4_4(a: [u64; 4], b: [u64; 4]) -> [u64; 8] {
 
 
 #[inline(always)]
-fn mul_4_4_step1(a: [u64; 4], b: u64, r: &mut [u64; 4]) -> u64 {
+fn mul_4_1_step1(a: [u64; 4], b: u64, r: &mut [u64; 4]) -> u64 {
     let mut c: u64;
     unsafe {
         asm!(
@@ -135,7 +135,7 @@ fn mul_4_4_step1(a: [u64; 4], b: u64, r: &mut [u64; 4]) -> u64 {
 
 
 #[inline(always)]
-fn mul_4_4_step2(a: [u64; 4], b: u64, r: &mut [u64; 4]) -> u64 {
+fn mul_4_1_step2(a: [u64; 4], b: u64, r: &mut [u64; 4]) -> u64 {
     let mut c: u64;
     unsafe {
         asm!(
@@ -182,10 +182,10 @@ fn mul_4_4_step2(a: [u64; 4], b: u64, r: &mut [u64; 4]) -> u64 {
 fn mul_4_4(a: [u64; 4], b: [u64; 4]) -> [u64; 8] {
     let mut ab = [0u64; 8];
     let mut r = [0u64; 4];
-    ab[0] = mul_4_4_step1(a, b[0], &mut r);
-    ab[1] = mul_4_4_step2(a, b[1], &mut r);
-    ab[2] = mul_4_4_step2(a, b[2], &mut r);
-    ab[3] = mul_4_4_step2(a, b[3], &mut r);
+    ab[0] = mul_4_1_step1(a, b[0], &mut r);
+    ab[1] = mul_4_1_step2(a, b[1], &mut r);
+    ab[2] = mul_4_1_step2(a, b[2], &mut r);
+    ab[3] = mul_4_1_step2(a, b[3], &mut r);
     ab[4] = r[0];
     ab[5] = r[1];
     ab[6] = r[2];
@@ -194,83 +194,89 @@ fn mul_4_4(a: [u64; 4], b: [u64; 4]) -> [u64; 8] {
 }
 
 
-
-#[inline]
-#[unroll_for_loops]
-fn mul_2_2(a: [u64; 2], b: [u64; 2]) -> [u64; 4] {
-    // Grade school multiplication. To avoid carrying at each of
-    // O(n^2) steps, we first add each intermediate product to a
-    // 128-bit accumulator, then propagate carries at the end.
-    let mut acc128 = [0u128; 2 + 2];
-
-    for i in 0..2 {
-        for j in 0..2 {
-            let a_i_b_j = a[i] as u128 * b[j] as u128;
-            // Add the less significant chunk to the less significant
-            // accumulator.
-            acc128[i + j] += a_i_b_j as u64 as u128;
-            // Add the more significant chunk to the more significant
-            // accumulator.
-            acc128[i + j + 1] += a_i_b_j >> 64;
-        }
+#[inline(always)]
+fn mul_2_1_step1(a: [u64; 2], b: u64, r: &mut [u64; 2]) -> u64 {
+    let mut c: u64;
+    unsafe {
+        asm!(
+            "mov rdx, {b}",             // rdx = b
+            "mulx {r0}, {c}, {a0}",     // r0:c = rdx * a[0]
+            "",
+            "mulx {r1}, {lo}, {a1}",    // r1:lo = rdx * a[1]
+            "add {r0}, {lo}",           // CF:r0 = r0 + lo
+            "",
+            "adc {r1}, 0",              // CF:r1 = r1 + CF
+            "",
+            a0 = in(reg) a[0],
+            a1 = in(reg) a[1],
+            b = in(reg) b,
+            lo = out(reg) _,
+            c = out(reg) c,
+            r0 = out(reg) r[0],
+            r1 = out(reg) r[1],
+            out("rdx") _,  // TODO: load b directly into rdx
+            options(pure, nomem, nostack),
+        );
     }
+    c
+}
 
-    let mut acc = [0u64; 4];
-    acc[0] = acc128[0] as u64;
-    let mut carry = false;
-    for i in 1..4 {
-        let last_chunk_big = (acc128[i - 1] >> 64) as u64;
-        let curr_chunk_small = acc128[i] as u64;
-        // Note that last_chunk_big won't get anywhere near 2^64,
-        // since it's essentially a carry from some additions in the
-        // previous phase, so we can add the carry bit to it without
-        // fear of overflow.
-        let result = curr_chunk_small.overflowing_add(
-            last_chunk_big + carry as u64);
-        acc[i] += result.0;
-        carry = result.1;
+
+#[inline(always)]
+fn mul_2_1_step2(a: [u64; 2], b: u64, r: &mut [u64; 2]) -> u64 {
+    let mut c: u64;
+    unsafe {
+        asm!(
+            "xor rax, rax", // clear both carry chains
+            "mov rdx, {b}",
+            "",
+            "mulx {hi}, {lo}, {a0}",
+            "adox {r0}, {lo}",
+            "adcx {r1}, {hi}",
+            "mov {c}, {r0}",
+            "",
+            "mulx {hi}, {r0}, {a1}",
+            "adox {r0}, {r1}",
+            "adcx {r1}, {hi}",
+            "",
+            a0 = in(reg) a[0],
+            a1 = in(reg) a[1],
+            b = in(reg) b,
+            hi = out(reg) _,
+            lo = out(reg) _,
+            c = out(reg) c,
+            r0 = inout(reg) r[0],
+            r1 = inout(reg) r[1],
+            out("rdx") _, // TODO: load b directly into rdx
+            options(pure, nomem, nostack),
+        );
     }
-    debug_assert!(!carry);
-    acc
+    c
 }
 
 #[inline]
-#[unroll_for_loops]
-fn mul_2_4(a: [u64; 2], b: [u64; 4]) -> [u64; 6] {
-    // Grade school multiplication. To avoid carrying at each of
-    // O(n^2) steps, we first add each intermediate product to a
-    // 128-bit accumulator, then propagate carries at the end.
-    let mut acc128 = [0u128; 2 + 4];
+fn mul_2_2(a: [u64; 2], b: [u64; 2]) -> [u64; 4] {
+    let mut ab = [0u64; 4];
+    let mut r = [0u64; 2];
+    ab[0] = mul_2_1_step1(a, b[0], &mut r);
+    ab[1] = mul_2_1_step2(a, b[1], &mut r);
+    ab[2] = r[0];
+    ab[3] = r[1];
+    ab
+}
 
-    for i in 0..2 {
-        for j in 0..4 {
-            let a_i_b_j = a[i] as u128 * b[j] as u128;
-            // Add the less significant chunk to the less significant
-            // accumulator.
-            acc128[i + j] += a_i_b_j as u64 as u128;
-            // Add the more significant chunk to the more significant
-            // accumulator.
-            acc128[i + j + 1] += a_i_b_j >> 64;
-        }
-    }
 
-    let mut acc = [0u64; 6];
-    acc[0] = acc128[0] as u64;
-    let mut carry = false;
-    for i in 1..6 {
-        let last_chunk_big = (acc128[i - 1] >> 64) as u64;
-        let curr_chunk_small = acc128[i] as u64;
-        // Note that last_chunk_big won't get anywhere near 2^64,
-        // since it's essentially a carry from some additions in the
-        // previous phase, so we can add the carry bit to it without
-        // fear of overflow.
-        let result = curr_chunk_small.overflowing_add(
-            last_chunk_big + carry as u64);
-        acc[i] += result.0;
-        carry = result.1;
-    }
-    debug_assert!(!carry);
-    acc
+#[inline]
+fn mul_4_2(a: [u64; 4], b: [u64; 2]) -> [u64; 6] {
+    let mut ab = [0u64; 6];
+    let mut r = [0u64; 4];
+    ab[0] = mul_4_1_step1(a, b[0], &mut r);
+    ab[1] = mul_4_1_step2(a, b[1], &mut r);
+    ab[2] = r[0];
+    ab[3] = r[1];
+    ab[4] = r[2];
+    ab[5] = r[3];
+    ab
 }
 
 #[inline]
@@ -381,7 +387,7 @@ pub trait DairaRepr {
         // x = (x0, x1, x2)
         let (x0, x1, x2) = rebase_8(x);
         // s = C * x1
-        let s = mul_2_4(Self::C, x1);
+        let s = mul_4_2(x1, Self::C);
         // t = C^2 * x2 + x0
         let t = if x2 == 0 {
             x0
