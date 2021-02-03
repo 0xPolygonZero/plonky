@@ -54,6 +54,7 @@ fn sqr_4(a: [u64; 4]) -> [u64; 8] {
     res
 }
 
+/*
 #[inline]
 #[unroll_for_loops]
 fn mul_4_4(a: [u64; 4], b: [u64; 4]) -> [u64; 8] {
@@ -92,6 +93,107 @@ fn mul_4_4(a: [u64; 4], b: [u64; 4]) -> [u64; 8] {
     debug_assert!(!carry);
     acc
 }
+*/
+
+
+#[inline(always)]
+fn mul_4_1(a: [u64; 4], b: u64, r: &mut [u64; 4]) -> u64 {
+    let mut c: u64;
+    unsafe {
+        asm!(
+            "mov rdx, {b}",             // rdx = b
+            "mulx {r0}, {c}, {a0}",     // r0:c = rdx * a[0]
+            "",
+            "mulx {r1}, {lo}, {a1}",    // r1:lo = rdx * a[1]
+            "add {r0}, {lo}",           // CF:r0 = r0 + lo
+            "",
+            "mulx {r2}, {lo}, {a2}",    // r2:lo = rdx * a[2]
+            "adc {r1}, {lo}",           // CF:r1 = r1 + lo + CF
+            "",
+            "mulx {r3}, {lo}, {a3}",    // r3:lo = rdx * a[3]
+            "adc {r2}, {lo}",           // CF:r2 = r2 + lo + CF
+            "",
+            "adc {r3}, 0",              // CF:r3 = r3 + CF
+            "",
+            a0 = in(reg) a[0],
+            a1 = in(reg) a[1],
+            a2 = in(reg) a[2],
+            a3 = in(reg) a[3],
+            b = in(reg) b,
+            lo = out(reg) _,
+            c = out(reg) c,
+            r0 = out(reg) r[0],
+            r1 = out(reg) r[1],
+            r2 = out(reg) r[2],
+            r3 = out(reg) r[3],
+            out("rdx") _,  // TODO: load b directly into rdx
+            options(pure, nomem, nostack),
+        );
+    }
+    c
+}
+
+
+#[inline(always)]
+fn mul_4_2(a: [u64; 4], b: u64, r: &mut [u64; 4]) -> u64 {
+    let mut c: u64;
+    unsafe {
+        asm!(
+            "xor rax, rax", // clear both carry chains
+            "mov rdx, {b}",
+            "",
+            "mulx {hi}, {lo}, {a0}",
+            "adox {r0}, {lo}",
+            "adcx {r1}, {hi}",
+            "mov {c}, {r0}",
+            "",
+            "mulx {hi}, {r0}, {a1}",
+            "adox {r0}, {r1}",
+            "adcx {r2}, {hi}",
+            "",
+            "mulx {hi}, {r1}, {a2}",
+            "adox {r1}, {r2}",
+            "adcx {r3}, {hi}",
+            "",
+            "mulx {hi}, {r2}, {a3}",
+            "adox {r2}, {r3}",
+            //"adcx {r3}, {hi}",
+            "",
+            a0 = in(reg) a[0],
+            a1 = in(reg) a[1],
+            a2 = in(reg) a[2],
+            a3 = in(reg) a[3],
+            b = in(reg) b,
+            hi = out(reg) _,
+            lo = out(reg) _,
+            c = out(reg) c,
+            r0 = inout(reg) r[0],
+            r1 = inout(reg) r[1],
+            r2 = inout(reg) r[2],
+            r3 = inout(reg) r[3],
+            out("rdx") _, // TODO: load b directly into rdx
+            options(pure, nomem, nostack),
+        );
+    }
+    c
+}
+
+#[inline]
+fn mul_4_4(a: [u64; 4], b: [u64; 4]) -> [u64; 8] {
+    let mut ab = [0u64; 8];
+    let mut r = [0u64; 4];
+    ab[0] = mul_4_1(a, b[0], &mut r);
+    ab[1] = mul_4_2(a, b[1], &mut r);
+    ab[2] = mul_4_2(a, b[2], &mut r);
+    ab[3] = mul_4_2(a, b[3], &mut r);
+    ab[4] = r[0];
+    ab[5] = r[1];
+    ab[6] = r[2];
+    ab[7] = r[3];
+    ab
+}
+
+
 
 #[inline]
 #[unroll_for_loops]

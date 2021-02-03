@@ -12,6 +12,9 @@
 // Unfortunately it makes rustc complain, so we include
 #![allow(incomplete_features)]
 
+// For experimental asm support in bigint arithmetic
+#![feature(asm)]
+
 
 pub use bigint::*;
 pub use circuit_bigint::*;
