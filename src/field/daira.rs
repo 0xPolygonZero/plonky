@@ -97,7 +97,7 @@ fn mul_4_4(a: [u64; 4], b: [u64; 4]) -> [u64; 8] {
 
 
 #[inline(always)]
-fn mul_4_1(a: [u64; 4], b: u64, r: &mut [u64; 4]) -> u64 {
+fn mul_4_4_step1(a: [u64; 4], b: u64, r: &mut [u64; 4]) -> u64 {
     let mut c: u64;
     unsafe {
         asm!(
@@ -135,7 +135,7 @@ fn mul_4_1(a: [u64; 4], b: u64, r: &mut [u64; 4]) -> u64 {
 
 
 #[inline(always)]
-fn mul_4_2(a: [u64; 4], b: u64, r: &mut [u64; 4]) -> u64 {
+fn mul_4_4_step2(a: [u64; 4], b: u64, r: &mut [u64; 4]) -> u64 {
     let mut c: u64;
     unsafe {
         asm!(
@@ -157,7 +157,7 @@ fn mul_4_2(a: [u64; 4], b: u64, r: &mut [u64; 4]) -> u64 {
             "",
             "mulx {hi}, {r2}, {a3}",
             "adox {r2}, {r3}",
-            //"adcx {r3}, {hi}",
+            "adcx {r3}, {hi}",
             "",
             a0 = in(reg) a[0],
             a1 = in(reg) a[1],
@@ -182,10 +182,10 @@ fn mul_4_2(a: [u64; 4], b: u64, r: &mut [u64; 4]) -> u64 {
 fn mul_4_4(a: [u64; 4], b: [u64; 4]) -> [u64; 8] {
     let mut ab = [0u64; 8];
     let mut r = [0u64; 4];
-    ab[0] = mul_4_1(a, b[0], &mut r);
-    ab[1] = mul_4_2(a, b[1], &mut r);
-    ab[2] = mul_4_2(a, b[2], &mut r);
-    ab[3] = mul_4_2(a, b[3], &mut r);
+    ab[0] = mul_4_4_step1(a, b[0], &mut r);
+    ab[1] = mul_4_4_step2(a, b[1], &mut r);
+    ab[2] = mul_4_4_step2(a, b[2], &mut r);
+    ab[3] = mul_4_4_step2(a, b[3], &mut r);
     ab[4] = r[0];
     ab[5] = r[1];
     ab[6] = r[2];
