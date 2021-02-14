@@ -1,4 +1,4 @@
-use crate::{AffinePoint, Curve, Field, TweedledumBase, Bls12377Base, Bls12377Scalar, TweedledeeBase};
+use crate::{AffinePoint, Curve, Field, TweedledumBase, Bls12377Base, Bls12377Scalar, TweedledeeBase, PallasBase, VestaBase};
 use serde::de::Error as DeError;
 use serde::de::Visitor;
 use serde::ser::Error as SerdeError;
@@ -151,11 +151,16 @@ impl_serde_field!(TweedledumBase);
 impl_serde_field!(TweedledeeBase);
 impl_serde_field!(Bls12377Base);
 impl_serde_field!(Bls12377Scalar);
+impl_serde_field!(PallasBase);
+impl_serde_field!(VestaBase);
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{blake_hash_base_field_to_curve, Bls12377, Bls12377Base, Bls12377Scalar, CircuitBuilder, HaloCurve, PartialWitness, Proof, Tweedledee, TweedledeeBase, Tweedledum, TweedledumBase, VerificationKey};
+    use crate::{blake_hash_base_field_to_curve, CircuitBuilder, HaloCurve, PartialWitness, Proof, VerificationKey};
+    use crate::{Bls12377, Bls12377Base, Bls12377Scalar};
+    use crate::{Tweedledee, TweedledeeBase, Tweedledum, TweedledumBase};
+    use crate::{Pallas, PallasBase, Vesta, VestaBase};
     use anyhow::Result;
 
     macro_rules! test_field_serialization {
@@ -213,10 +218,22 @@ mod test {
         };
     }
 
+    test_field_serialization!(PallasBase, test_pallas_base_serialization);
+    test_field_serialization!(VestaBase, test_vesta_base_serialization);
     test_field_serialization!(TweedledeeBase, test_tweedledee_base_serialization);
     test_field_serialization!(TweedledumBase, test_tweedledum_base_serialization);
     test_field_serialization!(Bls12377Base, test_bls_base_serialization);
     test_field_serialization!(Bls12377Scalar, test_bls_scalar_serialization);
+    test_curve_serialization!(
+        Pallas,
+        <Pallas as Curve>::BaseField,
+        test_pallas_curve_serialization
+    );
+    test_curve_serialization!(
+        Vesta,
+        <Vesta as Curve>::BaseField,
+        test_vesta_curve_serialization
+    );
     test_curve_serialization!(
         Tweedledee,
         <Tweedledee as Curve>::BaseField,
@@ -307,4 +324,6 @@ mod test {
 
     test_proof_vk_serialization!(Tweedledee, Tweedledum, test_proof_vk_serialization_tweedledee);
     test_proof_vk_serialization!(Tweedledum, Tweedledee, test_proof_vk_serialization_tweedledum);
+    test_proof_vk_serialization!(Pallas, Vesta, test_proof_vk_serialization_pallas);
+    test_proof_vk_serialization!(Vesta, Pallas, test_proof_vk_serialization_vesta);
 }
