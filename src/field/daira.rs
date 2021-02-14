@@ -139,7 +139,7 @@ fn mul_4_1_step2(a: [u64; 4], b: u64, r: &mut [u64; 4]) -> u64 {
     let mut c: u64;
     unsafe {
         asm!(
-            "xor rax, rax", // clear both carry chains
+            "xor eax, eax", // setting rax=0 clears both carry chains
             "mov rdx, {b}",
             "",
             "mulx {hi}, {lo}, {a0}",
@@ -157,8 +157,11 @@ fn mul_4_1_step2(a: [u64; 4], b: u64, r: &mut [u64; 4]) -> u64 {
             "",
             "mulx {hi}, {r2}, {a3}",
             "adox {r2}, {r3}",
-            "adcx {r3}, {hi}",
+            //"adcx {r3}, {hi}",
             "",
+            "adcx {hi}, rax",
+            "adox {hi}, rax",
+            "mov {r3}, {hi}",
             a0 = in(reg) a[0],
             a1 = in(reg) a[1],
             a2 = in(reg) a[2],
@@ -172,6 +175,7 @@ fn mul_4_1_step2(a: [u64; 4], b: u64, r: &mut [u64; 4]) -> u64 {
             r2 = inout(reg) r[2],
             r3 = inout(reg) r[3],
             out("rdx") _, // TODO: load b directly into rdx
+            out("rax") _, // TODO: load b directly into rdx
             options(pure, nomem, nostack),
         );
     }
@@ -227,7 +231,7 @@ fn mul_2_1_step2(a: [u64; 2], b: u64, r: &mut [u64; 2]) -> u64 {
     let mut c: u64;
     unsafe {
         asm!(
-            "xor rax, rax", // clear both carry chains
+            "xor eax, eax", // setting rax=0 clears both carry chains
             "mov rdx, {b}",
             "",
             "mulx {hi}, {lo}, {a0}",
@@ -237,7 +241,10 @@ fn mul_2_1_step2(a: [u64; 2], b: u64, r: &mut [u64; 2]) -> u64 {
             "",
             "mulx {hi}, {r0}, {a1}",
             "adox {r0}, {r1}",
-            "adcx {r1}, {hi}",
+            //"adcx {r1}, {hi}",
+            "adcx {hi}, rax",
+            "adox {hi}, rax",
+            "mov {r1}, {hi}",
             "",
             a0 = in(reg) a[0],
             a1 = in(reg) a[1],
@@ -248,6 +255,7 @@ fn mul_2_1_step2(a: [u64; 2], b: u64, r: &mut [u64; 2]) -> u64 {
             r0 = inout(reg) r[0],
             r1 = inout(reg) r[1],
             out("rdx") _, // TODO: load b directly into rdx
+            out("rax") _, // TODO: load b directly into rdx
             options(pure, nomem, nostack),
         );
     }
@@ -445,4 +453,20 @@ pub trait DairaRepr {
             b
         }
     }
+}
+
+use anyhow::Result;
+
+#[test]
+fn daira_asm_mul_4_4() -> Result<()> {
+    let b = 0xFFFFFFFFFFFFFFFFu64;
+    let x = [b, b];
+    let e = [1u64, 0, b-1, b];
+    let z = mul_2_2(x, x);
+    assert_eq!(e, z);
+    let x = [b, b, b, b];
+    let e = [1u64, 0, 0, 0, b-1, b, b, b];
+    let z = mul_4_4(x, x);
+    assert_eq!(e, z);
+    Ok(())
 }
