@@ -6,6 +6,8 @@ pub use curve_multiplication::*;
 pub use curve_summations::*;
 pub use tweedledee_curve::*;
 pub use tweedledum_curve::*;
+pub use pallas_curve::*;
+pub use vesta_curve::*;
 
 mod bls12_377_curve;
 #[allow(clippy::module_inception)]
@@ -16,3 +18,5 @@ mod curve_multiplication;
 mod curve_summations;
 mod tweedledee_curve;
 mod tweedledum_curve;
+mod pallas_curve;
+mod vesta_curve;
