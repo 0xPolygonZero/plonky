@@ -36,7 +36,7 @@ pub struct Circuit<C: HaloCurve> {
     pub gate_constants: Vec<Vec<C::ScalarField>>,
     pub routing_target_partitions: TargetPartitions<C::ScalarField>,
     pub gates: GateCollection<C>,
-    pub generators: Vec<Box<dyn WitnessGenerator<C::ScalarField>>>,
+    pub generators: Vec<Box<dyn WitnessGenerator<C::ScalarField> + Send + Sync>>,
     /// A generator of `subgroup_n`.
     pub subgroup_generator_n: C::ScalarField,
     /// A generator of `subgroup_8n`.
@@ -526,7 +526,7 @@ impl<C: HaloCurve> Circuit<C> {
         // Build a list of "pending" generators which are ready to run.
         let mut pending_generator_indices = HashSet::new();
         for (i, generator) in self.generators.iter().enumerate() {
-            let generator: &dyn WitnessGenerator<C::ScalarField> = generator.borrow();
+            let generator: &(dyn WitnessGenerator<C::ScalarField>+Send+Sync) = generator.borrow();
             if witness.contains_all_targets(&generator.dependencies(), self.num_gates_without_pis) {
                 pending_generator_indices.insert(i);
             }
@@ -544,7 +544,7 @@ impl<C: HaloCurve> Circuit<C> {
             let mut populated_targets: Vec<Target<C::ScalarField>> = Vec::new();
 
             for &generator_idx in &pending_generator_indices {
-                let generator: &dyn WitnessGenerator<C::ScalarField> =
+                let generator: &(dyn WitnessGenerator<C::ScalarField>+Send+Sync) =
                     self.generators[generator_idx].borrow();
                 let result =
                     generator.generate(&self.gates.prefixes, &self.gate_constants, &witness);
@@ -569,7 +569,7 @@ impl<C: HaloCurve> Circuit<C> {
                 for &generator_idx in affected_generator_indices {
                     // If this generator is not already pending or completed, and its dependencies
                     // are all satisfied, then add it as a pending generator.
-                    let generator: &dyn WitnessGenerator<C::ScalarField> =
+                    let generator: &(dyn WitnessGenerator<C::ScalarField>+Send+Sync) =
                         self.generators[generator_idx].borrow();
                     if !pending_generator_indices.contains(&generator_idx)
                         && !completed_generator_indices.contains(&generator_idx)

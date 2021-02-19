@@ -1,6 +1,7 @@
 #![allow(clippy::type_complexity)]
 
 use std::collections::{BTreeMap, HashMap};
+use std::fmt::Debug;
 
 use crate::gates::gate_collection::{GateCollection, GatePrefixes};
 use crate::gates::*;
@@ -17,7 +18,7 @@ pub struct CircuitBuilder<C: HaloCurve> {
     gate_constants: Vec<Vec<C::ScalarField>>,
     copy_constraints: Vec<(Target<C::ScalarField>, Target<C::ScalarField>)>,
     pub gates: GateCollection<C>,
-    generators: Vec<Box<dyn WitnessGenerator<C::ScalarField>>>,
+    generators: Vec<Box<dyn WitnessGenerator<C::ScalarField> + Send + Sync>>,
     constant_wires: HashMap<C::ScalarField, Target<C::ScalarField>>,
 }
 
@@ -1019,7 +1020,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         self.add_generator(gate);
     }
 
-    pub fn add_generator<G: WitnessGenerator<C::ScalarField>>(&mut self, generator: G) {
+    pub fn add_generator<G: WitnessGenerator<C::ScalarField> + Send + Sync>(&mut self, generator: G) {
         self.generators.push(Box::new(generator));
     }
 
@@ -1227,5 +1228,11 @@ impl<C: HaloCurve> CircuitBuilder<C> {
             partitions.merge(a, b);
         }
         partitions
+    }
+}
+
+impl<C: HaloCurve> Debug for CircuitBuilder<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Circuit builder with {} gates.", self.gates.gates.len())
     }
 }

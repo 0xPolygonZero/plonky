@@ -4,7 +4,7 @@ use crate::{biguint_to_field, biguint_to_limbs, field_to_biguint, AffinePoint, A
 use num::{BigUint, Zero};
 use std::{cmp::Ordering, collections::HashMap};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PartialWitness<F: Field> {
     wire_values: HashMap<Target<F>, F>,
 }
