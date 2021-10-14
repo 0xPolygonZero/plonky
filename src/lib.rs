@@ -6,8 +6,6 @@
 #![feature(associated_type_bounds)]
 // This is annoying and often wrong.
 #![allow(clippy::needless_range_loop)]
-// Required for generic low-level functions on small arrays.
-#![feature(const_generics)]
 // Unfortunately it makes rustc complain, so we include
 #![allow(incomplete_features)]
 
