@@ -63,7 +63,7 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
     let challs = proof.get_challenges(public_inputs, old_proofs)?;
 
     // Check the old proofs' openings.
-    verify_old_proof_evaluation(old_proofs, &proof, challs.zeta)?;
+    verify_old_proof_evaluation(old_proofs, proof, challs.zeta)?;
 
     let degree = vk.degree;
 
@@ -157,7 +157,7 @@ pub fn verify_proof<C: HaloCurve, InnerC: HaloCurve<BaseField = C::ScalarField>>
             subgroup_generator_n,
             u_curve,
             pedersen_h,
-            &proof,
+            proof,
             old_proofs,
             challs.u,
             challs.v,
@@ -249,7 +249,7 @@ fn verify_all_ipas<C: HaloCurve>(
     ];
     let halo_bs = points
         .iter()
-        .map(|&p| halo_g(p, &halo_us))
+        .map(|&p| halo_g(p, halo_us))
         .collect::<Vec<_>>();
     let halo_b = reduce_with_powers(&halo_bs, v);
     verify_ipa::<C>(

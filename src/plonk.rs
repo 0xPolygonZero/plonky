@@ -92,7 +92,7 @@ impl<C: HaloCurve> Circuit<C> {
         // Convert the witness both to coefficient form and a degree-8n LDE.
         let wire_values_by_wire_index = &witness.transpose();
         let wire_polynomials =
-            values_to_polynomials(&wire_values_by_wire_index, &self.fft_precomputation_n);
+            values_to_polynomials(wire_values_by_wire_index, &self.fft_precomputation_n);
         let wire_values_8n =
             polynomials_to_values_padded(&wire_polynomials, &self.fft_precomputation_8n);
 
@@ -127,7 +127,7 @@ impl<C: HaloCurve> Circuit<C> {
         let plonk_z_points_n = permutation_polynomial(
             self.degree(),
             &self.subgroup_n,
-            &witness,
+            witness,
             &self.s_sigma_values_8n,
             beta_sf,
             gamma_sf,
@@ -386,7 +386,7 @@ impl<C: HaloCurve> Circuit<C> {
             .collect::<Vec<_>>();
         // Low degree extend Z.
         let plonk_z_points_8n = fft_with_precomputation_power_of_2(
-            &pad_to_8n(&plonk_z_coeffs),
+            &pad_to_8n(plonk_z_coeffs),
             &self.fft_precomputation_8n,
         );
 
@@ -470,9 +470,9 @@ impl<C: HaloCurve> Circuit<C> {
         OpeningSet {
             o_constants: eval_polys(&self.constant_polynomials, &powers_of_zeta),
             o_plonk_sigmas: eval_polys(&self.s_sigma_polynomials, &powers_of_zeta),
-            o_wires: eval_polys(&wire_poly, &powers_of_zeta),
+            o_wires: eval_polys(wire_poly, &powers_of_zeta),
             o_plonk_z: plonk_z_poly.eval_from_power(&powers_of_zeta),
-            o_plonk_t: eval_polys(&plonk_t_polys, &powers_of_zeta),
+            o_plonk_t: eval_polys(plonk_t_polys, &powers_of_zeta),
             o_pi_quotient: pi_quotient_poly.eval_from_power(&powers_of_zeta),
             o_old_proofs: old_proofs
                 .iter()

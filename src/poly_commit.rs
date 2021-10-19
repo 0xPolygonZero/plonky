@@ -58,7 +58,7 @@ impl<C: Curve> PolynomialCommitment<C> {
         let mut comms: Vec<_> = coefficients_vec
             .iter()
             .map(|coeffs| {
-                Self::coeffs_to_commitment(coeffs, &msm_precomputation, blinding_point, blinding)
+                Self::coeffs_to_commitment(coeffs, msm_precomputation, blinding_point, blinding)
             })
             .collect();
         Self::batch_to_affine(&mut comms);

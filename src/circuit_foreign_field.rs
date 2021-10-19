@@ -63,7 +63,7 @@ impl<C: HaloCurve> CircuitBuilder<C> {
     ) -> ForeignFieldTarget<C::ScalarField, FF> {
         let order = field_to_biguint(FF::NEG_ONE) + BigUint::one();
         let order_target = self.constant_bigint(&order);
-        let value = self.bigint_rem(&x, &order_target);
+        let value = self.bigint_rem(x, &order_target);
         ForeignFieldTarget {
             value,
             _foreign_field: PhantomData,

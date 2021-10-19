@@ -172,7 +172,7 @@ pub(crate) fn values_to_polynomials<F: Field>(
 ) -> Vec<Polynomial<F>> {
     values_vec
         .par_iter()
-        .map(|values| Polynomial::from_evaluations(&values, fft_precomputation))
+        .map(|values| Polynomial::from_evaluations(values, fft_precomputation))
         .collect()
 }
 
@@ -302,7 +302,7 @@ pub(crate) fn polynomial_degree_plus_1<F: Field>(
     points: &[F],
     fft_precomputation: &FftPrecomputation<F>,
 ) -> usize {
-    let coeffs = ifft_with_precomputation_power_of_2(&points, fft_precomputation);
+    let coeffs = ifft_with_precomputation_power_of_2(points, fft_precomputation);
     coeffs.iter().rev().skip_while(|c| c.is_zero()).count()
 }
 
