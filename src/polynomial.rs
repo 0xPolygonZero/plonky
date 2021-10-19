@@ -136,9 +136,9 @@ impl<F: Field> Polynomial<F> {
         let domain_size = fft_precomputation.size();
         if self.len() < domain_size {
             // Need to pad the polynomial to have the same length as the domain.
-            fft_with_precomputation(&self.padded(domain_size).coeffs(), fft_precomputation)
+            fft_with_precomputation(self.padded(domain_size).coeffs(), fft_precomputation)
         } else {
-            fft_with_precomputation(&self.coeffs(), fft_precomputation)
+            fft_with_precomputation(self.coeffs(), fft_precomputation)
         }
     }
 
@@ -387,7 +387,7 @@ impl<F: Field> Polynomial<F> {
         blinding: bool,
     ) -> PolynomialCommitment<C> {
         PolynomialCommitment::coeffs_to_commitment(
-            &self.coeffs(),
+            self.coeffs(),
             msm_precomputation,
             blinding_point,
             blinding,

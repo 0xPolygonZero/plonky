@@ -34,9 +34,8 @@ impl<C: HaloCurve> Gate<C> for RescueStepBGate<C> {
         right_wire_values: &[C::ScalarField],
         _below_wire_values: &[C::ScalarField],
     ) -> Vec<C::ScalarField> {
-        let ins: Vec<C::ScalarField> = (0..RESCUE_SPONGE_WIDTH)
-            .map(|i| local_wire_values[Self::wire_acc(i)])
-            .collect();
+        let ins = (0..RESCUE_SPONGE_WIDTH)
+            .map(|i| local_wire_values[Self::wire_acc(i)]);
 
         let exps: Vec<C::ScalarField> = ins.into_iter().map(|n| n.exp_usize(5)).collect();
 
@@ -64,9 +63,8 @@ impl<C: HaloCurve> Gate<C> for RescueStepBGate<C> {
         right_wire_values: &[Target<C::ScalarField>],
         _below_wire_values: &[Target<C::ScalarField>],
     ) -> Vec<Target<C::ScalarField>> {
-        let ins: Vec<Target<C::ScalarField>> = (0..RESCUE_SPONGE_WIDTH)
-            .map(|i| local_wire_values[Self::wire_acc(i)])
-            .collect();
+        let ins = (0..RESCUE_SPONGE_WIDTH)
+            .map(|i| local_wire_values[Self::wire_acc(i)]);
 
         let exps: Vec<Target<C::ScalarField>> = ins
             .into_iter()

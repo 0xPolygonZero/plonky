@@ -452,12 +452,12 @@ impl<C: HaloCurve> CircuitBuilder<C> {
         });
 
         // Check that x = div * y + rem.
-        let div_y = self.bigint_mul(&div, &y);
+        let div_y = self.bigint_mul(&div, y);
         let div_y_plus_rem = self.bigint_add(&div_y, &rem);
-        self.copy_bigint(&x, &div_y_plus_rem);
+        self.copy_bigint(x, &div_y_plus_rem);
 
         // Check that rem < y.
-        let cmp_rem_y = self.bigint_cmp(&rem, &y).lt;
+        let cmp_rem_y = self.bigint_cmp(&rem, y).lt;
         self.assert_one(cmp_rem_y);
 
         (div, rem)
