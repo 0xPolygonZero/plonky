@@ -99,6 +99,7 @@ pub(crate) fn generate_rescue_constants<F: Field>(
     security_bits: usize,
 ) -> Vec<(Vec<F>, Vec<F>)> {
     // TODO: This should use deterministic randomness.
+    // TODO: Reject subgroup elements.
     // FIX: Use ChaCha CSPRNG with a seed. This is somewhat similar to official implementation
     // at https://github.com/KULeuven-COSIC/Marvellous/blob/master/instance_generator.sage where they
     // use SHAKE256 with a seed to generate randomness.

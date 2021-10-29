@@ -1,4 +1,4 @@
-use crate::Field;
+use crate::{Field, ConstraintPolynomial};
 use std::any::TypeId;
 use once_cell::sync::Lazy;
 use std::sync::Mutex;
@@ -28,6 +28,12 @@ pub struct MdsMatrix<F: Field> {
 }
 
 impl<F: Field> MdsMatrix<F> {
+    /// Returns the width and height of this matrix.
+    pub fn size(&self) -> usize {
+        self.unparameterized.rows.len()
+    }
+
+    /// Returns the entry at row `r` and column `c`.
     pub fn get(&self, r: usize, c: usize) -> F {
         F::from_canonical_u64_vec(self.unparameterized.rows[r][c].clone())
     }
@@ -39,17 +45,30 @@ struct UnparameterizedMdsMatrix {
     rows: Vec<Vec<Vec<u64>>>,
 }
 
-/// Apply an MDS matrix to the given state vector.
-pub(crate) fn apply_mds<F: Field>(inputs: Vec<F>) -> Vec<F> {
-    let n = inputs.len();
-    let mut result = vec![F::ZERO; n];
+/// Apply an MDS matrix to the given vector of field elements.
+pub(crate) fn apply_mds<F: Field>(vec: Vec<F>) -> Vec<F> {
+    let n = vec.len();
     let mds = mds_matrix::<F>(n);
-    for r in 0..n {
-        for c in 0..n {
-            result[r] = result[r] + mds.get(r, c) * inputs[c];
-        }
-    }
-    result
+
+    (0..n)
+        .map(|r| (0..n)
+            .map(|c| mds.get(r, c) * vec[c])
+            .fold(F::ZERO, |acc, x| acc + x))
+        .collect()
+}
+
+/// Applies an MDS matrix to the given vector of constraint polynomials.
+pub(crate) fn apply_mds_constraint_polys<F: Field>(
+    vec: Vec<ConstraintPolynomial<F>>,
+) -> Vec<ConstraintPolynomial<F>> {
+    let n = vec.len();
+    let mds = mds_matrix::<F>(n);
+
+    (0..n)
+        .map(|r| (0..n)
+            .map(|c| &vec[c] * mds.get(r, c))
+            .sum())
+        .collect()
 }
 
 /// Returns entry `(r, c)` of an `n` by `n` MDS matrix.
